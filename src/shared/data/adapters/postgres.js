@@ -93,7 +93,28 @@ function buildAdapter(io) {
     scheduleFlush()
   }
 
+  // A slow response must not start another read on every poll tick. Keep at
+  // most one in flight and coalesce changes into one fresh read afterwards.
   async function emit(l) {
+    if (l.closed) return
+    if (l.running) {
+      l.again = true
+      return
+    }
+    l.running = true
+    try {
+      await emitSnapshot(l)
+    } finally {
+      l.running = false
+      if (l.again && !l.closed) {
+        l.again = false
+        dirty.add(l)
+        scheduleFlush()
+      }
+    }
+  }
+
+  async function emitSnapshot(l) {
     if (l.closed) return
     if (refused(l.path)) {
       l.closed = true
@@ -328,27 +349,41 @@ export function createPostgresAdapter(engine, session = null) {
   return buildAdapter(engineIo(engine, session))
 }
 
+export const DATA_REQUEST_TIMEOUT_MS = 15_000
+
 function httpIo(baseUrl) {
   const root = String(baseUrl || '').replace(/\/$/, '')
   async function call(body) {
     if (!root) throw fail('failed-precondition', 'postgres: VITE_DATA_GATEWAY is not set')
     const token = currentAccessToken()
-    const res = await fetch(`${root}/data`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      },
-      body: JSON.stringify(encodeTree(body)),
-    })
-    const payload = await res.json().catch(() => ({}))
-    if (!res.ok) {
-      throw fail(
-        payload.code || 'unavailable',
-        payload.message || `data request failed (${res.status})`
-      )
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), DATA_REQUEST_TIMEOUT_MS)
+    try {
+      const res = await fetch(`${root}/data`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify(encodeTree(body)),
+        signal: controller.signal,
+      })
+      const payload = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        throw fail(
+          payload.code || 'unavailable',
+          payload.message || `data request failed (${res.status})`
+        )
+      }
+      return payload
+    } catch (err) {
+      if (controller.signal.aborted) {
+        throw fail('deadline-exceeded', 'The server took too long to respond. Please try again.')
+      }
+      throw err
+    } finally {
+      clearTimeout(timer)
     }
-    return payload
   }
   return {
     get: async (path, id, opts) =>

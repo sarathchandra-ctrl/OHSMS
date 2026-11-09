@@ -19,7 +19,6 @@ import { useAccessibleSites } from '../../../shared/org/useAccessibleSites'
 import { listLinkedAssets, filterByLinkState, siteIdSet, isLinkedToSite } from '../lib/linkedSites'
 import LinkSitesModal from '../components/LinkSitesModal'
 import LinkStateChips from '../components/LinkStateChips'
-import { exportRows } from '../lib/exporter'
 import ExportQrButton from '../components/ExportQrButton'
 import SiteScopePicker from '../../../shared/org/SiteScopePicker'
 import { dueState, dueTextColor, fasColor, fasIncomplete, highestAssetSeq } from '../lib/assetLogic'
@@ -81,6 +80,7 @@ export default function FASRepository() {
   const [serviceFor, setServiceFor] = useState(null)
   const [nextDate, setNextDate] = useState('')
   const [busy, setBusy] = useState(false)
+  const [exporting, setExporting] = useState(false)
   const [linkOpen, setLinkOpen] = useState(false)
   const [linkTab, setLinkTab] = useState('linked')
   const [linkState, setLinkState] = useState(null)
@@ -270,14 +270,23 @@ export default function FASRepository() {
       setServiceFor(null)
     } catch (err) { toastCaught(err) } finally { setBusy(false) }
   }
-  const doExport = () => {
+  const doExport = async () => {
+    if (exporting) return
     if (!visible.length) return toast.error('Nothing to export')
-    exportRows(visible.map((a) => ({
-      'Device ID': a.deviceId, Type: a.deviceType, Zone: a.zone, Site: a.centerName, Region: a.region, Entity: a.entity,
-      Location: a.location, Status: FAS_STATUS_LABEL[a.status] || a.status, 'Install Date': a.installDate,
-      'Last Service': a.lastService, 'Next Service': a.nextService, 'AMC Vendor': a.amcVendor, Notes: a.notes,
-    })), 'FAS', 'fire-marshal-fas.xlsx')
-    toast.success('Exported to Excel')
+    setExporting(true)
+    try {
+      const { exportRows } = await import('../lib/exporter')
+      exportRows(visible.map((a) => ({
+        'Device ID': a.deviceId, Type: a.deviceType, Zone: a.zone, Site: a.centerName, Region: a.region, Entity: a.entity,
+        Location: a.location, Status: FAS_STATUS_LABEL[a.status] || a.status, 'Install Date': a.installDate,
+        'Last Service': a.lastService, 'Next Service': a.nextService, 'AMC Vendor': a.amcVendor, Notes: a.notes,
+      })), 'FAS', 'fire-marshal-fas.xlsx')
+      toast.success('Exported to Excel')
+    } catch (err) {
+      toastCaught(err, 'Could not export fire alarm devices')
+    } finally {
+      setExporting(false)
+    }
   }
   const set = (k) => (e) => setEditing({ ...editing, [k]: e.target.value })
 
@@ -325,7 +334,7 @@ export default function FASRepository() {
           </button>
         )}
         {isAdmin && <Link to="/equipment/asset-bulk-upload" state={{ kind: 'fas' }} className="btn-soft"><Upload size={16} /> Bulk upload</Link>}
-        <button className="btn-soft" onClick={doExport} disabled={!fas.length}><Download size={16} /> Export</button>
+        <button className="btn-soft" onClick={doExport} disabled={exporting || !fas.length} aria-busy={exporting}><Download size={16} /> {exporting ? 'Exporting…' : 'Export'}</button>
         <ExportQrButton kind="fas" rows={selectedItems.length ? selectedItems : visible} selectedCount={selectedItems.length} />
         <RecentlyDeletedLink kinds={['fas']} noun="fire alarm devices" />
         <button className="btn-primary" onClick={openAdd}><Plus size={16} /> Add device</button>
