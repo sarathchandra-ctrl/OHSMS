@@ -34,7 +34,6 @@ const point = (over = {}) => ({
 })
 
 describe('lastSiteAudit', () => {
-
   it('reports the latest scored audit and only the open points from that audit', () => {
     const out = lastSiteAudit(
       site,
@@ -182,7 +181,6 @@ describe('lastSiteAudit', () => {
     )
     expect(out.openPoints).toEqual(['Fire: On the day — Open'])
   })
-
 
   it('says when the findings question was not available, and when there is no dated audit', () => {
     const missing = lastSiteAudit(site, null, [audit()])

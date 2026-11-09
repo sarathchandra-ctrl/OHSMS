@@ -8,7 +8,7 @@ import { createPostgresAdapter } from './postgres'
 // that bypasses RLS, for seeding and for reading back what really happened),
 // the same assertions run on a real Postgres. Embedded runs as superuser, and
 // that hid a bug: the SECURITY DEFINER helpers recursed on every member read
-// once their owner was an ordinary role (stack/schema.sql). docs/CONTROL-PLANE.md.
+// once their owner was an ordinary role (stack/schema.sql). docs/SELF-HOSTING.md.
 const PG_URL = process.env.OHSMS_TEST_PG_URL
 const PG_ADMIN_URL = process.env.OHSMS_TEST_PG_ADMIN_URL
 const onPg = Boolean(PG_URL && PG_ADMIN_URL)

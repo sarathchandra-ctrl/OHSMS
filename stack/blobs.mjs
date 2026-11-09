@@ -108,7 +108,8 @@ export function createBlobStore({ dir, key, origin }) {
           async function* cap(source) {
             for await (const chunk of source) {
               size += chunk.length
-              if (size > MAX_BLOB_BYTES) throw Object.assign(new Error('too large'), { code: 'big' })
+              if (size > MAX_BLOB_BYTES)
+                throw Object.assign(new Error('too large'), { code: 'big' })
               yield chunk
             }
           },
@@ -145,7 +146,8 @@ export function createBlobStore({ dir, key, origin }) {
         'Content-Length': info.size,
         // The app decides what to render; never let a stored file run as a page
         // on this origin.
-        'Content-Security-Policy': "default-src 'none'; img-src 'self' data:; style-src 'unsafe-inline'; sandbox",
+        'Content-Security-Policy':
+          "default-src 'none'; img-src 'self' data:; style-src 'unsafe-inline'; sandbox",
         'X-Content-Type-Options': 'nosniff',
         'Cache-Control': 'private, max-age=3600',
       })

@@ -770,7 +770,12 @@ export function createOwnStackServer({
       if (!values.samlEntryPoint || !cert) return refuse(400, 'saml', values)
       if (!httpsUrl(values.samlEntryPoint)) return refuse(400, 'samlUrl', values)
       // The SP entity id the setup page tells the IdP to expect is this origin.
-      nextAuth = { method: 'saml', clientId: origin, idpCert: cert, entryPoint: values.samlEntryPoint }
+      nextAuth = {
+        method: 'saml',
+        clientId: origin,
+        idpCert: cert,
+        entryPoint: values.samlEntryPoint,
+      }
     } else if (values.method === 'oidc') {
       const secret = typeof body.oidcClientSecret === 'string' ? body.oidcClientSecret.trim() : ''
       if (!values.authIssuer || !values.authClientId || !secret) {

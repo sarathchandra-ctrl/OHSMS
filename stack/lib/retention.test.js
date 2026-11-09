@@ -1,7 +1,13 @@
 import { describe, it, expect } from 'vitest'
 import {
-  PURGE_AFTER_DAYS, MAX_PURGES_PER_RUN, PURGEABLE,
-  toMillis, isExpired, daysRemaining, planPurge, summarizeFailures,
+  PURGE_AFTER_DAYS,
+  MAX_PURGES_PER_RUN,
+  PURGEABLE,
+  toMillis,
+  isExpired,
+  daysRemaining,
+  planPurge,
+  summarizeFailures,
 } from './retention.js'
 
 const NOW = Date.parse('2026-08-14T00:00:00.000Z')
@@ -60,7 +66,7 @@ describe('planning what a run may destroy', () => {
   it('takes the expired and leaves the rest, saying why', () => {
     const { purge, keep } = planPurge(
       [doc('old', daysAgo(40)), doc('fresh', daysAgo(2)), doc('live', null)],
-      { now: NOW },
+      { now: NOW }
     )
     expect(purge).toEqual(['old'])
     expect(keep).toEqual([

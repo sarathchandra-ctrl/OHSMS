@@ -103,18 +103,25 @@ DOMAIN="$(grep -E '^DOMAIN=' .env | cut -d= -f2-)"
 [ -n "$DOMAIN" ] || die 'DOMAIN is empty in .env.'
 
 # ── Start ───────────────────────────────────────────────────────────────────
-say 'Starting the database, the app and HTTPS (docker compose up -d)'
-docker compose up -d
+PROFILES="$(grep -E '^COMPOSE_PROFILES=' .env | cut -d= -f2-)"
+PROFILES="${PROFILES:-caddy}"
+say "Starting the database, the app and the front door: $PROFILES (docker compose up -d)"
+COMPOSE_PROFILES="$PROFILES" docker compose up -d
 
 say "Waiting for https://$DOMAIN/health"
-# Asked of Caddy on this machine, so it works before DNS has spread and
-# past any outbound proxy the server is configured with. -k
-# because this checks that the app answers, not the certificate: a new
-# public certificate can take a minute, and a .internal name uses Caddy's own.
+# With caddy this is asked of Caddy on this machine, so it works before DNS
+# has spread and past any outbound proxy the server is configured with. -k
+# because this checks that the app answers, not the certificate. With the
+# Cloudflare Tunnel it goes through Cloudflare, the way people will.
+health() {
+  case "$PROFILES" in
+    *cloudflare*) curl -fs --max-time 5 "https://$DOMAIN/health" ;;
+    *) curl -fsk --max-time 5 --noproxy "$DOMAIN" --resolve "$DOMAIN:443:127.0.0.1" "https://$DOMAIN/health" ;;
+  esac
+}
 ok=0
 for _ in $(seq 1 90); do
-  if curl -fsk --max-time 5 --noproxy "$DOMAIN" --resolve "$DOMAIN:443:127.0.0.1" "https://$DOMAIN/health" 2>/dev/null |
-    grep -q '"ok":true'; then
+  if health 2>/dev/null | grep -q '"ok":true'; then
     ok=1
     break
   fi
@@ -132,7 +139,7 @@ fi
 
 cat <<NEXT
 
-WEEHS is running at https://$DOMAIN  (health: {"ok":true})
+OHSMS is running at https://$DOMAIN  (health: {"ok":true})
 
 Next, in a browser: open https://$DOMAIN/setup
   Setup code: CONTROL_TOKEN in .env

@@ -136,9 +136,9 @@ export async function isLiveAdmin(engine, uid) {
   const profile = await liveProfile(engine, uid)
   return Boolean(
     profile &&
-      profile.status === 'approved' &&
-      profile.role === 'admin' &&
-      profile.mustChangePassword !== true
+    profile.status === 'approved' &&
+    profile.role === 'admin' &&
+    profile.mustChangePassword !== true
   )
 }
 
@@ -154,9 +154,7 @@ export async function runRetention(engine, { now = Date.now() }) {
   const docs = await engine.list(WORKER, 'incidents', {})
   const plan = planPurge(docs, { now })
   for (const item of plan.purge || []) {
-    await engine.commit(WORKER, [
-      { type: 'remove', path: 'incidents', id: item.id },
-    ])
+    await engine.commit(WORKER, [{ type: 'remove', path: 'incidents', id: item.id }])
   }
   return { livePurged: 0, recyclePurged: (plan.purge || []).length }
 }

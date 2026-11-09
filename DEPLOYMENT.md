@@ -1,188 +1,53 @@
-# WEHS — Deployment
+# Deployment
 
-**`docs/PRODUCTION.md` is the runbook.** Environment files, the order rules must
-ship in relative to hosting, App Check, backups and the restore drill, staging,
-custom domains and the four allowlists, bucket CORS, and the encryption
-switch-on all live there. Read §0 before deploying anything.
+OHSMS runs for **one organization** on **that organization's own server and
+Postgres database**. There is no shared or multi-tenant service.
 
-This file covers only the parts that runbook does not: bringing up the **first
-organization** in a fresh project, what to check **after each deploy**, and how
-to **roll back**.
+| Front door                                                                | Guide                                          |
+| ------------------------------------------------------------------------- | ---------------------------------------------- |
+| **Cloudflare** (Worker for the app + Tunnel to the server, no open ports) | [`docs/CLOUDFLARE.md`](docs/CLOUDFLARE.md)     |
+| HTTPS directly on the server (Caddy, ports 80/443)                        | [`docs/SELF-HOSTING.md`](docs/SELF-HOSTING.md) |
 
-An organization that chooses its own database at registration, instead of the
-shared WEEHS database, is [`docs/CUSTOM-STACK.md`](docs/CUSTOM-STACK.md). That
-branch can record a provisioning request and still cannot serve traffic.
-This file stays the WEEHS Firebase deploy's first-organization checks,
-post-deploy verification, and rollback.
+Both use the same server image (`stack/Dockerfile`) and the same
+`selfhost/compose.yaml`; `COMPOSE_PROFILES` in `selfhost/.env` picks the front
+door.
 
-Everything about creating projects, `.firebaserc`, environment variables and the
-deploy commands themselves has been removed rather than kept in step — it was a
-second copy, and it had drifted into describing a two-project layout with a
-`staging` alias that does not match the repository.
+## The pieces
 
-Deploys happen from CI, not a laptop: merge to `main` ships staging, a `v*` tag
-ships production. `PRODUCTION.md` §5 and §5a.
+- **`src/`** — the web app (React + Vite). Built to `dist/`.
+- **`stack/`** — the organization's server (Node 22): sign-in through the
+  organization's identity provider (OIDC, SAML or Supabase Auth), the data
+  gateway (`/data`, enforced by Postgres row-level security in
+  `stack/schema.sql`), server jobs (`/rpc/*`), file storage on disk
+  (`/presign`, `/blob`), SCIM, and the one-time `/setup`.
+- **`worker/`** — the Cloudflare Worker: serves `dist/` and forwards the
+  server's paths through the Tunnel.
+- **`selfhost/`** — compose file, `.env.example`, install script.
 
----
+## First organization
 
-## 1. Bring up the first organization
+There is exactly one. `/setup` creates it, once, and makes the email entered
+there its first administrator. Everyone else is invited from **Employees**
+(one by one, by email domain, by identity-provider group, or over SCIM).
 
-Seed scripts default to the emulators. To target a real project, export the same
-`VITE_*` values plus admin credentials, and confirm with `--prod`:
+## After each deploy
 
-```bash
-export VITE_USE_EMULATORS=false
-```
+- `curl -s https://ehs.example.com/health` answers `{"ok":true}`.
+- Sign in; open a few modules (Incidents, Inspections, Permits, LOTO,
+  Training). Upload a photo and open it again.
+- In DevTools, watch for `permission-denied` on `/data` — that is the
+  database's row-level security refusing a read the screen expected.
 
-```bash
-node scripts/seed-erp-baseline.mjs --prod
-```
+## Rollback
 
-Without `--prod` the scripts refuse to run against a real project.
+- **Worker:** Cloudflare dashboard → the Worker → **Deployments** → roll back
+  to the previous version (instant).
+- **Server:** set `WEEHS_IMAGE` in `selfhost/.env` back to the previous image
+  and `docker compose up -d`. Schema changes are additive; restore the
+  database backup if a release says otherwise.
 
-The first admin is created by signing up in the app and then promoted from the
-Firebase console — there is no bootstrap script for it, deliberately, because a
-script that can mint an approved admin is a script that can mint one later.
+## Releases
 
-1. Sign up in the app. That creates `/users/{uid}`. In the console set
-   `role: "admin"`, `status: "approved"` and an `orgId` on that document, and
-   create the matching `/organizations/{orgId}` document with a `name`.
-2. **Org Settings → General** — departments, Safety & Security helpline.
-3. **Org Settings → Scope & Granularity** — per-module levels and custom fields.
-4. **Sites** — add sites, **including latitude and longitude**. The FERP "Map
-   nearest" feature has nothing to work with without them.
-5. **Employees** — add or bulk-upload people.
-6. `node scripts/seed-erp-baseline.mjs --prod` — 19 baseline ERP procedures.
-7. **Objectives → Targets → "Use recommended defaults"** to create KPI targets.
-
-> Every other `scripts/seed-*.mjs` file is a **demo-data generator** — fake
-> incidents, 5 000 load-test employees. Never run one against production.
-
-## 2. Verify after each deploy
-
-- Sign in; provision an employee and confirm the forced password-change gate.
-- Smoke-test each module, specifically: Objectives scorecard, Emergency Response
-  site repository (contacts → FERP plan → rescue plans), Training, Action Tracker.
-- Open DevTools and watch for **missing-index** and **permission-denied** errors.
-  These are the two failures that appear only in production — the emulator has
-  neither constraint in the same form.
-- Firebase console → Firestore → Usage: sanity-check reads after a short soak.
-
-## 3. Rollback
-
-Firebase Hosting keeps every release:
-**Hosting → Release history → "..." → Rollback** (instant).
-
-**Rules and indexes do not roll back with it.** If a rules change is at fault,
-redeploy the previous `firestore.rules` from git explicitly. This matters more
-than it sounds, because the deploy order ships rules _before_ hosting — so a bad
-rules change is already live when the hosting rollback finishes, and the app
-will look broken in a way the release history does not explain.
-
-## 4. One thing to set up once, at scale
-
-A **budget alert** in Google Cloud Billing — start low, e.g. $50/month. It is the
-safety net against a runaway query, and it is the only item in this file that
-protects you from your own code rather than from an attacker.
-
-Reads are already kept flat by shared ref-counted listeners
-(`subscribeOrgCollection` in `src/shared/org/orgData.js`), pagination and bounded
-live queries. Monitor before optimising further — though note `SECURITY.md` S-04:
-some collection listeners are still uncapped.
-
----
-
-## 5. Staging functions deploy needs `iam.serviceAccounts.actAs`
-
-This is the failure `.github/workflows/deploy-staging.yml` hits on the
-**Deploy functions** step, and it is already named in two places in this
-repository:
-
-- `scripts/deploy-staging.mjs` (header): CI cannot deploy staging functions
-  today because the staging service account is refused
-  `iam.serviceAccounts.actAs` on the App Engine default / runtime service
-  account, which blocks that step and therefore the whole workflow. The laptop
-  script exists because of that, and it makes functions **opt-in**
-  (`--functions`) so a hand deploy can still ship rules and hosting.
-- `docs/ENTERPRISE-READINESS.md` scorecard: staging pipeline failing on
-  functions deploy (IAM) since 2026-08-29.
-
-Nothing in this repository can grant that IAM role. The GitHub secret
-`STAGING_FIREBASE_SERVICE_ACCOUNT` is a JSON key; Cloud Functions deploy
-impersonates the project's runtime service account, and that impersonation is
-`iam.serviceAccounts.actAs` on the runtime account, in GCP, for the identity
-in the secret. Until that grant exists, either:
-
-1. **Grant `iam.serviceAccounts.actAs`** on the staging runtime service
-   account to the CI deployer, then re-run the workflow, or
-2. **Stop deploying functions from staging CI** until then — which is what
-   `npm run deploy:staging` already does (functions are skipped unless
-   `--functions` is passed).
-
-This file does not claim either has been done. A functions deploy error that
-names `iam.serviceAccounts.actAs` is this gap, not a new one.
-
-## 6. Assignment email
-
-Saving an incident CAPA, an illness corrective action, a mock-drill CAPA or a
-training assignment emails the assignee from **info@weehs.org**. The same
-relay carries permit, incident, defect, drill and meeting mail. The triggers
-do not use a second mail service. They are `notifyIncidentAssignment`,
-`notifyIllnessAssignment`, `notifyDrillAssignment` and `notifyTrainingAssignment`.
-The write does not wait on the mail.
-
-Defaults, already set in code:
-
-- From: `EHS notifications <info@weehs.org>`. The address stays that mailbox.
-  Brevo must have the domain verified or it refuses the message. The display
-  name is the organisation's name (`organizations/{orgId}.name`) when that
-  field is set, and this label otherwise. A display name that is only the
-  old product name is not used.
-- SMTP: `smtp-relay.brevo.com` port 587 (STARTTLS). `SMTP_USER` is the Brevo
-  SMTP login and has no default. It is not the From address.
-- Links: `https://suite.weehs.org` plus the in-app path (`/incidents/{id}`,
-  `/incidents/illness/{id}`, `/mock-drills`, `/training/my`)
-
-The value that is not in the repo is the Brevo SMTP key. It has to exist as
-a secret before the triggers will deploy. A placeholder is enough to deploy;
-nothing is sent until the value is the real key and `SMTP_USER` is the login,
-and each skipped send is logged as an error rather than recorded as delivered.
-
-```bash
-firebase functions:secrets:set SMTP_PASS
-```
-
-Use the Brevo SMTP key, not a mailbox password. Do not put it in
-`functions/.env`. A mail credential in the Cloud Run environment in cleartext
-is the finding recorded as LOW-13.
-
-Production CI (`.github/workflows/deploy.yml`, and the staging workflow the
-same way) writes the non-secret mail defaults into `functions/.env.<project>`
-before it deploys functions. String params have defaults in code, but a
-non-interactive deploy still stops until those values are in that file. CI
-expects `DATA_KEY_MASTER` and `SMTP_PASS` in Secret Manager. If `SMTP_PASS`
-is missing, CI creates it from the `SMTP_PASS` GitHub secret when that is
-set, and otherwise as the placeholder `UNSET-PLACEHOLDER`. CI does not create
-or replace `DATA_KEY_MASTER`. Repository variables `SMTP_HOST`, `SMTP_PORT`,
-`SMTP_USER`, `MAIL_FROM` and `APP_ORIGIN` override those CI defaults when set.
-An empty `SMTP_USER` is left out of the file. Writing `SMTP_USER=` publishes
-an empty login over the one already on the function; that is what v2.0.9 did,
-and weather digests then failed with `missing:["SMTP_USER"]`. A non-interactive
-deploy with no `SMTP_USER` line stops and names the variable, which leaves the
-deployed login in place. `SMTP_HOST`, `SMTP_PORT` and `MAIL_FROM` are omitted
-the same way when they are still empty after the relay defaults. Do not put a
-login in this repository to get past that stop.
-`WA_TEMPLATE_WELCOME` and `WA_TEMPLATE_TEST` are written as well, blank unless
-those repository variables are set. Blank keeps the welcome and the org test
-on free-form text.
-
-Local emulators read the password from `functions/.secret.local` (one line,
-`SMTP_PASS=...`). Without that file the trigger logs the same configuration
-error and returns.
-
-`functions/.env` can override the defaults (`SMTP_HOST`, `SMTP_PORT`,
-`SMTP_USER`, `MAIL_FROM`, `APP_ORIGIN`). Leaving the host and port unset
-keeps the Brevo relay. `SMTP_USER` is not given a default. See
-`functions/.env.example`. `functions/.env.weehs-4eb28`
-supplies the non-secret relay defaults for CI and does not set `SMTP_USER`.
-`SMTP_PASS` remains a Secret Manager secret.
+Pushing a `v*` tag runs `.github/workflows/release.yml`: lint and tests, then
+the server image to GitHub Container Registry and a `selfhost` archive on the
+release page.

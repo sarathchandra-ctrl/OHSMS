@@ -135,7 +135,10 @@ export function daysRemaining(deletedAt, now = Date.now(), days = PURGE_AFTER_DA
  * cannot be checked; the kept list is what tells someone reading the logs that
  * the query is selecting what they think it is.
  */
-export function planPurge(docs = [], { now = Date.now(), days = PURGE_AFTER_DAYS, max = MAX_PURGES_PER_RUN } = {}) {
+export function planPurge(
+  docs = [],
+  { now = Date.now(), days = PURGE_AFTER_DAYS, max = MAX_PURGES_PER_RUN } = {}
+) {
   const purge = []
   const keep = []
 
@@ -200,6 +203,9 @@ export function summarizeFailures(failures = []) {
     // alerting side does.
     message:
       `retention sweep completed with ${list.length} failure(s): ` +
-      Object.keys(byKind).sort().map((k) => `${k}=${byKind[k]}`).join(', '),
+      Object.keys(byKind)
+        .sort()
+        .map((k) => `${k}=${byKind[k]}`)
+        .join(', '),
   }
 }

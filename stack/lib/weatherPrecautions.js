@@ -1252,5 +1252,3 @@ export function resolvePrecaution(alertKey, org, index, area, overrides = {}) {
   }
   return precautionText(alertKey, activitiesForArea(org, index, area), overrides)
 }
-
-

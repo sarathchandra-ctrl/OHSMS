@@ -70,10 +70,23 @@ export const LINKABLE_COLLECTIONS = ['extinguishers', 'aeds', 'fas']
 // locality suffixes, en-dashes, casing and all. What this module replaces is
 // the DECISION layer above them. The string handling is not up for reinvention.
 
-const base = (s) => String(s ?? '').trim().toLowerCase().replace(/[‐-―]/g, '-').replace(/\s+/g, ' ')
-const alnum = (s) => base(s).replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim()
+const base = (s) =>
+  String(s ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/[‐-―]/g, '-')
+    .replace(/\s+/g, ' ')
+const alnum = (s) =>
+  base(s)
+    .replace(/[^a-z0-9 ]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
 // "Gym" is noise: the site registry includes it, the equipment records often don't.
-const core = (s) => alnum(s).split(' ').filter((w) => w !== 'gym').join(' ')
+const core = (s) =>
+  alnum(s)
+    .split(' ')
+    .filter((w) => w !== 'gym')
+    .join(' ')
 
 /**
  * Key functions by tier name. `exact` is identity on purpose — it is the one
@@ -217,7 +230,11 @@ export function indexSites(sites = []) {
  * There is no fifth answer and no best guess. suggestSite in the app exists to
  * offer a person a choice on upload; there is no person here.
  */
-export function resolveSite(centerName, sites = [], { index = indexSites(sites), overrides = SITE_NAME_OVERRIDES } = {}) {
+export function resolveSite(
+  centerName,
+  sites = [],
+  { index = indexSites(sites), overrides = SITE_NAME_OVERRIDES } = {}
+) {
   const raw = String(centerName ?? '').trim()
   if (!raw) return { status: 'noName' }
 
@@ -273,7 +290,11 @@ export function resolveSite(centerName, sites = [], { index = indexSites(sites),
  * name resolves to is counted and skipped, so a second run — by someone unsure
  * whether the first took — writes nothing.
  */
-export function planSiteLinks(equipment = [], sites = [], { overrides = SITE_NAME_OVERRIDES } = {}) {
+export function planSiteLinks(
+  equipment = [],
+  sites = [],
+  { overrides = SITE_NAME_OVERRIDES } = {}
+) {
   const index = indexSites(sites)
   const writes = []
   const ambiguous = []
@@ -287,7 +308,10 @@ export function planSiteLinks(equipment = [], sites = [], { overrides = SITE_NAM
   for (const record of equipment || []) {
     if (!record || !record.id) continue
 
-    if (record.deletedAt) { deleted += 1; continue }
+    if (record.deletedAt) {
+      deleted += 1
+      continue
+    }
 
     // One document named twice would put two writes for the same path into one
     // batch, which Firestore rejects outright — failing the whole run over a
@@ -307,13 +331,19 @@ export function planSiteLinks(equipment = [], sites = [], { overrides = SITE_NAM
     // answer, a record that already carries a siteId is left exactly as it is
     // rather than being reported as a problem it is not.
     if (hit.status === 'noName') {
-      if (currentSiteId) { alreadyLinked += 1; continue }
+      if (currentSiteId) {
+        alreadyLinked += 1
+        continue
+      }
       noName.push(row)
       continue
     }
 
     if (hit.status === 'unmatched') {
-      if (currentSiteId) { alreadyLinked += 1; continue }
+      if (currentSiteId) {
+        alreadyLinked += 1
+        continue
+      }
       unmatched.push(row)
       continue
     }
@@ -323,7 +353,10 @@ export function planSiteLinks(equipment = [], sites = [], { overrides = SITE_NAM
       // Already pointing at one of the candidates: somebody has already made
       // the choice this job refuses to make. Re-reporting it every run would
       // train the reader to skip the bucket that matters most.
-      if (currentSiteId && siteIds.includes(currentSiteId)) { alreadyLinked += 1; continue }
+      if (currentSiteId && siteIds.includes(currentSiteId)) {
+        alreadyLinked += 1
+        continue
+      }
       ambiguous.push({
         ...row,
         currentSiteId: currentSiteId || null,
@@ -335,11 +368,19 @@ export function planSiteLinks(equipment = [], sites = [], { overrides = SITE_NAM
     }
 
     if (!currentSiteId) {
-      writes.push({ collection: record.collection, id: record.id, siteId: hit.site.id, matchedName: hit.site.name })
+      writes.push({
+        collection: record.collection,
+        id: record.id,
+        siteId: hit.site.id,
+        matchedName: hit.site.name,
+      })
       continue
     }
 
-    if (currentSiteId === hit.site.id) { alreadyLinked += 1; continue }
+    if (currentSiteId === hit.site.id) {
+      alreadyLinked += 1
+      continue
+    }
 
     conflicting.push({
       ...row,

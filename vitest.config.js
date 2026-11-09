@@ -19,7 +19,7 @@ export default defineConfig({
     // stop covering things.
     environment: 'node',
     globals: true,
-    include: ['src/**/*.{test,spec}.{js,jsx}', 'stack/**/*.test.{js,mjs}'],
+    include: ['src/**/*.{test,spec}.{js,jsx}', 'stack/**/*.test.{js,mjs}', 'worker/**/*.test.js'],
     exclude: ['node_modules/**', 'stack/node_modules/**', '.vendor/**'],
   },
 })

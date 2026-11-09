@@ -83,7 +83,11 @@ const utf8 = new TextEncoder()
 // organization that cannot read anything it has written.
 
 export function toB64u(bytes) {
-  return Buffer.from(bytes).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+  return Buffer.from(bytes)
+    .toString('base64')
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/, '')
 }
 
 export function fromB64u(text) {
@@ -124,7 +128,9 @@ async function masterKey(masterSecret) {
     // Refuse rather than derive. A short or mistyped secret that got stretched
     // into a valid-looking key would encrypt every tenant's keys under
     // something nobody can reproduce deliberately.
-    throw new Error(`DATA_KEY_MASTER must be ${KEY_BYTES} base64url-encoded bytes, got ${bytes.length}.`)
+    throw new Error(
+      `DATA_KEY_MASTER must be ${KEY_BYTES} base64url-encoded bytes, got ${bytes.length}.`
+    )
   }
   return subtle().importKey('raw', bytes, { name: 'AES-GCM' }, false, ['encrypt', 'decrypt'])
 }
@@ -133,11 +139,13 @@ async function masterKey(masterSecret) {
 export async function wrapKey(masterSecret, keyId, plaintextBytes) {
   const key = await masterKey(masterSecret)
   const iv = globalThis.crypto.getRandomValues(new Uint8Array(IV_BYTES))
-  const ct = new Uint8Array(await subtle().encrypt(
-    { name: 'AES-GCM', iv, additionalData: wrapAad(keyId) },
-    key,
-    plaintextBytes,
-  ))
+  const ct = new Uint8Array(
+    await subtle().encrypt(
+      { name: 'AES-GCM', iv, additionalData: wrapAad(keyId) },
+      key,
+      plaintextBytes
+    )
+  )
   const out = new Uint8Array(iv.length + ct.length)
   out.set(iv, 0)
   out.set(ct, iv.length)
@@ -152,7 +160,7 @@ export async function unwrapKey(masterSecret, keyId, wrapped) {
   const plain = await subtle().decrypt(
     { name: 'AES-GCM', iv: all.subarray(0, IV_BYTES), additionalData: wrapAad(keyId) },
     key,
-    all.subarray(IV_BYTES),
+    all.subarray(IV_BYTES)
   )
   return new Uint8Array(plain)
 }
@@ -176,7 +184,7 @@ export async function generateKeyset(masterSecret, version = 1) {
   const pair = await subtle().generateKey(
     { ...WRAP_ALG, modulusLength: WRAP_MODULUS_BITS, publicExponent: new Uint8Array([1, 0, 1]) },
     true,
-    ['encrypt', 'decrypt'],
+    ['encrypt', 'decrypt']
   )
   const spki = new Uint8Array(await subtle().exportKey('spki', pair.publicKey))
   const pkcs8 = new Uint8Array(await subtle().exportKey('pkcs8', pair.privateKey))
@@ -222,9 +230,8 @@ export function grantsFor(profile) {
   // administrator-issued temporary password can read nothing in the app, so
   // handing them the keys that open it would be the one grant looser than the
   // rules — and it would survive a password reset the rules would have caught.
-  const approved = Boolean(profile)
-    && profile.status === 'approved'
-    && profile.mustChangePassword !== true
+  const approved =
+    Boolean(profile) && profile.status === 'approved' && profile.mustChangePassword !== true
   const role = String(profile?.role || '')
   return {
     general: approved,
@@ -256,7 +263,7 @@ export async function releaseKeyset(masterSecret, keyset, profile) {
     out.medical = { keyId: keyset.medical.keyId, publicKey: keyset.medical.publicKey }
     if (grants.medicalPrivate && keyset.medical.wrappedPrivateKey) {
       out.medical.privateKey = toB64u(
-        await unwrapKey(masterSecret, keyset.medical.keyId, keyset.medical.wrappedPrivateKey),
+        await unwrapKey(masterSecret, keyset.medical.keyId, keyset.medical.wrappedPrivateKey)
       )
     }
   }

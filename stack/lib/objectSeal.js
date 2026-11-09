@@ -66,8 +66,7 @@ const utf8 = new TextEncoder()
  * Verified against the client by the cross-seam test named in the header.
  */
 export const fileLabel = (keyClass) => `file:${keyClass}`
-export const fileAad = (keyClass) =>
-  utf8.encode(`ohsms:1:org:${fileLabel(keyClass)}`)
+export const fileAad = (keyClass) => utf8.encode(`ohsms:1:org:${fileLabel(keyClass)}`)
 
 /** MUST match GENERAL/MEDICAL in policy.js and dataKeys.js. */
 export const GENERAL = 'general'
@@ -221,7 +220,9 @@ export async function openObjectBytes(keys, keyClass, meta, bytes) {
     const priv = await subtle().importKey('pkcs8', entry.privateKey, WRAP_ALG, false, ['decrypt'])
     const raw = await subtle().decrypt(WRAP_ALG, priv, fromB64u(meta.encWrapped))
     const cek = await subtle().importKey('raw', raw, { name: 'AES-GCM' }, false, ['decrypt'])
-    return new Uint8Array(await subtle().decrypt({ name: 'AES-GCM', iv, additionalData }, cek, bytes))
+    return new Uint8Array(
+      await subtle().decrypt({ name: 'AES-GCM', iv, additionalData }, cek, bytes)
+    )
   }
 
   const entry = keys?.general

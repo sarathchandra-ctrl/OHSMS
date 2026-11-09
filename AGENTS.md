@@ -7,11 +7,18 @@ arbitrary.
 
 ## Where the truth lives
 
-- **`firestore.rules` is the only enforcement that cannot be bypassed.** The
-  browser talks to Firestore directly. Anything enforced in React — `can()`, a
-  hidden button, a disabled field — is a usability feature. The same action
-  succeeds from the browser console. If a change makes a permission decision,
-  it belongs in the rules and needs a test in `tests/`.
+- **`stack/schema.sql` (Postgres row-level security) is the only enforcement
+  that cannot be bypassed.** The browser's `/data` calls run as a role with no
+  bypass, and the server only sets the session uid. Anything enforced in React
+  — `can()`, a hidden button, a disabled field — is a usability feature. The
+  same action succeeds from the browser console. If a change makes a
+  permission decision, it belongs in the schema (or, for a server job, in the
+  job's live-profile check in `stack/`) and needs a test in
+  `src/shared/data/adapters/postgres.rls.test.js`.
+- **One installation is one organization.** There is no tenant id anywhere:
+  collections are top-level (`incidents`, `permits/<id>/events`) and the
+  organization is the single document `organization/profile`. Do not
+  reintroduce an `orgId` parameter or path segment.
 - **`src/shared/modules/registry.js` is the module list.** It drives the
   sidebar, the dashboard grid and route mounting. Do not write the module count
   into a comment; it was wrong for a long time.
@@ -19,18 +26,15 @@ arbitrary.
   `docs/PRODUCTION.md` on operating the deployed system. When another document
   restates either, it drifts. Link instead of copying.
 
-## Three deployable units, two of them separate npm packages
+## Three deployable units, two npm packages
 
-`src/` (the SPA) and `functions/` each have their own `package.json`, lockfile
-and test config. The root `npm test` only reaches `src/**`. CI runs both; a
-local check that only runs the root script has tested half the repository.
+`src/` (the app) and `stack/` (the organization's server) each have their own
+`package.json` and lockfile; `worker/` is the Cloudflare Worker and has no
+dependencies of its own. The root `npm test` covers all three, but needs
+`npm ci --prefix stack` first because the server tests import `pg` and SAML.
 
-There was a third package, `server/`, an Express + firebase-admin service meant
-to take over the write path. It is **gone**. It served no traffic, nothing
-deployed it, and its `src/authz/policy.js` was a hand-maintained second copy of
-eight `firestore.rules` role helpers — a drift risk paid for every month against
-a benefit with no date on it. If the write-path migration is revived, take it
-out of the history rather than out of memory.
+`stack/lib/` holds rules shared by the server and the app (file deletion,
+retention, data keys, subject data). The app imports them by relative path.
 
 ## The audit trail
 
@@ -80,17 +84,17 @@ failure that motivated a line.
   however well written up. The write-up quality is what makes it dangerous: a
   reachability assessment is an argument someone can test. These go in the
   private register; `docs/SECURITY.md` explains the split.
-- **Operational description of the live system** — project ids, deployed
-  function names, which console toggles are on, deployment order. That is
-  `docs/PRODUCTION.md`, and it is private.
+- **Operational description of the live system** — hostnames, tunnel ids,
+  Access policies, which settings are on. That stays with the operator.
 - **A worked request against production.** A copy-pasteable `curl` at a live
   endpoint is a proof of concept regardless of why it was written.
 - **Anything personal.** Real names, real incident narratives, real medical
   detail — in a fixture, a seed script, a test, a screenshot or a comment. Seed
   data is invented. This is the one that gets in by accident.
 - **Credentials, obviously**, though nothing here has ever carried one:
-  `.gitignore` covers `.env`, `.env.production` and `.firebaserc`, and the full
-  history has been searched.
+  `.gitignore` covers `.env` and `.env.production`, and the full history has
+  been searched. Server secrets live in `selfhost/.env`; Worker secrets are
+  `wrangler secret put`.
 
 **When unsure, private.** The asymmetry is total: a doc kept private that
 needn't have been costs a request to the maintainer; a doc published that
@@ -104,15 +108,12 @@ the file that is read before writing.
 
 `src/shared/data/` and `src/shared/storage/` are adapter contracts. The header
 comment in `src/shared/data/index.js` declares itself to be the specification —
-it is, and an adapter that deviates is a bug in the adapter. Most of the app
-still imports `firebase/firestore` directly. The list to trust is
-`docs/CUSTOM-STACK.md`, which is also the registration-time choice between the
-WEEHS database and a company's own database (Postgres is the generic driver;
-other engines register the same way). The seam is real and not universal, so
-do not assume it.
+it is, and an adapter that deviates is a bug in the adapter. Module code calls
+the Firestore-shaped functions in `src/shared/data/client.js`, which are backed
+by the postgres adapter (`postgresClient.js`).
 
-`src/shared/module-kit/service.js` (`createModuleService`) is the org-scoped CRUD
-factory. Prefer it over hand-rolling `collection(db, 'organizations', orgId, …)`.
+`src/shared/module-kit/service.js` (`createModuleService`) is the CRUD
+factory. Prefer it over hand-rolling `collection(db, …)`.
 
 ## Testing
 
@@ -125,15 +126,12 @@ factory. Prefer it over hand-rolling `collection(db, 'organizations', orgId, …
   `// @vitest-environment jsdom` docblock. **Put that docblock on any new test
   that touches the DOM**; without it the failure is immediate and obvious, which
   is the point.
-- `npm run test:rules` and the Playwright suite need a **JDK** — the emulators
-  are JVM processes. CI uses Java 21. firebase-tools 15 will not start them
-  on an older JDK.
-- Rules tests send hostile payloads, not well-behaved ones. A new rule needs a
+- RLS tests send hostile payloads, not well-behaved ones. A new policy needs a
   test that tries to defeat it, not one that confirms it works when used
   correctly.
-- After changing `firestore.rules`, the result count must be **unchanged** unless
-  you intended a semantic change. A refactor that moves the number changed
-  meaning.
+- The RLS and server suites run on embedded PGlite. Set `OHSMS_TEST_PG_URL`
+  and `OHSMS_TEST_PG_ADMIN_URL` to run the same assertions on a real Postgres
+  with a non-superuser app role (docs/SELF-HOSTING.md, "Testing locally").
 
 ## Accessibility is enforced, in two places that do not overlap
 
@@ -169,12 +167,12 @@ that has to carry white text.
 Both are documented in `docs/SECURITY.md` and both have bitten this codebase
 three times each:
 
-1. **The permissive union.** Firestore rules OR together. A narrow rule that
-   refuses something is worthless while a broader `match` grants it. Adding a
-   restrictive match block restricts nothing on its own.
-2. **The post-state branch.** `request.resource.data` on an update is the state
-   *after* the write. A rule that authorises against it lets the writer supply
-   the value that authorises them.
+1. **The permissive union.** Permissive policies OR together. A narrow policy
+   that refuses something is worthless while a broader one grants it; the
+   strict case must be `AS RESTRICTIVE`.
+2. **The post-state branch.** `WITH CHECK` sees the row *after* the write. A
+   policy that authorises against it lets the writer supply the value that
+   authorises them; read the actor's profile and `OLD` instead.
 
 ## Style
 

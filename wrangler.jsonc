@@ -1,22 +1,46 @@
-// Cloudflare Workers static-assets deploy of the SPA. The backend stays on
-// Firebase: the browser still talks to Firestore, Auth, Storage and Functions
-// directly, and firestore.rules is still the enforcement.
+// Cloudflare Workers deploy of one organization's OHSMS.
+//
+// The Worker (worker/index.js) serves the built app from Cloudflare's edge and
+// forwards the server's paths to the organization's own server through a
+// Cloudflare Tunnel. docs/CLOUDFLARE.md is the procedure.
 //
 // This file exists so `wrangler deploy` does not run its framework
 // auto-configuration. Without it, wrangler tries to parse and rewrite
 // vite.config.js to add its own plugin, and the deploy failed with
-// "Error parsing file: vite.config.js". An assets-only Worker needs no plugin:
-// the build is the plain `vite build` output in dist/.
+// "Error parsing file: vite.config.js".
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   // Must match the Worker's name in the Cloudflare dashboard.
   "name": "ohsms",
+  "main": "worker/index.js",
   "compatibility_date": "2026-06-01",
   "assets": {
     "directory": "./dist",
-    // Every unknown path serves index.html, which is the "**" rewrite in
-    // firebase.json. /privacy and /terms resolve to their .html files through
-    // the default html_handling, so they need no rule of their own.
-    "not_found_handling": "single-page-application"
-  }
+    "binding": "ASSETS",
+    // Every unknown path serves index.html. /privacy and /terms resolve to
+    // their .html files through the default html_handling.
+    "not_found_handling": "single-page-application",
+    // These reach the Worker even though dist/ has a file of the same name
+    // (public/runtime-config.js is a build-time placeholder): the server's
+    // version is the one that knows the connected sign-in.
+    "run_worker_first": [
+      "/data",
+      "/auth/*",
+      "/presign",
+      "/blob",
+      "/rpc/*",
+      "/oidc/*",
+      "/.well-known/*",
+      "/setup",
+      "/scim/*",
+      "/health",
+      "/runtime-config.js"
+    ]
+  },
+  "vars": {
+    // The Tunnel hostname of the organization's server. Set it to yours,
+    // here or in the dashboard (Settings → Variables).
+    "ORIGIN_URL": "https://ehs-origin.example.com"
+  },
+  "observability": { "enabled": true }
 }

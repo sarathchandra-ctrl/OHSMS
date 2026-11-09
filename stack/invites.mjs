@@ -124,11 +124,9 @@ export async function inviteMember(
 export async function listInvites(engine, db, { uid }) {
   const admin = await adminOf(engine, uid)
   if (!admin) return refuse('not-admin')
-  const rows = await asWorker(
-    db,
-    'SELECT email, role, name FROM invites ORDER BY email LIMIT $1',
-    [MAX_PENDING_INVITES]
-  )
+  const rows = await asWorker(db, 'SELECT email, role, name FROM invites ORDER BY email LIMIT $1', [
+    MAX_PENDING_INVITES,
+  ])
   return { ok: true, invites: rows.rows }
 }
 

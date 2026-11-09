@@ -1,7 +1,14 @@
 import { describe, it, expect } from 'vitest'
 import {
-  SUBJECT_SOURCES, EXPECTED_SEALED, planExport, planScan, scanFeasibility,
-  classifyErasure, ERASABLE, STATUTORY, ANONYMISE,
+  SUBJECT_SOURCES,
+  EXPECTED_SEALED,
+  planExport,
+  planScan,
+  scanFeasibility,
+  classifyErasure,
+  ERASABLE,
+  STATUTORY,
+  ANONYMISE,
 } from './subjectData.js'
 
 describe('the inventory itself', () => {
@@ -27,7 +34,10 @@ describe('the inventory itself', () => {
   it('covers every collection the encryption policy seals', () => {
     const covered = new Set(SUBJECT_SOURCES.map((s) => s.path))
     for (const path of EXPECTED_SEALED) {
-      expect(covered.has(path), `${path} is sealed by policy.js but absent from SUBJECT_SOURCES`).toBe(true)
+      expect(
+        covered.has(path),
+        `${path} is sealed by policy.js but absent from SUBJECT_SOURCES`
+      ).toBe(true)
     }
   })
 
@@ -155,7 +165,11 @@ describe('the LOTO permit sources', () => {
   it('names contractors and the people on a permit as scan-only mentions', () => {
     const scan = Object.fromEntries(planScan().map((s) => [s.path, s]))
     expect(scan.lotoPermits.fields).toEqual(
-      expect.arrayContaining(['vendorWorkers[].name', 'internalPersonnel[].name', 'locks[].techName']),
+      expect.arrayContaining([
+        'vendorWorkers[].name',
+        'internalPersonnel[].name',
+        'locks[].techName',
+      ])
     )
     expect(scan.technicians.fields).toEqual(['name', 'contact', 'licenceNo'])
   })
@@ -185,11 +199,16 @@ describe('the LOTO permit sources', () => {
 // without the entries at all, a person's linked number is missing from their
 // own export.
 describe('WhatsApp collections', () => {
-  it.each(['waLinks', 'waQueryLog', 'waSessions'])('%s is reachable by uid within the org', (path) => {
-    const src = SUBJECT_SOURCES.find((s) => s.path === path)
-    expect(src).toBeTruthy()
-    expect(src).toMatchObject({ topLevel: true, orgField: 'orgId', retention: ERASABLE })
-    const q = planExport({ uid: 'u1' }).filter((x) => x.path === path)
-    expect(q).toEqual([expect.objectContaining({ field: 'uid', value: 'u1', orgField: 'orgId', topLevel: true })])
-  })
+  it.each(['waLinks', 'waQueryLog', 'waSessions'])(
+    '%s is reachable by uid within the org',
+    (path) => {
+      const src = SUBJECT_SOURCES.find((s) => s.path === path)
+      expect(src).toBeTruthy()
+      expect(src).toMatchObject({ topLevel: true, orgField: 'orgId', retention: ERASABLE })
+      const q = planExport({ uid: 'u1' }).filter((x) => x.path === path)
+      expect(q).toEqual([
+        expect.objectContaining({ field: 'uid', value: 'u1', orgField: 'orgId', topLevel: true }),
+      ])
+    }
+  )
 })

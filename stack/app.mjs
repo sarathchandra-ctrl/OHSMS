@@ -192,9 +192,7 @@ export async function createDedicatedApp({
           'Cache-Control': 'no-store',
         })
         return res.end(
-          req.method === 'HEAD'
-            ? undefined
-            : runtimeConfigScript({ origin, auth: currentAuth })
+          req.method === 'HEAD' ? undefined : runtimeConfigScript({ origin, auth: currentAuth })
         )
       }
       if (root && (req.method === 'GET' || req.method === 'HEAD') && !isApi(url.pathname)) {

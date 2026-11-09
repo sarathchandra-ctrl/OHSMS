@@ -8,7 +8,7 @@
 // the ones Google and Microsoft publish, and the exact-issuer rule accepts a
 // real single tenant and refuses Microsoft's multi-tenant "common" endpoint.
 // What it cannot: a person signing in, which needs a real account in a real
-// tenant (docs/CONTROL-PLANE.md, "Known limits").
+// tenant (docs/SELF-HOSTING.md, "Known limits").
 import { describe, expect, it } from 'vitest'
 import { authorizeUrl, endpointsFor } from '../../../stack/oidc.mjs'
 

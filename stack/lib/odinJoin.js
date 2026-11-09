@@ -23,7 +23,11 @@ const isNum = (v) => typeof v === 'number' && Number.isFinite(v)
  * importer — the two disagreeing is how a name matches on one screen and not
  * on the other.
  */
-export const normSiteName = (s) => String(s || '').trim().toLowerCase().replace(/\s+/g, ' ')
+export const normSiteName = (s) =>
+  String(s || '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
 
 // The same name with punctuation and spacing thrown away, for the last-resort
 // pass of the site join. See resolveOdinRows.
@@ -38,7 +42,14 @@ const looseKey = (s) => normSiteName(s).replace(/[^a-z0-9]/g, '')
  * that box existed, and are checked on the site document AND inside its
  * `attributes` map, so nothing anybody already recorded stops working.
  */
-export const SITE_CODE_FIELDS = ['code', 'siteCode', 'centerId', 'centreId', 'centerServiceId', 'externalId']
+export const SITE_CODE_FIELDS = [
+  'code',
+  'siteCode',
+  'centerId',
+  'centreId',
+  'centerServiceId',
+  'externalId',
+]
 
 /**
  * Fill in what the warehouse did not say, from the site register this app
@@ -120,38 +131,46 @@ export function resolveOdinRows(rows = [], sites = [], { keepUnplaced = true } =
     else if (prev && prev.id !== site.id) byFold.set(folded, null)
   }
 
-  return (rows || []).filter(Boolean).map((r) => {
-    // Centre id first — an exact key beats a name every time — then the name
-    // exactly, then the name ignoring punctuation and spacing.
-    const rawId = r.siteId ? String(r.siteId).trim() : ''
-    const exactId = rawId ? byId.get(rawId) : null
-    // A case-only miss is not on byId. byFold is that site when exactly one
-    // code folds to the query, and null when two sites do.
-    const foldedId = rawId && !exactId ? byFold.get(rawId.toLowerCase()) || null : null
-    const byCode = exactId || foldedId
-    const exact = !byCode && r.site ? byName.get(normSiteName(r.site)) || null : null
-    const loose = !byCode && !exact && r.site ? byLoose.get(looseKey(r.site)) || null : null
-    const site = byCode || exact || loose
-    return {
-      // How the row found its site, so the tab can report the join rather than
-      // leave "why is half my estate missing from the map" unanswerable.
-      matchedBy: byCode ? 'id' : exact ? 'name' : loose ? 'name~' : '',
-      ...r,
-      site: r.site || site?.name || '',
-      region: r.region || site?.region || '',
-      entity: r.entity || site?.entity || '',
-      lat: isNum(r.lat) ? r.lat : (isNum(site?.lat) ? site.lat : null),
-      lng: isNum(r.lng) ? r.lng : (isNum(site?.lng) ? site.lng : null),
-      // Where the coordinates came from, because "why is this site not on the
-      // map" is the question this panel gets asked, and the answer is either
-      // "your question has no lat/lng" or "that site has none in Sites".
-      placedFrom: isNum(r.lat) && isNum(r.lng) ? 'query' : (isNum(site?.lat) && isNum(site?.lng) ? 'register' : ''),
-      // Whether it matched a site THIS VIEWER may see, which is what the
-      // filter below turns into scoping. Distinct from matchedSiteId, which
-      // keeps whatever id the warehouse supplied so the map can still group by
-      // it — an id we do not recognise is still an id.
-      inScope: Boolean(site),
-      matchedSiteId: site?.id || r.siteId || '',
-    }
-  }).filter((r) => keepUnplaced || r.inScope)
+  return (rows || [])
+    .filter(Boolean)
+    .map((r) => {
+      // Centre id first — an exact key beats a name every time — then the name
+      // exactly, then the name ignoring punctuation and spacing.
+      const rawId = r.siteId ? String(r.siteId).trim() : ''
+      const exactId = rawId ? byId.get(rawId) : null
+      // A case-only miss is not on byId. byFold is that site when exactly one
+      // code folds to the query, and null when two sites do.
+      const foldedId = rawId && !exactId ? byFold.get(rawId.toLowerCase()) || null : null
+      const byCode = exactId || foldedId
+      const exact = !byCode && r.site ? byName.get(normSiteName(r.site)) || null : null
+      const loose = !byCode && !exact && r.site ? byLoose.get(looseKey(r.site)) || null : null
+      const site = byCode || exact || loose
+      return {
+        // How the row found its site, so the tab can report the join rather than
+        // leave "why is half my estate missing from the map" unanswerable.
+        matchedBy: byCode ? 'id' : exact ? 'name' : loose ? 'name~' : '',
+        ...r,
+        site: r.site || site?.name || '',
+        region: r.region || site?.region || '',
+        entity: r.entity || site?.entity || '',
+        lat: isNum(r.lat) ? r.lat : isNum(site?.lat) ? site.lat : null,
+        lng: isNum(r.lng) ? r.lng : isNum(site?.lng) ? site.lng : null,
+        // Where the coordinates came from, because "why is this site not on the
+        // map" is the question this panel gets asked, and the answer is either
+        // "your question has no lat/lng" or "that site has none in Sites".
+        placedFrom:
+          isNum(r.lat) && isNum(r.lng)
+            ? 'query'
+            : isNum(site?.lat) && isNum(site?.lng)
+              ? 'register'
+              : '',
+        // Whether it matched a site THIS VIEWER may see, which is what the
+        // filter below turns into scoping. Distinct from matchedSiteId, which
+        // keeps whatever id the warehouse supplied so the map can still group by
+        // it — an id we do not recognise is still an id.
+        inScope: Boolean(site),
+        matchedSiteId: site?.id || r.siteId || '',
+      }
+    })
+    .filter((r) => keepUnplaced || r.inScope)
 }

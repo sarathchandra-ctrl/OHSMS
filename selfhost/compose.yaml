@@ -1,6 +1,9 @@
-# WEEHS on any Linux server with Docker: the app, its Postgres, and an HTTPS
-# front door. docs/SELF-HOSTING.md is the procedure; .env.example lists every
-# setting.
+# OHSMS for one organization on its own server with Docker: the app server,
+# its Postgres, and a front door — either Caddy (HTTPS on this server, ports
+# 80/443 open) or a Cloudflare Tunnel (no inbound ports; Cloudflare in front).
+# COMPOSE_PROFILES in .env picks which: `caddy` or `cloudflare`.
+# docs/SELF-HOSTING.md and docs/CLOUDFLARE.md are the procedures;
+# .env.example lists every setting.
 #
 #   ./install.sh --domain ehs.example.com --image IMAGE    # writes .env, starts
 #
@@ -9,8 +12,8 @@
 #   cp .env.example .env    # then fill it in
 #   docker compose up -d
 #
-# Only Caddy publishes ports. The database and the app are reachable from
-# inside this network and nowhere else.
+# Only Caddy publishes ports (and only with the caddy profile). The database
+# and the app are reachable from inside this network and nowhere else.
 name: weehs
 
 services:
@@ -54,6 +57,10 @@ services:
       SMTP_PASS: ${SMTP_PASS:-}
       MAIL_FROM: ${MAIL_FROM:-}
       OIDC_ACCEPT_UNVERIFIED_EMAIL: ${OIDC_ACCEPT_UNVERIFIED_EMAIL:-false}
+      BLOB_DIR: /srv/stack/data/files
+    volumes:
+      # Uploaded photos and documents. Back this up with the database.
+      - files:/srv/stack/data/files
     expose:
       - '8080'
 
@@ -61,6 +68,7 @@ services:
   # DOMAIN must point at this server, and ports 80 and 443 must be open.
   caddy:
     image: caddy:2
+    profiles: ['caddy']
     restart: unless-stopped
     depends_on:
       - app
@@ -74,7 +82,21 @@ services:
       - caddy-data:/data
       - caddy-config:/config
 
+  # Cloudflare Tunnel: an outbound-only connection from this server to
+  # Cloudflare. In the Zero Trust dashboard, give the tunnel a public hostname
+  # (e.g. ehs-origin.example.com) whose service is http://app:8080.
+  cloudflared:
+    image: cloudflare/cloudflared:2025.11.1
+    profiles: ['cloudflare']
+    restart: unless-stopped
+    depends_on:
+      - app
+    command: tunnel --no-autoupdate run
+    environment:
+      TUNNEL_TOKEN: ${TUNNEL_TOKEN:?set TUNNEL_TOKEN in .env for the cloudflare profile}
+
 volumes:
+  files:
   db-data:
   caddy-data:
   caddy-config:

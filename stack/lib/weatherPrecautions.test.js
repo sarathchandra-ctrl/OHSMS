@@ -16,7 +16,6 @@ import {
 } from './weatherPrecautions.js'
 
 describe('generic precautions', () => {
-
   it('never treats UV as an alert', () => {
     expect(ALERT_KEYS).not.toContain('uv')
     for (const entry of CATALOG) {
@@ -274,4 +273,3 @@ describe('site records', () => {
     )
   })
 })
-

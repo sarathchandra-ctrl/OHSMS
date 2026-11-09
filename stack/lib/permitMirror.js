@@ -143,14 +143,23 @@ export function withdrawnFields() {
  * blast radius is every tenant should cost one run's worth of damage if its
  * query is wrong, not the whole collection.
  */
-export function planWithdrawals(mirrors = [], { now = Date.now(), days = STALE_AFTER_DAYS, max = MAX_WITHDRAWALS_PER_RUN } = {}) {
+export function planWithdrawals(
+  mirrors = [],
+  { now = Date.now(), days = STALE_AFTER_DAYS, max = MAX_WITHDRAWALS_PER_RUN } = {}
+) {
   const withdraw = []
   const skipped = []
   for (const m of mirrors || []) {
     if (!m) continue
     const { withdraw: yes, reason } = shouldWithdraw(m, now, days)
-    if (!yes) { skipped.push({ token: m.token || m.id, reason }); continue }
-    if (withdraw.length >= max) { skipped.push({ token: m.token || m.id, reason: 'over the per-run cap' }); continue }
+    if (!yes) {
+      skipped.push({ token: m.token || m.id, reason })
+      continue
+    }
+    if (withdraw.length >= max) {
+      skipped.push({ token: m.token || m.id, reason: 'over the per-run cap' })
+      continue
+    }
     withdraw.push(m.token || m.id)
   }
   return { withdraw, skipped, capped: skipped.some((s) => s.reason === 'over the per-run cap') }

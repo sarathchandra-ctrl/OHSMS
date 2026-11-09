@@ -1,7 +1,12 @@
 import { describe, it, expect } from 'vitest'
 import {
-  STALE_AFTER_DAYS, MAX_WITHDRAWALS_PER_RUN, toMillis, effectiveEnd,
-  shouldWithdraw, withdrawnFields, planWithdrawals,
+  STALE_AFTER_DAYS,
+  MAX_WITHDRAWALS_PER_RUN,
+  toMillis,
+  effectiveEnd,
+  shouldWithdraw,
+  withdrawnFields,
+  planWithdrawals,
 } from './permitMirror.js'
 
 const NOW = Date.parse('2026-08-16T00:00:00.000Z')
@@ -65,8 +70,10 @@ describe('deciding whether to withdraw a mirror', () => {
 
   // ...and the half that was missing: the challenge window has an end.
   it('withdraws once the challenge window has passed', () => {
-    expect(shouldWithdraw(live({ validTo: daysAgo(8) }), NOW))
-      .toEqual({ withdraw: true, reason: 'stale' })
+    expect(shouldWithdraw(live({ validTo: daysAgo(8) }), NOW)).toEqual({
+      withdraw: true,
+      reason: 'stale',
+    })
     expect(shouldWithdraw(live({ validTo: daysAgo(400) }), NOW).withdraw).toBe(true)
   })
 
@@ -81,8 +88,10 @@ describe('deciding whether to withdraw a mirror', () => {
 
   // Idempotence. Without this a large backlog is rewritten every night.
   it('skips one that is already withdrawn', () => {
-    expect(shouldWithdraw({ ...live({ validTo: daysAgo(400) }), withdrawn: true }, NOW))
-      .toEqual({ withdraw: false, reason: 'already-withdrawn' })
+    expect(shouldWithdraw({ ...live({ validTo: daysAgo(400) }), withdrawn: true }, NOW)).toEqual({
+      withdraw: false,
+      reason: 'already-withdrawn',
+    })
   })
 
   // The app treats a permit with no window as in progress. Withdrawing it would
@@ -128,12 +137,15 @@ describe('what a withdrawal writes', () => {
 
 describe('planning a run', () => {
   it('takes the stale and says why it left the rest', () => {
-    const { withdraw, skipped } = planWithdrawals([
-      { token: 'old', validTo: daysAgo(30) },
-      { token: 'fresh', validTo: daysAgo(1) },
-      { token: 'done', validTo: daysAgo(30), withdrawn: true },
-      { token: 'undated' },
-    ], { now: NOW })
+    const { withdraw, skipped } = planWithdrawals(
+      [
+        { token: 'old', validTo: daysAgo(30) },
+        { token: 'fresh', validTo: daysAgo(1) },
+        { token: 'done', validTo: daysAgo(30), withdrawn: true },
+        { token: 'undated' },
+      ],
+      { now: NOW }
+    )
 
     expect(withdraw).toEqual(['old'])
     expect(skipped).toEqual([

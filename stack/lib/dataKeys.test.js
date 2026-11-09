@@ -72,7 +72,6 @@ describe('wrapping', () => {
     expect(wrapped).not.toContain(toB64u(secret))
   })
 
-
   it('refuses a blob moved to another key id', async () => {
     const wrapped = await wrapKey(MASTER, 'general.1', secret)
     await expect(unwrapKey(MASTER, 'medical.1', wrapped)).rejects.toThrow()
@@ -84,14 +83,17 @@ describe('wrapping', () => {
   })
 
   it('refuses a truncated blob rather than reading past it', async () => {
-    await expect(unwrapKey(MASTER, 'general.1', toB64u(new Uint8Array(4)))).rejects.toThrow(/truncated/)
+    await expect(unwrapKey(MASTER, 'general.1', toB64u(new Uint8Array(4)))).rejects.toThrow(
+      /truncated/
+    )
   })
 
   it('refuses a master secret that is not 32 bytes', async () => {
     // Stretching a mistyped secret into a valid-looking key would encrypt every
     // tenant's keys under something nobody can reproduce deliberately.
-    await expect(wrapKey(toB64u(new Uint8Array(16)), 'general.1', secret))
-      .rejects.toThrow(/must be 32/)
+    await expect(wrapKey(toB64u(new Uint8Array(16)), 'general.1', secret)).rejects.toThrow(
+      /must be 32/
+    )
   })
 })
 
@@ -131,7 +133,11 @@ describe('generateKeyset', () => {
 // ─────────────────────────────────────────────────────────────────────────────
 describe('who gets which half', () => {
   it('gives an admin everything', () => {
-    expect(grantsFor(profile('admin'))).toEqual({ general: true, medicalPublic: true, medicalPrivate: true })
+    expect(grantsFor(profile('admin'))).toEqual({
+      general: true,
+      medicalPublic: true,
+      medicalPrivate: true,
+    })
   })
 
   it('gives a manager everything — isManagerOf is admin OR manager', () => {
@@ -157,7 +163,9 @@ describe('who gets which half', () => {
   it('refuses everything to anyone not approved', () => {
     for (const status of ['pending', 'suspended', 'rejected', '']) {
       expect(grantsFor(profile('admin', status))).toEqual({
-        general: false, medicalPublic: false, medicalPrivate: false,
+        general: false,
+        medicalPublic: false,
+        medicalPrivate: false,
       })
     }
   })
@@ -167,7 +175,9 @@ describe('who gets which half', () => {
     // reading anything; a key handed to them would be the one grant looser
     // than the rules it is meant to copy.
     expect(grantsFor({ ...profile('admin'), mustChangePassword: true })).toEqual({
-      general: false, medicalPublic: false, medicalPrivate: false,
+      general: false,
+      medicalPublic: false,
+      medicalPrivate: false,
     })
   })
 

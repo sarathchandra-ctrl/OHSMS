@@ -47,8 +47,10 @@ describe('who may delete a file', () => {
   // because a token stays valid until it expires. Before this existed, every
   // one of them could delete.
   it('refuses a manager whose profile has been suspended', () => {
-    expect(mayDeleteFile({ ...manager, status: 'revoked' }, P))
-      .toEqual({ ok: false, reason: 'not-approved' })
+    expect(mayDeleteFile({ ...manager, status: 'revoked' }, P)).toEqual({
+      ok: false,
+      reason: 'not-approved',
+    })
     expect(mayDeleteFile({ ...manager, status: 'pending' }, P).ok).toBe(false)
   })
 
@@ -59,8 +61,10 @@ describe('who may delete a file', () => {
 
   // The clause a custom claim could never carry.
   it('refuses an account still on the password an admin typed for it', () => {
-    expect(mayDeleteFile({ ...manager, mustChangePassword: true }, P))
-      .toEqual({ ok: false, reason: 'must-change-password' })
+    expect(mayDeleteFile({ ...manager, mustChangePassword: true }, P)).toEqual({
+      ok: false,
+      reason: 'must-change-password',
+    })
   })
 
   // Profiles predating the field have no such key; treating that as "must
@@ -71,8 +75,10 @@ describe('who may delete a file', () => {
   })
 
   it('refuses a legitimate manager pointing outside the stored files', () => {
-    expect(mayDeleteFile(manager, 'secrets/evidence.jpg'))
-      .toEqual({ ok: false, reason: 'foreign-path' })
+    expect(mayDeleteFile(manager, 'secrets/evidence.jpg')).toEqual({
+      ok: false,
+      reason: 'foreign-path',
+    })
   })
 
   it('refuses an empty or missing path', () => {

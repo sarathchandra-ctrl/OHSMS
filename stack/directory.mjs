@@ -125,11 +125,7 @@ export async function syncRoleFromGroups(engine, db, uid, profile, groups) {
 // rules can be written with names.
 
 async function scimGroupRows(db) {
-  const res = await asWorker(
-    db,
-    `SELECT id, data FROM documents WHERE path = 'scimGroups'`,
-    []
-  )
+  const res = await asWorker(db, `SELECT id, data FROM documents WHERE path = 'scimGroups'`, [])
   // A group deleted in the directory gives nobody anything from that moment.
   return res.rows
     .map((r) => ({ id: r.id, rec: typeof r.data === 'string' ? JSON.parse(r.data) : r.data }))
@@ -447,9 +443,7 @@ export async function handleScim({ engine, db, origin, method, pathname, query, 
       .filter(({ rec }) => !rec.deleted)
   }
   const save = async (id, rec) =>
-    engine.commit(WORKER, [
-      { type: 'set', path: 'scimUsers', id, merge: false, data: { ...rec } },
-    ])
+    engine.commit(WORKER, [{ type: 'set', path: 'scimUsers', id, merge: false, data: { ...rec } }])
 
   if (rest === '/Users' && method === 'GET') {
     let list = await users()
@@ -518,8 +512,7 @@ export async function handleScim({ engine, db, origin, method, pathname, query, 
       if (!next.email) return fail(400, 'A work email is required.', 'invalidValue')
       next.lastModified = new Date().toISOString()
       // A changed address: the old one is no longer this person's here.
-      if (next.email !== found.rec.email)
-        await applyActive(engine, db, found.rec.email, false)
+      if (next.email !== found.rec.email) await applyActive(engine, db, found.rec.email, false)
       await save(id, next)
       await applyActive(engine, db, next.email, next.active)
       return reply(200, toResource(id, next, origin))
@@ -545,9 +538,7 @@ export async function handleScim({ engine, db, origin, method, pathname, query, 
   const memberIds = (list, known) =>
     (Array.isArray(list) ? list : []).map((m) => String(m?.value || '')).filter((v) => known.has(v))
   const saveGroup = async (id, rec) =>
-    engine.commit(WORKER, [
-      { type: 'set', path: 'scimGroups', id, merge: false, data: { ...rec } },
-    ])
+    engine.commit(WORKER, [{ type: 'set', path: 'scimGroups', id, merge: false, data: { ...rec } }])
   const groupResource = (id, rec) => ({
     schemas: [GROUP_SCHEMA],
     id,

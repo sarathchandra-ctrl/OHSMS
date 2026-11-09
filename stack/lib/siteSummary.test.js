@@ -113,4 +113,3 @@ describe('summariseSites', () => {
     expect(appResolveSite('constructor', [{ id: 's', name: 'X' }])).toBeNull()
   })
 })
-

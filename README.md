@@ -1,10 +1,11 @@
 # OHS MS — Occupational Health & Safety Management System
 
-A unified, multi-tenant OHS platform that brings seventeen health-&-safety
-domains into one app with a single sign-on, one dashboard and one audit trail.
+One organization's OHS platform: seventeen health-&-safety domains in one app
+with a single sign-on, one dashboard and one audit trail — installed on **the
+organization's own server and Postgres database**, with Cloudflare in front.
 
-Built with **Vite + React + Tailwind CSS + Firebase** (Auth, Firestore, Storage,
-and Cloud Functions). UI is an **amber+white glass** ops dashboard (amber canvas,
+Built with **Vite + React + Tailwind CSS**, and a Node 22 server (`stack/`)
+over **Postgres** with row-level security. Deploying: [`DEPLOYMENT.md`](DEPLOYMENT.md). UI is an **amber+white glass** ops dashboard (amber canvas,
 frosted white panels, logo teal / amber / siren) with **Emil Kowalski**-style
 motion and **skeleton loaders** throughout.
 
@@ -60,135 +61,84 @@ not share a name.
 
 ## Architecture
 
-Three deployable units:
+One installation serves one organization. Three deployable pieces:
 
-- **Frontend** (`src/`) — one Vite React SPA. A shared shell (auth, nav,
+- **Web app** (`src/`) — one Vite React SPA. A shared shell (auth, nav,
   dashboard) mounts each module as a lazily-loaded feature area under
-  `src/modules/<key>/`. Public unauthenticated routes exist for the QR flows
-  (`/qr/:token`, `/permit/:token`, `/p/:id`, `/t/:id/:point`).
-- **Cloud Functions** (`functions/`) — its own npm package, deployed to
-  `asia-south1`. Custom-claim sync, the data-key service, subject-access export,
-  the nightly retention sweep, and the one-time backfills the Maintenance page
-  drives. Has its own lockfile, test config and CI job.
-- **Security rules** (`firestore.rules`, `storage.rules`) — where tenant
-  isolation is actually enforced, with a dedicated emulator-backed test suite.
+  `src/modules/<key>/`. Public routes exist for the QR flows (`/qr/:token`,
+  `/permit/:token`, `/p/:id`, `/t/:id/:point`).
+- **Server** (`stack/`) — its own npm package. Sign-in through the
+  organization's identity provider (OIDC, SAML or Supabase Auth; no passwords
+  are kept here), the data gateway, server jobs (`/rpc/*`), file storage on
+  disk, SCIM, and the one-time `/setup` that creates the organization.
+- **Cloudflare Worker** (`worker/`) — serves the built app from the edge and
+  forwards the server's paths to it through a Cloudflare Tunnel.
 
-There used to be a fourth, `server/` — an Express + firebase-admin service
-intended to take over the write path. It served no traffic, nothing deployed it,
-and it carried a hand-maintained second copy of eight `firestore.rules` role
-helpers that could drift silently. It was removed rather than maintained; the
-history has it if the write-path migration is ever revived.
+Cross-cutting:
 
-Other cross-cutting pieces:
-
-- **Data** — Cloud Firestore. Every tenant is an organization; module data lives
-  under `/organizations/{orgId}/<collection>` for row-level isolation. The
-  append-only audit trail is `/organizations/{orgId}/auditLogs`.
-- **Auth & RBAC** — Firebase Auth with SAML/OIDC SSO and TOTP two-factor. Four
-  roles — `admin`, `manager`, `member`, `auditor`
-  (`src/shared/auth/permissions.js`) — plus site scoping. Self-service org
-  onboarding with admin approval.
-- **Application-layer encryption** (`src/shared/crypto/`) — envelope encryption
-  over the fields named in `policy.js`, with an escrowed master key held in
-  Secret Manager. Gated by `VITE_ENCRYPTION`; see `docs/PRODUCTION.md` §11.
-- **Portability seams** — `src/shared/data/` (database) and
-  `src/shared/storage/` (files) sit behind documented adapter contracts selected
-  by `VITE_DATA_DRIVER` / `VITE_STORAGE_DRIVER`. See
-  `src/shared/data/README.md`. Organization registration is intended to offer
-  the WEEHS database or the company's own stack (their database, their auth).
-  That choice, and the work still required before the second branch can serve
-  anyone, is `docs/CUSTOM-STACK.md`. Registration asks which database. The
-  WEEHS choice creates a WEEHS organization. The own-database choice files a
-  provisioning request and does not serve traffic. The default build stays on
-  Firestore.
-- **Platform console** — a separate application at `/platform` with its own
-  sign-in, deciding which modules each organization may use. See
-  `docs/PLATFORM-CONSOLE.md`.
+- **Data** — Postgres, one `documents` table addressed by collection path
+  (`incidents`, `permits/<id>/events`, …). Access is enforced by row-level
+  security in `stack/schema.sql`: the browser's requests run as a role with no
+  bypass, and only the server's own jobs may assume the bypass role.
+- **Roles** — `admin`, `manager`, `member`, `auditor`
+  (`src/shared/auth/permissions.js`) plus site scoping. People join by invite,
+  by email domain, by identity-provider group, or over SCIM.
+- **Files** — stored on the server's disk (`/blob`), reached through signed
+  URLs the server issues after re-reading the caller's live profile.
+- **Application-layer encryption** (`src/shared/crypto/`) — envelope
+  encryption over the fields named in `policy.js`, keys wrapped by the
+  server's `DATA_KEY_MASTER`. Gated by `VITE_ENCRYPTION`.
+- **Modules on/off** — one setting, `moduleEntitlements/organization`,
+  writable by an administrator.
 
 ```
 src/
-  shared/       firebase · auth · org · audit · crypto · data · storage · ui kit
+  shared/       auth · org · audit · crypto · data · storage · ui kit
                 layout · module-kit · docId · modules registry
-  pages/        auth/ · admin/ · analytics/ · platform/ · portal/ · Dashboard
+  pages/        auth/ · admin/ · analytics/ · portal/ · Dashboard
   modules/      incidents hira inspections audit ptw loto fire committee training
                 documents emergency objectives weather cctv stakeholder actions
-functions/      Cloud Functions (own package)
-tests/          Firestore + Storage rules suite (needs the emulator)
-e2e/            Playwright smoke, accessibility (axe) + console sweep
-scripts/        seed and one-off ops scripts (.mjs, Node only)
-docs/           production runbook, security register, compliance
+stack/          the organization's server (own package); stack/lib shared rules
+worker/         Cloudflare Worker
+selfhost/       Docker Compose install for the server
+docs/           deployment, security register, compliance
 ```
 
-## Getting started (local, with emulators — no cloud project needed)
+## Getting started (local)
 
-Copy the example environment file, which already points at the emulators:
-
-```bash
-cp .env.example .env
-```
+Needs Node 22.
 
 ```bash
-npm install
+npm ci
 ```
 
 ```bash
-npm run dev:full
+npm ci --prefix stack
 ```
 
-Open http://localhost:5173. The Firebase Emulator UI is at http://localhost:4000.
-Prefer two terminals? Run `npm run emulators` and `npm run dev` separately.
-
-**A JDK is required** for anything that starts the Firestore, Auth or Storage
-emulator — they are JVM processes. That covers `npm run emulators`,
-`npm run dev:full`, `npm run test:rules` and the Playwright suite. Java 21 is
-what CI uses. firebase-tools 15 will not start the emulators on an older JDK.
-
-Seed a demo organization with `npm run seed`.
-
-### One-command Docker (optional)
+Run the server against a local Postgres (the bundled compose `db` service, or
+your own), with the variables listed in `selfhost/.env.example` exported and
+`PUBLIC_ORIGIN=https://localhost`, then the app with `VITE_DATA_GATEWAY`
+pointing at it (see `.env.example`):
 
 ```bash
-docker compose up
+npm run server
 ```
 
-Runs the Vite app and the Firebase Emulator Suite in containers.
-
-### First run
-
-1. **Register organization** — you become the first admin (approved automatically).
-2. Teammates **Sign up** and pick your org, then appear as _pending_ on
-   **Users**, where an admin approves them and assigns a role.
-3. Create records in any module. Everything writes to the unified **Audit Log**
-   and rolls up onto the **Dashboard**.
-
-## Connecting a real Firebase project
-
-`docs/PRODUCTION.md` is the pointer to the private runbook for the Firebase
-deployment this product already runs. Read §0 of that runbook before
-deploying it.
-
-Choosing the company's own database is a registration-time choice, not a
-matter of filling in Firebase keys. The screen offers it. The own-database
-choice files a provisioning request and does not serve traffic. The intent
-and the build plan are `docs/CUSTOM-STACK.md`.
+```bash
+npm run dev
+```
 
 ## Scripts
 
-| Script                            | Purpose                                       |
-| --------------------------------- | --------------------------------------------- |
-| `npm run dev`                     | Vite dev server                               |
-| `npm run dev:full`                | Emulators + Vite together                     |
-| `npm run emulators`               | Firebase Emulator Suite (needs a JDK)         |
-| `npm run build`                   | Production build                              |
-| `npm run seed`                    | Seed a demo organization into the emulators   |
-| `npm test`                        | Unit tests (Vitest, `src/**` only)            |
-| `npm run test:rules`              | Firestore + Storage rules suite (needs a JDK) |
-| `npm run platform:grant`          | Grant a user platform-operator access         |
-| `npm run deploy:staging`          | Deploy to the staging project                 |
-| `npm run lint` / `npm run format` | Lint / format                                 |
-
-`functions/` has its own `npm test`; the root `npm test` does not reach it,
-which is why CI runs both.
+| Script                            | Purpose                                         |
+| --------------------------------- | ----------------------------------------------- |
+| `npm run dev`                     | Vite dev server                                 |
+| `npm run build`                   | Production build of the app (`dist/`)           |
+| `npm run server`                  | The organization's server (`stack/main.mjs`)    |
+| `npm run deploy:cloudflare`       | Build and deploy the Cloudflare Worker          |
+| `npm test`                        | Unit tests: app, server and Worker (Vitest)     |
+| `npm run lint` / `npm run format` | Lint / format                                   |
 
 ## Testing
 
@@ -197,11 +147,14 @@ which is why CI runs both.
   export, scheduling, energy sources. They run in parallel and are stable there;
   DOM tests carry a `// @vitest-environment jsdom` docblock and the default is
   `node`.
-- **Rules** — `npm run test:rules` spins up the emulator and asserts tenant
-  isolation (org A cannot read org B), role-gated writes, medical-record
-  confinement and the limits of the anonymous QR write surfaces. These send
-  hostile payloads, not well-behaved ones.
-- **Functions** — `cd functions && npm test`.
+- **Row-level security** — `src/shared/data/adapters/postgres.rls.test.js`
+  runs `stack/schema.sql` on an embedded Postgres and asserts that signed-out,
+  pending and disabled accounts see nothing, role-gated writes, medical-record
+  confinement, the server-only directory paths and the limits of the anonymous
+  QR write surfaces. These send hostile payloads, not well-behaved ones.
+- **Server** — `src/shared/data/controlPlane.test.js` and
+  `ownStack.live.test.js` drive the real server: /setup, SAML and OIDC sign-in,
+  invites, SCIM, on a database set up like a managed one.
 - **Accessibility** — `e2e/accessibility.spec.js` runs axe against the rendered
   DOM and fails on any serious or critical WCAG 2.1 AA violation. It is the half
   of the gate `eslint-plugin-jsx-a11y` cannot be: this app binds most labels to
@@ -210,4 +163,5 @@ which is why CI runs both.
   set low, asserts that screens totalling a capped collection actually render
   the "these figures are incomplete" notice (portal home is the exception: it
   must not).
-- **End-to-end** — `e2e/` under Playwright, against seeded emulators.
+- **End-to-end** — `e2e/` under Playwright. The older specs were written
+  against the Firebase emulators and need a seeded server to run.

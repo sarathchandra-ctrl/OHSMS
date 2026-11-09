@@ -12,7 +12,12 @@ import {
 // Marshal export, so the cases reflect the data the backfill will actually meet
 // rather than invented shapes.
 const site = (id, name) => ({ id, name })
-const record = (collection, id, centerName, extra = {}) => ({ collection, id, centerName, ...extra })
+const record = (collection, id, centerName, extra = {}) => ({
+  collection,
+  id,
+  centerName,
+  ...extra,
+})
 const ext = (id, centerName, extra = {}) => record('extinguishers', id, centerName, extra)
 
 const SITES = [
@@ -32,7 +37,15 @@ const SITES = [
 const DUPLICATE_SITES = [...SITES, site('s9', 'Raptor Fitness Addagutta')]
 
 // Every bucket planSiteLinks reports. Arrays hold rows, numbers are counts.
-const BUCKETS = ['writes', 'ambiguous', 'conflicting', 'unmatched', 'noName', 'alreadyLinked', 'deleted']
+const BUCKETS = [
+  'writes',
+  'ambiguous',
+  'conflicting',
+  'unmatched',
+  'noName',
+  'alreadyLinked',
+  'deleted',
+]
 
 const size = (v) => (Array.isArray(v) ? v.length : v)
 const landedIn = (plan) => BUCKETS.filter((b) => size(plan[b]) > 0)
@@ -69,7 +82,9 @@ const BUCKET_CASES = [
     centerName: 'Cult Gym Shaikpet',
     extra: {},
     check: (plan, { collection, id }) =>
-      expect(plan.writes).toEqual([{ collection, id, siteId: 's2', matchedName: 'Cult Gym Shaikpet' }]),
+      expect(plan.writes).toEqual([
+        { collection, id, siteId: 's2', matchedName: 'Cult Gym Shaikpet' },
+      ]),
   },
   {
     bucket: 'ambiguous',
@@ -100,7 +115,8 @@ const BUCKET_CASES = [
     bucket: 'noName',
     centerName: '',
     extra: {},
-    check: (plan, { collection, id }) => expect(plan.noName).toEqual([{ collection, id, centerName: '' }]),
+    check: (plan, { collection, id }) =>
+      expect(plan.noName).toEqual([{ collection, id, centerName: '' }]),
   },
   {
     bucket: 'alreadyLinked',
@@ -135,7 +151,10 @@ describe('the tables cover the module', () => {
 
 describe.each(COLLECTION_CASES)('planning $collection', (target) => {
   it.each(BUCKET_CASES)('files a record into $bucket', (c) => {
-    const plan = planSiteLinks([{ ...target, centerName: c.centerName, ...c.extra }], c.sites || SITES)
+    const plan = planSiteLinks(
+      [{ ...target, centerName: c.centerName, ...c.extra }],
+      c.sites || SITES
+    )
     // Exactly one bucket, every time: a record that lands in none has been
     // dropped without a trace, and one that lands in two is counted twice in
     // the dry run a human reads before saying yes.
@@ -179,13 +198,21 @@ describe('ambiguity is never resolved by guessing', () => {
   const collapsing = [site('a', 'Cult Gym X'), site('b', 'Cult X')]
 
   it('keeps every site that shares a normalised name', () => {
-    expect(indexSites(collapsing).get('core').get('cult x').map((s) => s.id)).toEqual(['a', 'b'])
+    expect(
+      indexSites(collapsing)
+        .get('core')
+        .get('cult x')
+        .map((s) => s.id)
+    ).toEqual(['a', 'b'])
   })
 
   it('makes EVERY record carrying that name ambiguous, and writes none of them', () => {
     const plan = planSiteLinks([ext('e1', 'Cult X Gym'), ext('e2', 'Cult X Gym')], collapsing)
     expect(plan.writes).toEqual([])
-    expect(plan.ambiguous.map((a) => a.siteIds)).toEqual([['a', 'b'], ['a', 'b']])
+    expect(plan.ambiguous.map((a) => a.siteIds)).toEqual([
+      ['a', 'b'],
+      ['a', 'b'],
+    ])
     expect(plan.ambiguous[0].how).toBe('core')
     expect(plan.ambiguous[0].siteNames).toEqual(['Cult Gym X', 'Cult X'])
   })
@@ -202,13 +229,19 @@ describe('ambiguity is never resolved by guessing', () => {
   it('counts a record already linked to one of the candidates as done', () => {
     // Somebody has already made the choice this job refuses to make. Reporting
     // it every run trains the reader to skip the bucket that matters most.
-    const plan = planSiteLinks([ext('e1', 'Raptor Fitness - Addagutta', { siteId: 's7' })], DUPLICATE_SITES)
+    const plan = planSiteLinks(
+      [ext('e1', 'Raptor Fitness - Addagutta', { siteId: 's7' })],
+      DUPLICATE_SITES
+    )
     expect(plan.ambiguous).toEqual([])
     expect(plan.alreadyLinked).toBe(1)
   })
 
   it('still reports one linked to a site that is not a candidate', () => {
-    const plan = planSiteLinks([ext('e1', 'Raptor Fitness - Addagutta', { siteId: 's2' })], DUPLICATE_SITES)
+    const plan = planSiteLinks(
+      [ext('e1', 'Raptor Fitness - Addagutta', { siteId: 's2' })],
+      DUPLICATE_SITES
+    )
     expect(plan.ambiguous[0].currentSiteId).toBe('s2')
     expect(plan.ambiguous[0].siteIds).toEqual(['s7', 's9'])
     expect(plan.writes).toEqual([])
@@ -228,15 +261,17 @@ describe('an existing siteId is never overwritten', () => {
     // the wrong half. The job cannot tell which half is stale.
     const plan = planSiteLinks([ext('e1', 'Cult Gym Shaikpet', { siteId: 's1' })], SITES)
     expect(plan.writes).toEqual([])
-    expect(plan.conflicting).toEqual([{
-      collection: 'extinguishers',
-      id: 'e1',
-      centerName: 'Cult Gym Shaikpet',
-      currentSiteId: 's1',
-      resolvedSiteId: 's2',
-      resolvedName: 'Cult Gym Shaikpet',
-      how: 'exact',
-    }])
+    expect(plan.conflicting).toEqual([
+      {
+        collection: 'extinguishers',
+        id: 'e1',
+        centerName: 'Cult Gym Shaikpet',
+        currentSiteId: 's1',
+        resolvedSiteId: 's2',
+        resolvedName: 'Cult Gym Shaikpet',
+        how: 'exact',
+      },
+    ])
   })
 
   it('leaves a linked record alone when its text names no site at all', () => {
@@ -253,7 +288,9 @@ describe('an existing siteId is never overwritten', () => {
 
   it('treats a blank siteId as no link at all', () => {
     for (const blank of ['', '   ', null, undefined]) {
-      expect(planSiteLinks([ext('e1', 'Cult Gym Shaikpet', { siteId: blank })], SITES).writes).toHaveLength(1)
+      expect(
+        planSiteLinks([ext('e1', 'Cult Gym Shaikpet', { siteId: blank })], SITES).writes
+      ).toHaveLength(1)
     }
   })
 })
@@ -265,8 +302,20 @@ describe('the write itself', () => {
     // report, and siteId is the entire patch — there is nothing else here for a
     // caller to write by accident.
     const plan = planSiteLinks([ext('e1', 'Cult Ameerpet')], SITES)
-    expect(Object.keys(plan.writes[0]).sort()).toEqual(['collection', 'id', 'matchedName', 'siteId'])
-    for (const forbidden of ['centerName', 'siteName', 'entity', 'region', 'name', 'sourceCenterName']) {
+    expect(Object.keys(plan.writes[0]).sort()).toEqual([
+      'collection',
+      'id',
+      'matchedName',
+      'siteId',
+    ])
+    for (const forbidden of [
+      'centerName',
+      'siteName',
+      'entity',
+      'region',
+      'name',
+      'sourceCenterName',
+    ]) {
       expect(plan.writes[0]).not.toHaveProperty(forbidden)
     }
   })
@@ -293,22 +342,28 @@ describe('the write itself', () => {
   it('emits one write when the same document is listed twice', () => {
     // Two writes to one path in a single batch is rejected outright, failing
     // the whole run over a duplicate in the caller's query.
-    const plan = planSiteLinks([ext('e1', 'Cult Gym Shaikpet'), ext('e1', 'Cult Gym Shaikpet')], SITES)
+    const plan = planSiteLinks(
+      [ext('e1', 'Cult Gym Shaikpet'), ext('e1', 'Cult Gym Shaikpet')],
+      SITES
+    )
     expect(plan.writes).toHaveLength(1)
   })
 
   it('treats the same id in two collections as two documents', () => {
-    const plan = planSiteLinks([
-      record('extinguishers', 'x1', 'Cult Gym Shaikpet'),
-      record('aeds', 'x1', 'Cult Gym Shaikpet'),
-    ], SITES)
+    const plan = planSiteLinks(
+      [
+        record('extinguishers', 'x1', 'Cult Gym Shaikpet'),
+        record('aeds', 'x1', 'Cult Gym Shaikpet'),
+      ],
+      SITES
+    )
     expect(plan.writes.map((w) => w.collection)).toEqual(['extinguishers', 'aeds'])
   })
 
   it('skips a deleted record even when it would otherwise conflict', () => {
     const plan = planSiteLinks(
       [ext('e1', 'Cult Gym Shaikpet', { siteId: 's1', deletedAt: '2026-01-01T00:00:00Z' })],
-      SITES,
+      SITES
     )
     expect(plan.conflicting).toEqual([])
     expect(plan.deleted).toBe(1)
@@ -333,16 +388,21 @@ describe('the override table', () => {
   })
 
   it('can be switched off by a caller running an unconfirmed tenant', () => {
-    const plan = planSiteLinks([ext('e1', 'G8 Fitness Studio - Sainikpuri')], SITES, { overrides: {} })
+    const plan = planSiteLinks([ext('e1', 'G8 Fitness Studio - Sainikpuri')], SITES, {
+      overrides: {},
+    })
     expect(plan.writes).toEqual([])
     expect(plan.unmatchedNames).toEqual(['G8 Fitness Studio - Sainikpuri'])
   })
 
-  it.each(['__proto__', 'constructor', 'toString'])('does not read "%s" off Object.prototype', (name) => {
-    const plan = planSiteLinks([ext('e1', name)], SITES)
-    expect(plan.writes).toEqual([])
-    expect(plan.unmatched).toHaveLength(1)
-  })
+  it.each(['__proto__', 'constructor', 'toString'])(
+    'does not read "%s" off Object.prototype',
+    (name) => {
+      const plan = planSiteLinks([ext('e1', name)], SITES)
+      expect(plan.writes).toEqual([])
+      expect(plan.unmatched).toHaveLength(1)
+    }
+  )
 
   // Mirrors the checks on the app-side copy in
   // src/modules/fire/lib/siteLink.test.js. functions/ cannot import from src/,
@@ -362,16 +422,16 @@ describe('the override table', () => {
 
 describe('the whole estate at once', () => {
   const ESTATE = [
-    ext('e1', 'Cult Gym Shaikpet'),                                  // writes
-    record('aeds', 'a1', 'Cult Ameerpet'),                           // writes
-    record('fas', 'f1', 'Raptor Fitness - Addagutta'),               // ambiguous
-    ext('e2', 'Cult Gym Shaikpet', { siteId: 's1' }),                // conflicting
-    ext('e3', 'Zeta Fitness'),                                       // unmatched
-    ext('e4', 'Alpha Fitness'),                                      // unmatched
-    ext('e5', 'Zeta Fitness'),                                       // unmatched
-    ext('e6', ''),                                                   // noName
-    ext('e7', 'Cult Gym Shaikpet', { siteId: 's2' }),                // alreadyLinked
-    ext('e8', 'Cult Gym Shaikpet', { deletedAt: '2026-01-01' }),     // deleted
+    ext('e1', 'Cult Gym Shaikpet'), // writes
+    record('aeds', 'a1', 'Cult Ameerpet'), // writes
+    record('fas', 'f1', 'Raptor Fitness - Addagutta'), // ambiguous
+    ext('e2', 'Cult Gym Shaikpet', { siteId: 's1' }), // conflicting
+    ext('e3', 'Zeta Fitness'), // unmatched
+    ext('e4', 'Alpha Fitness'), // unmatched
+    ext('e5', 'Zeta Fitness'), // unmatched
+    ext('e6', ''), // noName
+    ext('e7', 'Cult Gym Shaikpet', { siteId: 's2' }), // alreadyLinked
+    ext('e8', 'Cult Gym Shaikpet', { deletedAt: '2026-01-01' }), // deleted
   ]
 
   it('files every record into exactly one bucket', () => {
@@ -401,13 +461,20 @@ describe('the whole estate at once', () => {
 
 describe('degenerate inputs', () => {
   it('survives empty and missing collections', () => {
-    for (const [equipment, sites] of [[[], []], [undefined, undefined], [null, null]]) {
+    for (const [equipment, sites] of [
+      [[], []],
+      [undefined, undefined],
+      [null, null],
+    ]) {
       expect(planSiteLinks(equipment, sites).writes).toEqual([])
     }
   })
 
   it('skips a record with no id — there is nothing to address', () => {
-    const plan = planSiteLinks([{ collection: 'extinguishers', centerName: 'Cult Gym Shaikpet' }, null], SITES)
+    const plan = planSiteLinks(
+      [{ collection: 'extinguishers', centerName: 'Cult Gym Shaikpet' }, null],
+      SITES
+    )
     expect(BUCKETS.reduce((n, b) => n + size(plan[b]), 0)).toBe(0)
   })
 
@@ -416,7 +483,12 @@ describe('degenerate inputs', () => {
     // drops documents missing the ordered field.
     const idx = indexSites([site('a', ''), site('b', undefined), site('c', 'Real Site')])
     expect(idx.get('base').size).toBe(1)
-    expect(idx.get('base').get('real site').map((s) => s.id)).toEqual(['c'])
+    expect(
+      idx
+        .get('base')
+        .get('real site')
+        .map((s) => s.id)
+    ).toEqual(['c'])
   })
 
   it('does not list signages among the linkable collections', () => {
