@@ -117,6 +117,9 @@ export function limit(n) {
 }
 
 export function onSnapshot(target, onNext, onError) {
+  if (typeof onNext !== 'function') {
+    throw new TypeError('onSnapshot requires a callback function')
+  }
   if (target.kind === 'doc') {
     return dataProvider.subscribeDoc(
       splitDoc(target).path,

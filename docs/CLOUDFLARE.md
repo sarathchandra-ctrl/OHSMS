@@ -70,6 +70,29 @@ organization.
 `npx wrangler d1 time-travel restore ohsms --timestamp <time>`. For a copy
 you hold yourself: `npx wrangler d1 export ohsms --remote --output ohsms.sql`.
 
+## Deploying main from GitHub
+
+`.github/workflows/deploy-cloudflare.yml` deploys the `main` branch to the
+existing **ohsms** Worker on every push, and can also be run from Actions.
+It does not deploy the separate sms Worker.
+
+Before the first run, in GitHub **Settings → Secrets and variables → Actions**,
+add repository secrets named `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`.
+Use an API token scoped to the intended account that can deploy Workers and
+access the configured D1 and R2 resources. Enter credentials in GitHub's secure
+settings, never in a source file or issue.
+
+The existing D1 database and the private R2 bucket declared in `wrangler.jsonc`
+must exist. Keep the Worker's existing `SESSION_SECRET` and `DATA_KEY_MASTER`
+unchanged. Worker secrets are separate from GitHub's deployment credentials.
+Email reset also needs `RESEND_API_KEY` and a verified `MAIL_FROM` setting.
+
+The workflow installs locked dependencies, runs lint and tests, builds the app,
+and deploys its assets and backend together. It then checks `/health` for the
+database, storage binding and deployed Git commit. A missing deployment secret
+stops the job with a setup error; a pushed commit alone is not a live deployment.
+After supplying secrets, use **Actions → Deploy OHSMS → Run workflow**, branch `main`.
+
 ## B. Cloudflare in front of your own server
 
 OHSMS runs for **one organization**, on **that organization's server and

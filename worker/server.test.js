@@ -178,10 +178,13 @@ describe('Cloudflare startup', () => {
     for (let i = 0; i < 2; i++) {
       const db = openSqlite()
       try {
-        const env = settings(db)
+        const env = { ...settings(db), BUILD_COMMIT: 'test-build' }
         const health = () => serveOnCloudflare(new Request('https://ehs.example.com/health'), env)
         const responses = await Promise.all([health(), health(), health()])
-        for (const res of responses) expect(res.status).toBe(200)
+        for (const res of responses) {
+          expect(res.status).toBe(200)
+          expect(await res.json()).toMatchObject({ ok: true, database: 'ok', version: 'test-build' })
+        }
         const { count } = await db.prepare('SELECT count(*) AS count FROM auth_secrets').first()
         expect(count).toBe(1)
       } finally {

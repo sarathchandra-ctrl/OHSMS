@@ -17,7 +17,8 @@
     "mobile:sync": "npm run build && npx cap sync ios",
     "mobile:ios": "npx cap open ios",
     "server": "node stack/main.mjs",
-    "deploy:cloudflare": "npm run build && wrangler deploy"
+    "deploy:cloudflare": "npm run build && wrangler deploy",
+    "dev:local": "node scripts/dev-local.mjs"
   },
   "dependencies": {
     "@capacitor-mlkit/barcode-scanning": "^8.2.2",
@@ -72,7 +73,7 @@
     "eslint-plugin-jsx-a11y": "^6.10.2",
     "eslint-plugin-react": "^7.35.0",
     "eslint-plugin-react-hooks": "^4.6.2",
-    "eslint-plugin-react-refresh": "^0.5.7",
+    "eslint-plugin-react-refresh": "^0.4.26",
     "globals": "^15.9.0",
     "jsdom": "^24.1.1",
     "postcss": "^8.5.32",

@@ -119,23 +119,23 @@ npm ci
 npm ci --prefix stack
 ```
 
-Run the server (it keeps its SQLite file under `stack/data/`), with the variables listed in `selfhost/.env.example` exported and
-`PUBLIC_ORIGIN=https://localhost`, then the app with `VITE_DATA_GATEWAY`
-pointing at it (see `.env.example`):
+Start the app and its local backend together:
 
 ```bash
-npm run server
+npm run dev:local
 ```
 
-```bash
-npm run dev
-```
+Open `http://127.0.0.1:5173`. The initial administrator login is saved in
+`stack/data/local/credentials.json` (ignored by Git). SQLite, attachments,
+and a local password-reset email outbox are stored in that same local folder.
+Cloudflare credentials are not required. See [local development](docs/LOCAL-DEVELOPMENT.md).
 
 ## Scripts
 
 | Script                            | Purpose                                         |
 | --------------------------------- | ----------------------------------------------- |
 | `npm run dev`                     | Vite dev server                                 |
+| `npm run dev:local`               | App, local SQLite backend, uploads and email outbox |
 | `npm run build`                   | Production build of the app (`dist/`)           |
 | `npm run server`                  | The organization's server (`stack/main.mjs`)    |
 | `npm run deploy:cloudflare`       | Build and deploy the Cloudflare Worker          |

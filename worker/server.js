@@ -111,6 +111,7 @@ export async function serveOnCloudflare(request, env, ctx) {
         database: 'ok',
         files: Boolean(files),
         mail: Boolean(env.RESEND_API_KEY && env.MAIL_FROM),
+        ...(env.BUILD_COMMIT ? { version: env.BUILD_COMMIT } : {}),
       })
     }
     const handle = createOwnStackHandler({
