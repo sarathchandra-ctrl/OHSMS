@@ -7,7 +7,7 @@
 //   PUT  /blob?op=put&path=…&exp=…&sig=…   upload, valid for 15 minutes
 //   GET  /blob?op=get&path=…&sig=…         download, a capability URL
 //
-// The download URL is what the app stores on the record (the `url` beside the
+// Link signing is stack/blobSign.mjs. The download URL is what the app stores on the record (the `url` beside the
 // `path`), the same role a storage download token played before. It never
 // expires on its own, so a file whose record is deleted keeps working for
 // whoever copied the link — exactly as before; deleting the FILE (presign
@@ -16,26 +16,14 @@
 // Paths are checked twice: by isAppFilePath before any signature is minted,
 // and again here against the directory, so a crafted path cannot escape it.
 
-import { createHmac, timingSafeEqual } from 'node:crypto'
 import { createReadStream, createWriteStream } from 'node:fs'
 import { mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises'
 import { dirname, join, normalize, sep } from 'node:path'
 import { pipeline } from 'node:stream/promises'
 import { isAppFilePath } from './lib/fileDelete.js'
+import { DOWNLOAD_HEADERS, MAX_BLOB_BYTES, createBlobSigner } from './blobSign.mjs'
 
-export const UPLOAD_TTL_MS = 15 * 60 * 1000
-// Above MAX_UPLOAD_BYTES in src/shared/storage, with headroom for sealing.
-export const MAX_BLOB_BYTES = 30 * 1024 * 1024
-
-function sign(key, parts) {
-  return createHmac('sha256', key).update(parts.join('\n')).digest('base64url')
-}
-
-function same(a, b) {
-  const x = Buffer.from(String(a || ''))
-  const y = Buffer.from(String(b || ''))
-  return x.length > 0 && x.length === y.length && timingSafeEqual(x, y)
-}
+export { UPLOAD_TTL_MS, MAX_BLOB_BYTES, blobKeyFrom } from './blobSign.mjs'
 
 /**
  * @param {object} o
@@ -53,18 +41,8 @@ export function createBlobStore({ dir, key, origin }) {
     return full
   }
 
-  function uploadUrl(path, now = Date.now()) {
-    const exp = String(now + UPLOAD_TTL_MS)
-    const sig = sign(key, ['put', path, exp])
-    const q = new URLSearchParams({ op: 'put', path, exp, sig })
-    return `${origin}/blob?${q}`
-  }
-
-  function downloadUrl(path) {
-    const sig = sign(key, ['get', path])
-    const q = new URLSearchParams({ op: 'get', path, sig })
-    return `${origin}/blob?${q}`
-  }
+  const signer = createBlobSigner({ key, origin })
+  const { uploadUrl, downloadUrl } = signer
 
   async function remove(path) {
     const file = fileFor(path)
@@ -75,17 +53,8 @@ export function createBlobStore({ dir, key, origin }) {
   }
 
   function check(url, op, now) {
-    const path = url.searchParams.get('path') || ''
-    const sig = url.searchParams.get('sig') || ''
-    if (url.searchParams.get('op') !== op) return null
-    if (op === 'put') {
-      const exp = url.searchParams.get('exp') || ''
-      if (!/^\d+$/.test(exp) || Number(exp) < now) return null
-      if (!same(sig, sign(key, ['put', path, exp]))) return null
-    } else if (!same(sig, sign(key, ['get', path]))) {
-      return null
-    }
-    return fileFor(path)
+    const path = signer.check(url, op, now)
+    return path ? fileFor(path) : null
   }
 
   /** Answers /blob. Returns false when the request is not for it. */
@@ -146,10 +115,7 @@ export function createBlobStore({ dir, key, origin }) {
         'Content-Length': info.size,
         // The app decides what to render; never let a stored file run as a page
         // on this origin.
-        'Content-Security-Policy':
-          "default-src 'none'; img-src 'self' data:; style-src 'unsafe-inline'; sandbox",
-        'X-Content-Type-Options': 'nosniff',
-        'Cache-Control': 'private, max-age=3600',
+        ...DOWNLOAD_HEADERS,
       })
       if (req.method === 'HEAD') return res.end()
       createReadStream(file).pipe(res)
@@ -159,9 +125,4 @@ export function createBlobStore({ dir, key, origin }) {
   }
 
   return { uploadUrl, downloadUrl, remove, handle, fileFor }
-}
-
-/** A signing key for blob URLs that is not the session secret itself. */
-export function blobKeyFrom(sessionSecret) {
-  return createHmac('sha256', String(sessionSecret)).update('ohsms:blob-urls:v1').digest()
 }

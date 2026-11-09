@@ -135,7 +135,7 @@ function AppChromeInner({ children }) {
             as the single letter "W". */}
           <NavLink
             to={shell.homePath}
-            aria-label={`${branded && orgName ? orgName : 'WEHS'} home`}
+            aria-label={`${branded && orgName ? orgName : 'Cult Fit SMS'} home`}
             className="flex min-w-0 flex-1 items-center gap-2.5 rounded-xl focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-brand-400 focus-visible:ring-offset-2 focus-visible:ring-offset-canvas sm:flex-none"
           >
             <OrgMark className="h-8 w-8 shrink-0 rounded-xl ring-1 ring-ink-200" />
@@ -149,7 +149,7 @@ function AppChromeInner({ children }) {
             </span>
             <span className="hidden min-w-0 leading-tight sm:block">
               <span className="block truncate text-[13px] font-extrabold tracking-[-0.02em] text-ink-900">
-                {branded ? orgName || 'Your organization' : 'WEHS'}
+                {branded ? orgName || 'Your organization' : 'Cult Fit SMS'}
               </span>
               <span className="block truncate text-[11px] text-ink-400">
                 {branded

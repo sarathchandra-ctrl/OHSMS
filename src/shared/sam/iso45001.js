@@ -29,7 +29,7 @@ export const ISO_CLAUSES = [
   {
     clause: '4.4', title: 'OH&S management system',
     summary: 'Establish, implement, maintain and continually improve the management system and its processes.',
-    modules: [{ label: 'WEHS Portal — all modules', path: '/portal' }],
+    modules: [{ label: 'Cult Fit SMS Portal — all modules', path: '/portal' }],
     keywords: ['management system', 'ohsms', 'processes'],
     stat: null,
   },

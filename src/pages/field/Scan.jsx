@@ -11,7 +11,7 @@ import {
 } from '../../shared/mobile/webScan'
 
 const UNKNOWN =
-  'This QR code is not a WEEHS OHSMS label. Nothing was opened. Equipment labels start with /qr/, permits with /permit/.'
+  'This QR code is not a Cult Fit SMS label. Nothing was opened. Equipment labels start with /qr/, permits with /permit/.'
 
 const STARTING = 'Starting the camera…'
 const SCANNING = 'Scanning. Point the camera at the code.'

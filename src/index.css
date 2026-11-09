@@ -113,7 +113,7 @@
   --amber: #e8a33d;
   --siren: #d94a3c;
   --kraft: #c6946c;
-  /* Brand scale. Kit defaults match public/wehs.svg; OrgTheme rewrites these
+  /* Brand scale. Kit defaults (public/brand/logo.svg is the default mark); OrgTheme rewrites these
      from the organization's logo / canvas pick so Liquid Glass follows the
      mark. Space-separated *-rgb channels feed Tailwind opacity modifiers. */
   --brand-50: #e8f4f2;

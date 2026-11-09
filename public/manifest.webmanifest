@@ -1,6 +1,6 @@
 {
-  "name": "WEEHS OHSMS",
-  "short_name": "OHSMS",
+  "name": "Cult Fit SMS",
+  "short_name": "Cult Fit SMS",
   "description": "Workplace Environment, Health and Safety. Scan equipment labels, record inspections, raise defects and report incidents.",
   "id": "/",
   "start_url": "/field",

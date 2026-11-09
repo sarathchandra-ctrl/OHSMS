@@ -63,7 +63,7 @@ const IncidentReportDoc = forwardRef(function IncidentReportDoc({ incident, phot
     <div ref={ref} className="doc-sheet mx-auto max-w-[800px] p-8">
       <div className="doc-header">
         <div>
-          <p className="doc-kicker">WEHS · Incident IRA</p>
+          <p className="doc-kicker">Cult Fit SMS · Incident IRA</p>
           <h1 className="doc-title">{full ? 'Incident investigation report' : 'Initial incident report'}</h1>
           <p className="mt-1 text-sm text-ink-500">{org?.name || 'Organization'}</p>
         </div>

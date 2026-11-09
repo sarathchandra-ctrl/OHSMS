@@ -27,7 +27,7 @@ const IllnessReportDoc = forwardRef(function IllnessReportDoc({ illness, org }, 
     <div ref={ref} className="doc-sheet mx-auto max-w-[800px] p-8">
       <div className="doc-header">
         <div>
-          <p className="doc-kicker">WEHS · Incident IRA</p>
+          <p className="doc-kicker">Cult Fit SMS · Incident IRA</p>
           <h1 className="doc-title">Occupational illness report</h1>
           <p className="mt-1 text-sm text-ink-500">{org?.name || 'Organization'}</p>
         </div>

@@ -21,7 +21,13 @@ import {
   revive,
 } from '../src/shared/data/adapters/postgresWire.js'
 
-const SCHEMA = readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'schema.sql'), 'utf8')
+// Read on first use, not at import: the Cloudflare Worker has no file system
+// and passes the schema text it was bundled with instead.
+let schemaText = null
+function defaultSchema() {
+  schemaText ??= readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'schema.sql'), 'utf8')
+  return schemaText
+}
 
 const ROLES = new Set(['ohsms_browser', 'ohsms_worker'])
 
@@ -57,8 +63,8 @@ export async function asWorker(db, sql, params = []) {
   })
 }
 
-export async function applySchema(db) {
-  await db.exec(SCHEMA)
+export async function applySchema(db, sql = defaultSchema()) {
+  await db.exec(sql)
 }
 
 function rowToDoc(row, { rev = false } = {}) {

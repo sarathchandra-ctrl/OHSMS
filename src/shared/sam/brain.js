@@ -86,7 +86,7 @@ export function findByKeywords(text) {
 function clauseAnswer(c, stats) {
   const parts = [
     { type: 'text', text: `**Clause ${c.clause} — ${c.title}.** ${c.summary}` },
-    { type: 'modules', label: 'In WEHS this lives in:', modules: c.modules },
+    { type: 'modules', label: 'In Cult Fit SMS this lives in:', modules: c.modules },
   ]
   const lines = c.stat ? statLines(c.stat, stats) : []
   if (lines.length) parts.push({ type: 'text', text: `📊 Live: ${lines.join(' · ')}.` })
@@ -108,7 +108,7 @@ export function answer(question, stats = {}) {
 
   if (/\biso map\b|clause map|all clauses|full map|correlat/i.test(q)) {
     return [
-      { type: 'text', text: 'Here’s how ISO 45001:2018 maps onto your WEHS modules:' },
+      { type: 'text', text: 'Here’s how ISO 45001:2018 maps onto your Cult Fit SMS modules:' },
       { type: 'map' },
     ]
   }

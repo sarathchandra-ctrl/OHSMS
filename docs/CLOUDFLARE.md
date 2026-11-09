@@ -1,4 +1,54 @@
-# Deploying behind Cloudflare
+# Deploying on Cloudflare
+
+Two ways, chosen by the Worker's settings in `wrangler.jsonc`:
+
+- **A. Everything on Cloudflare** (no server to manage). The Worker serves the
+  app *and* runs the server (`worker/server.js`). Postgres is reached through
+  a **Hyperdrive** config; uploaded files go to an **R2** bucket. `ORIGIN_URL`
+  is empty and the `HYPERDRIVE` binding is set. This is how the current
+  deployment runs.
+- **B. Cloudflare in front of your own server** (below, from "What you need").
+  The Worker serves the app and forwards server requests through a Cloudflare
+  Tunnel to the server in `selfhost/`. `ORIGIN_URL` is the Tunnel hostname.
+
+## A. Everything on Cloudflare
+
+1. **Postgres.** Create the database (PlanetScale, Neon, Supabase, RDS…) and a
+   Hyperdrive config for it (Cloudflare → Storage & Databases → Hyperdrive).
+   Put its id in `wrangler.jsonc` under `hyperdrive`.
+2. **One-time database roles.** Most hosted databases do not let the app's
+   user create roles. Run [`stack/planetscale-setup.sql`](../stack/planetscale-setup.sql)
+   once in the database's console as its administrator, with `APP_USER` set to
+   the user the Hyperdrive config connects as. The Worker creates every table,
+   policy and function itself on its first request after that, and again
+   after any deploy that changes `stack/schema.sql`.
+3. **Files.** Enable R2 on the account (Cloudflare → R2, accept the terms),
+   then:
+   ```bash
+   npx wrangler r2 bucket create ohsms-files
+   ```
+   and uncomment the `r2_buckets` entry in `wrangler.jsonc`. Without it the
+   app still works, keeping each photo or document (up to 700 KB) inside its
+   record.
+4. **Secrets.** `SESSION_SECRET` and `CONTROL_TOKEN` (`openssl rand -hex 32`),
+   `STATE_KEY` and `DATA_KEY_MASTER` (`openssl rand -base64 32`), each with
+   `npx wrangler secret put NAME`. Keep a copy somewhere safe: losing
+   `STATE_KEY` loses the sign-in configuration, losing `DATA_KEY_MASTER` loses
+   encrypted fields.
+5. **Address.** `PUBLIC_ORIGIN` in `wrangler.jsonc` is the address people
+   type (the `workers.dev` URL, or a custom domain added under the Worker's
+   Settings → Domains & Routes).
+6. **Deploy:** `npm run deploy:cloudflare`. Check
+   `curl -s https://<address>/health` — it answers
+   `{"ok":true,"database":"ok",…}`, or says what is missing.
+7. **Set up:** open `https://<address>/setup` with `CONTROL_TOKEN` as the
+   setup code, and connect the company sign-in (OIDC or SAML).
+
+Limits of A: invitation mail is not sent (no SMTP on Workers yet), and every
+request opens its database connection through Hyperdrive, so pick a database
+region close to Cloudflare's users.
+
+## B. Cloudflare in front of your own server
 
 OHSMS runs for **one organization**, on **that organization's server and
 Postgres database**. Cloudflare sits in front of it:

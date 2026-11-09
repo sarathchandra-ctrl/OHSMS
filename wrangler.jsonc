@@ -1,28 +1,25 @@
-// Cloudflare Workers deploy of one organization's OHSMS.
+// Cloudflare Workers deploy of one organization's OHSMS. docs/CLOUDFLARE.md.
 //
 // The Worker (worker/index.js) serves the built app from Cloudflare's edge and
-// forwards the server's paths to the organization's own server through a
-// Cloudflare Tunnel. docs/CLOUDFLARE.md is the procedure.
+// runs the organization's server itself (worker/server.js): Postgres through
+// Hyperdrive, uploaded files in R2. Set ORIGIN_URL instead to forward the
+// server paths to a server of your own through a Cloudflare Tunnel.
 //
 // This file exists so `wrangler deploy` does not run its framework
-// auto-configuration. Without it, wrangler tries to parse and rewrite
-// vite.config.js to add its own plugin, and the deploy failed with
-// "Error parsing file: vite.config.js".
+// auto-configuration, which tried to rewrite vite.config.js and failed.
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  // Must match the Worker's name in the Cloudflare dashboard.
   "name": "ohsms",
   "main": "worker/index.js",
   "compatibility_date": "2026-06-01",
+  // node:crypto, Buffer and the pg driver.
+  "compatibility_flags": ["nodejs_compat"],
   "assets": {
     "directory": "./dist",
     "binding": "ASSETS",
-    // Every unknown path serves index.html. /privacy and /terms resolve to
-    // their .html files through the default html_handling.
     "not_found_handling": "single-page-application",
-    // These reach the Worker even though dist/ has a file of the same name
-    // (public/runtime-config.js is a build-time placeholder): the server's
-    // version is the one that knows the connected sign-in.
+    // These reach the Worker even though dist/ may hold a file of the same
+    // name (public/runtime-config.js is a placeholder).
     "run_worker_first": [
       "/data",
       "/auth/*",
@@ -37,11 +34,25 @@
       "/runtime-config.js"
     ]
   },
+  // The schema is bundled as text; there is no file system on Workers.
+  "rules": [{ "type": "Text", "globs": ["**/*.sql"], "fallthrough": true }],
+  "hyperdrive": [
+    {
+      // planetscale-ohsms-main-d1uz
+      "binding": "HYPERDRIVE",
+      "id": "ab824a7427d24e388d3178a10aa1f90a"
+    }
+  ],
+  // Uploaded photos and documents. Add once R2 is enabled on the account:
+  //   "r2_buckets": [{ "binding": "FILES", "bucket_name": "ohsms-files" }],
   "vars": {
-    // The Tunnel hostname of the organization's server, e.g.
-    // "https://ehs-origin.example.com". Empty until the server is connected:
-    // the Worker then answers its paths with 503 "not configured".
+    // The address people type. Every sign-in redirect and file link is built on it.
+    "PUBLIC_ORIGIN": "https://ohsms.sarath-chandra.workers.dev",
+    // Leave empty to run the server here. Set to a Tunnel hostname
+    // (https://ehs-origin.example.com) to use a server of your own instead.
     "ORIGIN_URL": ""
   },
+  // Secrets, set with `npx wrangler secret put NAME` (never in this file):
+  //   SESSION_SECRET, STATE_KEY, CONTROL_TOKEN, DATA_KEY_MASTER
   "observability": { "enabled": true }
 }

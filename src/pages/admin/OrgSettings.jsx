@@ -312,7 +312,7 @@ export default function OrgSettings() {
           canvasSource: prev.canvasSource === 'custom' ? 'custom' : 'default',
         }),
       })
-      toast.success('Logo removed — the WE EHS mark is back in the header')
+      toast.success('Logo removed — the Cult Fit logo is back in the header')
     } catch (err) {
       toastCaught(err, 'Could not remove the logo')
     } finally {
@@ -583,7 +583,7 @@ export default function OrgSettings() {
               <ImageUp size={17} className="text-brand-600" /> Organization logo
             </h3>
             <p className="mb-4 mt-1 text-sm text-ink-500">
-              Shown in the top-left corner of every screen, in place of the WE EHS mark when none is
+              Shown in the top-left corner of every screen, in place of the Cult Fit logo when none is
               set. PNG or JPEG with a transparent background looks best; up to{' '}
               {formatSize(MAX_LOGO_BYTES)}.
             </p>

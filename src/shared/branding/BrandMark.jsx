@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// The WEHS vendor mark, centred in a Liquid Glass slot.
+// The Cult Fit SMS mark, centred in a Liquid Glass slot.
 //
 // Auth pages used a bare `<img className="h-16 w-16 rounded-3xl">`. The SVG
 // already paints its own kraft tile, so a second CSS radius clipped unevenly
@@ -18,9 +18,9 @@ const SIZE = {
 
 /**
  * @param {'sm'|'md'|'lg'} [size='lg']
- * @param {string} [alt='WEHS']  empty when the surrounding link/heading already names it
+ * @param {string} [alt='Cult Fit SMS']  empty when the surrounding link/heading already names it
  */
-export default function BrandMark({ size = 'lg', className = '', alt = 'WEHS' }) {
+export default function BrandMark({ size = 'lg', className = '', alt = 'Cult Fit SMS' }) {
   return (
     <span
       data-tone="brand"

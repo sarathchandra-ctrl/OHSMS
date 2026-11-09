@@ -119,6 +119,6 @@ describe('Scan preview', () => {
       target: { value: 'https://evil.test/login' },
     })
     fireEvent.click(screen.getByRole('button', { name: 'Open code' }))
-    expect(screen.getByRole('alert').textContent).toMatch(/not a WEEHS OHSMS label/)
+    expect(screen.getByRole('alert').textContent).toMatch(/not a Cult Fit SMS label/)
   })
 })

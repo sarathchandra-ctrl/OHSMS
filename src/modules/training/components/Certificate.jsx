@@ -10,7 +10,7 @@ import { formatDate } from '../../../shared/lib/format'
  */
 export default function CertificateModal({ record, orgName, onClose }) {
   if (!record) return null
-  const certNo = `WEHS-TR-${(record.id || '').slice(0, 8).toUpperCase() || 'DRAFT'}`
+  const certNo = `CFSMS-TR-${(record.id || '').slice(0, 8).toUpperCase() || 'DRAFT'}`
 
   return (
     <div className="fixed inset-0 z-50 grid place-items-center p-4">
@@ -46,12 +46,12 @@ export default function CertificateModal({ record, orgName, onClose }) {
             <div className="flex h-full flex-col items-center px-10 py-7 text-center">
               <div className="flex items-center gap-3">
                 <img
-                  src="/wehs.svg"
-                  alt="WEHS"
+                  src="/brand/logo.svg"
+                  alt="Cult Fit SMS"
                   className="h-12 w-12 rounded-lg ring-1 ring-ink-200"
                 />
                 <div className="text-left leading-tight">
-                  <p className="text-base font-bold tracking-tight text-ink-900">WEHS</p>
+                  <p className="text-base font-bold tracking-tight text-ink-900">Cult Fit SMS</p>
                   <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-500">
                     Workplace Environment, Health &amp; Safety
                   </p>
@@ -92,7 +92,7 @@ export default function CertificateModal({ record, orgName, onClose }) {
                   </p>
                   <p className="font-mono text-xs font-semibold text-ink-800">{certNo}</p>
                   <p className="mt-1 text-[10px] text-ink-400">
-                    Issued by {orgName || 'WEHS'} · {formatDate(new Date())}
+                    Issued by {orgName || 'Cult Fit'} · {formatDate(new Date())}
                   </p>
                 </div>
                 <Award size={36} className="text-brand-600" aria-hidden />

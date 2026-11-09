@@ -155,7 +155,7 @@ const PermitPrintable = forwardRef(function PermitPrintable({ permit, documents 
               overflowWrap: 'anywhere',
             }}
           >
-            WEHS · Permit to work
+            Cult Fit SMS · Permit to work
           </div>
           <div
             style={{

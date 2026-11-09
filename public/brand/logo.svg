@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 480" role="img" aria-label="Cult Fit">
+  <!-- Cult Fit mark, redrawn as vector from the supplied artwork. -->
+  <rect width="480" height="480" fill="#000"/>
+  <g fill="none" stroke-linecap="round">
+    <line x1="238" y1="74" x2="238" y2="82" stroke="#E8467C" stroke-width="24"/>
+    <circle cx="238" cy="161" r="27" stroke="#fff" stroke-width="24"/>
+    <line x1="115" y1="155" x2="160" y2="183" stroke="#fff" stroke-width="22"/>
+    <line x1="318" y1="183" x2="363" y2="155" stroke="#fff" stroke-width="22"/>
+    <line x1="95" y1="240" x2="385" y2="240" stroke="#fff" stroke-width="30"/>
+    <line x1="115" y1="321" x2="160" y2="293" stroke="#42B8EA" stroke-width="22"/>
+    <line x1="318" y1="293" x2="363" y2="321" stroke="#FDD615" stroke-width="22"/>
+    <polyline points="152,372 238,293 324,372" stroke="#fff" stroke-width="26" stroke-linejoin="round"/>
+    <line x1="238" y1="370" x2="238" y2="402" stroke="#fff" stroke-width="24"/>
+  </g>
+</svg>

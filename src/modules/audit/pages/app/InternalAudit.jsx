@@ -1101,7 +1101,7 @@ function PrintReport({ data, fallbackFindings, currentTask, docId, siteName }) {
     <div className="absolute inset-0 z-[9999] hidden min-h-screen doc-sheet p-10 print:block" style={{ printColorAdjust: 'exact', WebkitPrintColorAdjust: 'exact' }}>
       <div className="doc-header">
         <div>
-          <p className="doc-kicker">WEHS · ISO 45001 OHSMS</p>
+          <p className="doc-kicker">Cult Fit SMS · ISO 45001 OHSMS</p>
           <h1 className="doc-title">Internal audit report</h1>
         </div>
         <div className="doc-meta">
@@ -1150,7 +1150,7 @@ function PrintPlan({ plan, rows, siteName }) {
     <div className="absolute inset-0 z-[9999] hidden min-h-screen doc-sheet p-10 print:block" style={{ printColorAdjust: 'exact', WebkitPrintColorAdjust: 'exact' }}>
       <div className="doc-header">
         <div>
-          <p className="doc-kicker">WEHS · ISO 45001 OHSMS</p>
+          <p className="doc-kicker">Cult Fit SMS · ISO 45001 OHSMS</p>
           <h1 className="doc-title">Internal audit schedule &amp; matrix</h1>
         </div>
         <div className="doc-meta">

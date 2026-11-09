@@ -19,7 +19,7 @@ export function normalizeIdpCert(cert) {
     .replace(/\s+/g, '')
 }
 
-export function samlClient({ issuer, callbackUrl, idpCert, entryPoint }) {
+export function samlClient({ issuer, callbackUrl, idpCert, entryPoint, cacheProvider }) {
   const cert = normalizeIdpCert(idpCert)
   if (!cert || !entryPoint) {
     throw new Error('saml: the IdP certificate and entry point are required')
@@ -35,9 +35,12 @@ export function samlClient({ issuer, callbackUrl, idpCert, entryPoint }) {
     // issued, once. The library default is 'never', under which a signed
     // response captured from one sign-in can be posted again, or posted
     // without anyone having started a sign-in, until its timestamps expire.
-    // The request ids live in this client's in-memory cache, so the host must
-    // keep one client for both legs (stack/server.mjs does).
+    // The request ids live in this client's cache, so the host must keep one
+    // cache for both legs: one client in a long-lived server, or a shared
+    // store on Cloudflare (stack/handler.mjs, worker/pending.js).
     validateInResponseTo: 'always',
+    // Where those ids are kept. Undefined is node-saml's in-memory cache.
+    ...(cacheProvider ? { cacheProvider } : {}),
   })
 }
 

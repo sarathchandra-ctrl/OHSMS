@@ -170,7 +170,7 @@ export default function StoreBadges({
               <li>Open this page in Safari.</li>
               <li>Tap the Share button.</li>
               <li>Tap Add to Home Screen, then Add.</li>
-              <li>Open WEEHS OHSMS from the Home Screen.</li>
+              <li>Open Cult Fit SMS from the Home Screen.</li>
             </ol>
             {resolved.testFlight && (
               <p className="mt-3 text-sm text-ink-700">

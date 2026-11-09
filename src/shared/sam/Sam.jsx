@@ -114,7 +114,7 @@ export default function Sam() {
   const [messages, setMessages] = useState([
     {
       role: 'sam',
-      parts: [{ type: 'text', text: 'Hi, I’m **Sam** — your ISO 45001 buddy! 🦺 Ask me about any clause, or how your WEHS modules stack up against the standard.' }],
+      parts: [{ type: 'text', text: 'Hi, I’m **Sam** — your ISO 45001 buddy! 🦺 Ask me about any clause, or how your Cult Fit SMS modules stack up against the standard.' }],
     },
   ])
   const [input, setInput] = useState('')

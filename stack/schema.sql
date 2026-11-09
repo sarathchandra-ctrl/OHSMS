@@ -33,9 +33,29 @@ END $$;
 
 DO $$ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'ohsms_worker') THEN
-    CREATE ROLE ohsms_worker NOLOGIN BYPASSRLS;
+    BEGIN
+      CREATE ROLE ohsms_worker NOLOGIN BYPASSRLS;
+    EXCEPTION WHEN insufficient_privilege THEN
+      -- A hosted Postgres (PlanetScale, Neon…) may refuse BYPASSRLS. The
+      -- worker then gets the same reach from the allow-all policies below.
+      CREATE ROLE ohsms_worker NOLOGIN;
+    END;
   END IF;
 EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
+-- The app connects as an ordinary login role and switches to these two with
+-- SET LOCAL ROLE, which needs membership. Postgres 16+ does not give the
+-- creator of a role that membership by itself.
+DO $$ BEGIN
+  IF NOT pg_has_role(current_user, 'ohsms_browser', 'MEMBER') THEN
+    EXECUTE format('GRANT ohsms_browser TO %I', current_user);
+  END IF;
+  IF NOT pg_has_role(current_user, 'ohsms_worker', 'MEMBER') THEN
+    EXECUTE format('GRANT ohsms_worker TO %I', current_user);
+  END IF;
+EXCEPTION WHEN insufficient_privilege THEN
+  RAISE NOTICE 'could not grant the app roles to %; an administrator must', current_user;
 END $$;
 
 CREATE TABLE IF NOT EXISTS documents (
@@ -80,6 +100,17 @@ CREATE TABLE IF NOT EXISTS invites (
 CREATE TABLE IF NOT EXISTS schema_migrations (
   id text PRIMARY KEY
 );
+
+-- Sign-ins in progress (OIDC state, SAML request ids), when the server runs
+-- on Cloudflare and the two legs of one sign-in can reach different isolates
+-- (worker/pending.js). Read and written only by the login role: no grant to
+-- either app role, so the data API cannot see it.
+CREATE TABLE IF NOT EXISTS auth_pending (
+  key text PRIMARY KEY,
+  value jsonb NOT NULL,
+  expires_at timestamptz NOT NULL
+);
+REVOKE ALL ON auth_pending FROM PUBLIC;
 
 DROP FUNCTION IF EXISTS stamp_org() CASCADE;
 DROP FUNCTION IF EXISTS approved_of(text) CASCADE;
@@ -139,6 +170,21 @@ ALTER TABLE auth_secrets ENABLE ROW LEVEL SECURITY;
 ALTER TABLE auth_secrets FORCE ROW LEVEL SECURITY;
 ALTER TABLE invites ENABLE ROW LEVEL SECURITY;
 ALTER TABLE invites FORCE ROW LEVEL SECURITY;
+
+-- The server's own jobs run as ohsms_worker. Where that role could be created
+-- with BYPASSRLS these change nothing; where the database refused BYPASSRLS
+-- they are what lets the worker read and write every row, exactly as before.
+-- They name ohsms_worker only: the browser's role gains nothing from them.
+DROP POLICY IF EXISTS worker_all ON documents;
+CREATE POLICY worker_all ON documents FOR ALL TO ohsms_worker USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS worker_all ON files;
+CREATE POLICY worker_all ON files FOR ALL TO ohsms_worker USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS worker_all ON policy_union;
+CREATE POLICY worker_all ON policy_union FOR ALL TO ohsms_worker USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS worker_all ON auth_secrets;
+CREATE POLICY worker_all ON auth_secrets FOR ALL TO ohsms_worker USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS worker_all ON invites;
+CREATE POLICY worker_all ON invites FOR ALL TO ohsms_worker USING (true) WITH CHECK (true);
 
 -- ── Session helpers ──────────────────────────────────────────────────────────
 -- SECURITY DEFINER so a policy can read the caller's profile without the

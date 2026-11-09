@@ -19,22 +19,11 @@ import { applySchema, createEngine } from './engine.mjs'
 import { createOwnStackServer } from './server.mjs'
 import { openState } from './state.mjs'
 import { blobKeyFrom, createBlobStore } from './blobs.mjs'
+import { API_PREFIXES, runtimeConfigScript } from './runtimeConfig.mjs'
+
+export { API_PREFIXES, runtimeConfigScript }
 
 // Paths the host answers. Anything else on GET is the app.
-// worker/index.js forwards the same list; keep the two in step.
-export const API_PREFIXES = [
-  '/data',
-  '/auth/',
-  '/presign',
-  '/blob',
-  '/rpc/',
-  '/oidc/',
-  '/.well-known/',
-  '/setup',
-  '/scim/',
-  '/health',
-]
-
 const TYPES = {
   '.html': 'text/html; charset=utf-8',
   '.js': 'text/javascript; charset=utf-8',
@@ -62,29 +51,6 @@ const BASE_HEADERS = {
   'X-Frame-Options': 'DENY',
   'Referrer-Policy': 'strict-origin-when-cross-origin',
   'Strict-Transport-Security': 'max-age=31536000',
-}
-
-/**
- * The settings the app reads before it starts (src/shared/runtimeConfig.js),
- * from what this server is now rather than from how its image was built: the
- * sign-in method follows the IdP connected at /setup, and the gateway is this
- * origin.
- *
- * Every value is a JSON string, and `<` is escaped, so nothing a request
- * carried can close the script or start another one.
- */
-export function runtimeConfigScript({ origin, auth }) {
-  const method = ['saml', 'oidc', 'supabase'].includes(auth?.method) ? auth.method : 'none'
-  const config = {
-    DATA_DRIVER: 'postgres',
-    DATA_GATEWAY: origin,
-    STORAGE_DRIVER: 's3',
-    S3_PRESIGN_ENDPOINT: `${origin}/presign`,
-    AUTH_METHOD: method,
-    AUTH_TOTP: 'off',
-  }
-  const json = JSON.stringify(config).replace(/</g, '\\u003c')
-  return `window.__OHSMS_CONFIG__ = ${json};\n`
 }
 
 function isApi(pathname) {

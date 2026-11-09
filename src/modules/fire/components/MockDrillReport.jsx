@@ -14,7 +14,7 @@ export default function MockDrillReport({ record }) {
     <div className="doc-sheet p-8" style={{ width: '210mm' }}>
       <div className="doc-header">
         <div>
-          <p className="doc-kicker">WEHS · Fire Marshal</p>
+          <p className="doc-kicker">Cult Fit SMS · Fire Marshal</p>
           <h1 className="doc-title">{r.eventType || 'Mock Drill'} report</h1>
         </div>
         <div className="doc-meta">

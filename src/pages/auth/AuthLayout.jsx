@@ -19,7 +19,7 @@ export default function AuthLayout({ title, subtitle, children, footer, showcase
     <div
       className={`flex flex-col items-center px-1 text-center ${showcase ? 'mb-3' : 'mb-4 sm:mb-6'}`}
     >
-      <BrandMark className="mb-2.5 sm:mb-3" size="lg" alt="WEHS" />
+      <BrandMark className="mb-2.5 sm:mb-3" size="lg" alt="Cult Fit SMS" />
       <h1 className="text-[22px] font-bold tracking-[-0.02em] text-ink-900 sm:text-2xl">{title}</h1>
       {subtitle && (
         <p className="mt-1 max-w-[28ch] text-[13px] leading-snug text-ink-500 sm:max-w-none sm:text-sm sm:leading-normal">

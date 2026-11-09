@@ -68,7 +68,7 @@ export function exportAssessmentPdf(assessment, generatedAt = new Date()) {
   doc.text('HAZARD IDENTIFICATION & RISK ASSESSMENT', MARGIN, 10)
   doc.setFont('helvetica', 'normal')
   doc.setFontSize(8)
-  doc.text('HIRA — ISO 45001 OHSMS', pageW - MARGIN, 10, { align: 'right' })
+  doc.text('HIRA — Cult Fit SMS', pageW - MARGIN, 10, { align: 'right' })
 
   // ── Document control block ──
   autoTable(doc, {

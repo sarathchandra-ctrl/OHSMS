@@ -9,7 +9,7 @@ export default function SetupNeeded() {
     <div className="aurora grid min-h-screen place-items-center p-4">
       <div className="w-full max-w-lg">
         <div className="mb-6 flex flex-col items-center text-center">
-          <BrandMark className="mb-3" alt="WEHS" />
+          <BrandMark className="mb-3" alt="Cult Fit SMS" />
           <h1 className="text-2xl font-bold tracking-[-0.02em] text-ink-900">Not connected yet</h1>
           <p className="mt-1 text-sm text-ink-500">Occupational Health &amp; Safety Management System</p>
         </div>

@@ -3,7 +3,7 @@
 //
 // The organization using the app owns the top-left corner — that is the
 // identity a person recognises before they read anything. An organization that
-// has not uploaded a logo falls back to the WE EHS mark, because an empty box
+// has not uploaded a logo falls back to the Cult Fit logo, because an empty box
 // is worse than a stand-in. The vendor mark is not pinned to the viewport:
 // a "Powered by" badge in the corner competed with the page and was not the
 // identity the header is for.
@@ -16,15 +16,15 @@ import { useAuth } from '../auth/AuthContext'
 import { safeSrc } from '../safeUrl'
 import { inlineImageSrc, useFileUrl } from '../storage/useFileUrl'
 
-/** The vendor mark, in /public. Also the fallback identity when none is set. */
-export const WE_EHS_MARK = '/wehs.svg'
+/** The Cult Fit logo, in /public/brand. Also the fallback identity when none is set. */
+export const WE_EHS_MARK = '/brand/logo.svg'
 
 /**
  * True when the org document points at a logo.
  *
  * Uploads after audit finding M-5 no longer mint a permanent download URL, so
  * a freshly set logo often has `logoPath` and an empty `logoUrl`. Treating
- * only `logoUrl` as "has a logo" is how the header kept showing WE EHS after a
+ * only `logoUrl` as "has a logo" is how the header kept showing the default logo after a
  * successful upload, and how Org Settings offered "Upload" for a logo that
  * was already stored.
  */

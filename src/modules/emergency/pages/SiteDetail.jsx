@@ -331,7 +331,7 @@ export default function SiteDetail() {
             style={{ height: '188mm', ...(i > 0 ? { pageBreakBefore: 'always' } : null) }}
           >
             <div className="w-full border-b-2 border-brand-600 pb-1">
-              <p className="doc-kicker">WEHS · Emergency evacuation</p>
+              <p className="doc-kicker">Cult Fit SMS · Emergency evacuation</p>
               <h1 className="text-[16pt] font-bold leading-tight tracking-tight">
                 {site.name} — Emergency evacuation plan
               </h1>
@@ -352,7 +352,7 @@ export default function SiteDetail() {
       <div id="site-ferp-sheet" className="doc-sheet hidden p-10">
         <div className="doc-header">
           <div>
-            <p className="doc-kicker">WEHS · Fire &amp; emergency response</p>
+            <p className="doc-kicker">Cult Fit SMS · Fire &amp; emergency response</p>
             <h1 className="doc-title">Fire &amp; emergency response plan — {site.name}</h1>
           </div>
           <div className="doc-meta">
