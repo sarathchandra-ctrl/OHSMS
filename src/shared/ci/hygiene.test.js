@@ -15,8 +15,6 @@ const read = (p) => readFileSync(p, 'utf8')
 
 const WORKFLOWS = [
   '.github/workflows/ci.yml',
-  '.github/workflows/deploy.yml',
-  '.github/workflows/deploy-staging.yml',
   '.github/workflows/uptime.yml',
 ]
 
@@ -29,34 +27,6 @@ describe('GitHub Actions least privilege', () => {
   })
 })
 
-describe('service-account JSON is not interpolated into the shell', () => {
-  it.each(['.github/workflows/deploy.yml', '.github/workflows/deploy-staging.yml'])(
-    '%s does not echo a secret into the generated script',
-    (file) => {
-      const yml = read(file)
-      // The unsafe form is a run-step command, not a comment describing it.
-      // `env: SECRET: ${{ secrets.X }}` then `"$SECRET"` is the safe pattern
-      // the creds-check step already used; echo '${{ secrets.… }}' is not.
-      expect(yml).not.toMatch(/^\s*echo\s+['"]\$\{\{\s*secrets\./m)
-    }
-  )
-
-  it('writes the key from an env var and removes it afterwards', () => {
-    for (const file of ['.github/workflows/deploy.yml', '.github/workflows/deploy-staging.yml']) {
-      const yml = read(file)
-      expect(yml, file).toMatch(/printf '%s' "\$FIREBASE_SERVICE_ACCOUNT"/)
-      expect(yml, file).toMatch(/Remove the service-account key/)
-      expect(yml, file).toMatch(/rm -f "\$RUNNER_TEMP\//)
-    }
-  })
-
-  it('keeps the production environment approval from #49', () => {
-    const yml = read('.github/workflows/deploy.yml')
-    expect(yml).toMatch(/environment:\s*\n\s+name:\s+production/)
-    expect(yml).toMatch(/timeout-minutes:\s*45/)
-  })
-})
-
 describe('Playwright does not reuse a CI dev server', () => {
   it('reuseExistingServer is off when CI is set', () => {
     const cfg = read('playwright.config.js')
@@ -64,158 +34,6 @@ describe('Playwright does not reuse a CI dev server', () => {
     // step's Vite process, which was started without VITE_TEST_READ_CAP.
     expect(cfg).toMatch(/reuseExistingServer:\s*!process\.env\.CI/)
     expect(cfg).not.toMatch(/reuseExistingServer:\s*true/)
-  })
-})
-
-describe('hosting CSP allows Sentry ingest and refuses framing', () => {
-  it('connect-src names the ingest hosts the SDK actually calls', () => {
-    const json = read('firebase.json')
-    // VITE_SENTRY_DSN is wired into production and staging builds. Without
-    // these origins a browser with a DSN set drops every event on the CSP
-    // and the monitoring funnel is a no-op that looks configured.
-    expect(json).toContain('https://*.ingest.sentry.io')
-    expect(json).toContain('https://*.ingest.us.sentry.io')
-    // From #49 (ISO 27001 L-1). Kept through the rebase onto that merge;
-    // dropping it would re-open framing of a signed-in admin session.
-    expect(json).toContain("frame-ancestors 'none'")
-  })
-})
-
-function hostingHeader(source, key) {
-  const hosting = JSON.parse(read('firebase.json')).hosting
-  const block = hosting.headers.find((entry) => entry.source === source)
-  return block?.headers?.find((entry) => entry.key === key)?.value
-}
-
-describe('hosting HSTS is this host only, and the CSP still blocks inline scripts', () => {
-  it('sends a one-day HSTS on every hosting response, without subdomains or preload', () => {
-    const hosting = JSON.parse(read('firebase.json')).hosting
-    const hsts = hostingHeader('**', 'Strict-Transport-Security')
-    // One day, this host only. includeSubDomains would force HTTPS on every
-    // name under the custom domain, web.app and firebaseapp.com, and those
-    // names are not all listed here. preload is a public list that is hard
-    // to leave. A longer max-age is a later change, after this header has
-    // been served from the production host without a mixed-content failure.
-    // Browsers that saw it keep HTTPS-only for this host until max-age ends,
-    // even if a later deploy drops the header.
-    expect(hsts).toBe('max-age=86400')
-    expect(hsts).not.toMatch(/includeSubDomains|preload/i)
-    const overrides = hosting.headers.filter((entry) =>
-      entry.headers.some(
-        (header) => header.key === 'Strict-Transport-Security' && entry.source !== '**'
-      )
-    )
-    expect(overrides).toEqual([])
-    // The other firebase configs do not serve hosting. A second header
-    // block there would not be covered by the assertion above.
-    expect(JSON.parse(read('firebase.docker.json')).hosting).toBeUndefined()
-    expect(JSON.parse(read('firebase.rulestest.json')).hosting).toBeUndefined()
-    expect(hostingHeader('**', 'X-Frame-Options')).toBe('DENY')
-    expect(hostingHeader('**', 'X-Content-Type-Options')).toBe('nosniff')
-    expect(hostingHeader('**', 'Referrer-Policy')).toBe('strict-origin-when-cross-origin')
-  })
-
-  it('keeps script-src free of unsafe-inline and serves the splash from a file', () => {
-    const csp = hostingHeader('**', 'Content-Security-Policy')
-    const scriptSrc = csp
-      .split(';')
-      .map((part) => part.trim())
-      .find((part) => part.startsWith('script-src '))
-    expect(scriptSrc).toBeTruthy()
-    expect(scriptSrc).not.toContain('unsafe-inline')
-    expect(scriptSrc).toContain("'self'")
-    expect(csp).toContain("object-src 'none'")
-    expect(csp).toContain("frame-ancestors 'none'")
-    // The boot <style> is still inline. style-src keeps unsafe-inline for that.
-    // Moving it is a separate change; do not "fix" the script by opening script-src.
-    expect(csp).toMatch(/style-src [^;]*'unsafe-inline'/)
-
-    const html = read('index.html')
-    const scripts = [...html.matchAll(/<script\b([^>]*)>/g)].map((match) => match[1])
-    expect(scripts.length).toBeGreaterThan(0)
-    for (const attrs of scripts) expect(attrs).toMatch(/\bsrc=/)
-    expect(html).toContain('src="/boot-splash.js"')
-    const boot = read('public/boot-splash.js')
-    expect(boot).toContain('native-shell')
-    expect(boot).toContain('ohsms.viewMode')
-    expect(boot).toContain("getElementById('boot-splash')")
-    expect(boot).toContain('8000')
-  })
-})
-
-describe('Cloud Functions tests run on the runtime they deploy to', () => {
-  it('the functions CI job uses Node 22', () => {
-    const yml = read('.github/workflows/ci.yml')
-    const engines = JSON.parse(read('functions/package.json')).engines.node
-    expect(engines).toBe('22')
-    // The functions job is the block that follows "name: Cloud Functions tests".
-    const job = yml.split('name: Cloud Functions tests')[1]?.split(/^[ ]{2}[a-z]/m)[0] || ''
-    expect(job).toMatch(/node-version:\s*22/)
-    expect(job).toMatch(/cache-dependency-path:\s*functions\/package-lock\.json/)
-  })
-})
-
-describe('emulator jobs use a JDK firebase-tools 15 will start', () => {
-  it('pins Java 21 everywhere the emulators boot', () => {
-    for (const file of [
-      '.github/workflows/ci.yml',
-      '.github/workflows/deploy.yml',
-      '.github/workflows/deploy-staging.yml',
-    ]) {
-      const yml = read(file)
-      expect(yml, file).toMatch(/java-version:\s*21/)
-      expect(yml, file).not.toMatch(/java-version:\s*17/)
-    }
-  })
-})
-
-describe('staging deploys rules only after the rules suite', () => {
-  it('installs a JDK and runs npm run test:rules', () => {
-    const yml = read('.github/workflows/deploy-staging.yml')
-    expect(yml).toMatch(/actions\/setup-java@v5/)
-    // firebase-tools 15 exits before the emulator starts on a JDK before 21.
-    // Java 17 took the rules job and the smoke job red with that message.
-    expect(yml).toMatch(/java-version:\s*21/)
-    expect(yml).toMatch(/npm run test:rules/)
-  })
-})
-
-describe('docker compose can actually boot the emulators', () => {
-  it('builds an image that has a JDK, rather than a bare Node image', () => {
-    const compose = read('docker-compose.yml')
-    const dockerfile = read('Dockerfile.emulators')
-    expect(compose).toMatch(/dockerfile:\s*Dockerfile\.emulators/)
-    expect(dockerfile).toMatch(/openjdk-21-jre-headless/)
-  })
-
-  it('binds the emulators on 0.0.0.0 so the web container can reach them', () => {
-    const dockerCfg = JSON.parse(read('firebase.docker.json'))
-    expect(dockerCfg.emulators.auth.host).toBe('0.0.0.0')
-    expect(dockerCfg.emulators.firestore.host).toBe('0.0.0.0')
-    expect(dockerCfg.emulators.storage.host).toBe('0.0.0.0')
-    // The laptop config stays loopback — that is the whole reason there are two
-    // files. A copy-paste that puts 0.0.0.0 into firebase.json is a laptop
-    // listening on the LAN with no authentication on the emulator.
-    const local = JSON.parse(read('firebase.json'))
-    expect(local.emulators.auth.host == null || local.emulators.auth.host === '127.0.0.1').toBe(
-      true
-    )
-  })
-
-  it('creates the import directory before starting', () => {
-    expect(read('docker-compose.yml')).toMatch(/mkdir -p \/app\/emulator-data/)
-  })
-})
-
-describe('admin MFA in rules stays off until enrolment is done', () => {
-  it('requireAdminMfa returns false and isAdminOf short-circuits on that', () => {
-    const rules = read('firestore.rules')
-    // Flipping the constant is the lock. The hygiene pin is that it is false,
-    // not that the helper is absent — a missing helper would also "pass" a
-    // test that only looked for the string false somewhere else in the file.
-    expect(rules).toMatch(/function requireAdminMfa\(\) \{\s*return false;/)
-    expect(rules).toMatch(/!requireAdminMfa\(\) \|\| hasSecondFactor\(\)/)
-    expect(rules).toMatch(/sign_in_second_factor/)
   })
 })
 
@@ -265,18 +83,16 @@ describe('uptime check and health file', () => {
     expect(yml).toMatch(/permissions:\s*\n\s+contents:\s+read/)
   })
 
-  it('hosting has a static health file that is not rewritten into the SPA', () => {
+  it('serves a static health file', () => {
     const health = JSON.parse(read('public/health.json'))
     expect(health).toMatchObject({ status: 'ok', service: 'wehs' })
-    const hosting = JSON.parse(read('firebase.json'))
-    expect(hosting.hosting.headers.some((h) => h.source === '/health.json')).toBe(true)
   })
 })
 
 describe('malware scanning stays a decision, not a pretend scanner', () => {
   it('does not add a ClamAV / scanning-vendor package', () => {
     const root = JSON.parse(read('package.json'))
-    const fn = JSON.parse(read('functions/package.json'))
+    const fn = JSON.parse(read('stack/package.json'))
     const names = [
       ...Object.keys(root.dependencies || {}),
       ...Object.keys(root.devDependencies || {}),
@@ -293,11 +109,3 @@ describe('malware scanning stays a decision, not a pretend scanner', () => {
   })
 })
 
-describe('legacy download-token apply stays gated', () => {
-  it('the inventory script requires CONFIRM_REVOKE on a live --apply', () => {
-    const script = read('scripts/inventory-download-tokens.mjs')
-    expect(script).toMatch(/CONFIRM_REVOKE/)
-    expect(script).toMatch(/assertApplyAllowed/)
-    expect(read('docs/LEGACY-DOWNLOAD-URLS.md')).toMatch(/url-only/)
-  })
-})

@@ -13,7 +13,7 @@ const store = vi.hoisted(() => ({ writes: [] }))
 
 vi.mock('../functions', () => ({ getDataKeys: async () => keysMock.current }))
 vi.mock('../monitoring', () => ({ reportError: vi.fn() }))
-vi.mock('../firebase', () => ({ db: {} }))
+vi.mock('../db', () => ({ db: {} }))
 vi.mock('../data/client.js', () => ({
   collection: (...p) => ({ path: p.slice(1).join('/') }),
   doc: (...p) => ({ path: p.slice(1).join('/') }),
@@ -35,7 +35,6 @@ const {
   opensBackIntact, sealAndVerify, backfillAll, MAX_SEALS_PER_RUN,
 } = await import('./backfill')
 
-const ORG = 'org-alpha'
 const pair = await generateWrapKeyPair()
 const generalKey = toB64u(new Uint8Array(32).fill(3))
 

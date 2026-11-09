@@ -49,9 +49,7 @@ describe('In Process — received back from the vendor', () => {
     fireEvent.change(screen.getByLabelText('Next refill date'), { target: { value: '2027-10-15' } })
     fireEvent.click(screen.getByRole('button', { name: 'Confirm received' }))
     await waitFor(() => expect(toast.success).toHaveBeenCalled())
-    expect(markReceivedFromVendor).toHaveBeenCalledWith(
-      'o',
-      'Depot Org',
+    expect(markReceivedFromVendor).toHaveBeenCalledWith('Depot Org',
       'e1',
       { receivedOn: '2026-10-15', dateOfNextRefill: '2027-10-15' },
       'Ada'

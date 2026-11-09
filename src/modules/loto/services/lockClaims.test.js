@@ -15,7 +15,7 @@ vi.mock('../../../shared/data/client.js', () => ({
   where: (f, op, v) => ({ __where: [f, op, v] }),
   writeBatch: vi.fn(),
 }))
-vi.mock('../../../shared/firebase', () => ({ db: {} }))
+vi.mock('../../../shared/db', () => ({ db: {} }))
 vi.mock('../../../shared/org/orgData', () => ({ COLLECTION_READ_CAP: 500 }))
 
 const {
@@ -54,25 +54,25 @@ function txReading(existing) {
 
 describe('claimId', () => {
   it('puts the org first so the rules can pin the id to its payload', () => {
-    expect(claimId('12')).toBe('org1__12')
+    expect(claimId('12')).toBe('org__12')
   })
 
   it('leaves an ordinary lock number readable', () => {
-    expect(claimId('DEPT-045')).toBe('org1__DEPT-045')
+    expect(claimId('DEPT-045')).toBe('org__DEPT-045')
   })
 
   it('escapes a slash rather than crashing on an illegal document id', () => {
     // A technician typing "12/A" would otherwise throw inside doc() and take
     // the lock down with it — refusing to apply a padlock over punctuation.
-    expect(claimId('12/A')).toBe('org1__12%2FA')
+    expect(claimId('12/A')).toBe('org__12%2FA')
   })
 
   it('keeps the org recoverable as the first segment even when the lock has one', () => {
-    expect(claimId('A__B').split('__')[0]).toBe('org1')
+    expect(claimId('A__B').split('__')[0]).toBe('org')
   })
 
   it('accepts a number as readily as a string', () => {
-    expect(claimId(12)).toBe('org1__12')
+    expect(claimId(12)).toBe('org__12')
   })
 })
 
@@ -152,11 +152,11 @@ describe('readClaims', () => {
   it('reads one document per distinct lock number', async () => {
     const tx = txReading({})
     await readClaims(tx, ['12', '12', '13'])
-    expect(tx.reads).toEqual(['lockClaims/org1__12', 'lockClaims/org1__13'])
+    expect(tx.reads).toEqual(['lockClaims/org__12', 'lockClaims/org__13'])
   })
 
   it('reports which are held and by whom', async () => {
-    const tx = txReading({ 'lockClaims/org1__12': { procedureId: 'p2', equipment: 'Press 4' } })
+    const tx = txReading({ 'lockClaims/org__12': { procedureId: 'p2', equipment: 'Press 4' } })
     const held = await readClaims(tx, ['12', '13'])
     expect(held).toEqual([
       { lockNo: '12', exists: true, data: { procedureId: 'p2', equipment: 'Press 4' } },
@@ -177,14 +177,9 @@ describe('takeClaims', () => {
 
   it('writes one claim per lock, at the id that carries the number', () => {
     takeClaims(writer, { procedureId: 'p1' }, ['12', '13'])
-    expect(writer.sets.map((s) => s.path)).toEqual(['lockClaims/org1__12', 'lockClaims/org1__13'])
+    expect(writer.sets.map((s) => s.path)).toEqual(['lockClaims/org__12', 'lockClaims/org__13'])
   })
 
-  it('carries the org in the payload as well as the id, which the rules compare', () => {
-    takeClaims(writer, { procedureId: 'p1' }, ['12'])
-    expect().toBe('org1')
-    expect(writer.sets[0].path.split('__')[0]).toBe('lockClaims/org1')
-  })
 
   it('records where to go and look for the padlock', () => {
     takeClaims(
@@ -212,7 +207,7 @@ describe('releaseClaims', () => {
   it('deletes one document per lock', () => {
     const writer = recorder()
     releaseClaims(writer, ['12', '13'])
-    expect(writer.deletes).toEqual(['lockClaims/org1__12', 'lockClaims/org1__13'])
+    expect(writer.deletes).toEqual(['lockClaims/org__12', 'lockClaims/org__13'])
   })
 
   it('ignores a missing lock number rather than refusing the release', () => {

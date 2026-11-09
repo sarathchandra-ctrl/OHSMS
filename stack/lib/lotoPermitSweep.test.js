@@ -3,7 +3,6 @@ import {
   DUE_SOON_MS,
   OVERDUE_REPEAT_MS,
   LOTO_PERMIT_RETENTION_DAYS,
-  MAX_PERMIT_PURGES_PER_RUN,
   planFlags,
   isPurgeable,
 } from './lotoPermitSweep.js'
@@ -128,50 +127,4 @@ describe('isPurgeable', () => {
     ).toBe(true)
   })
 })
-
-// ── A small hierarchical fake: collection → doc → subcollection ──────────────
-function fakeDb(seed) {
-  const store = new Map(Object.entries(seed))
-  const deleted = []
-  const ref = (path) => ({
-    path,
-    id: path.split('/').pop(),
-    collection: (name) => col(`${path}/${name}`),
-    async update(patch) {
-      store.set(path, { ...store.get(path), ...patch })
-    },
-    async delete() {
-      deleted.push(path)
-      store.delete(path)
-    },
-    async get() {
-      const data = store.get(path)
-      return { exists: data !== undefined, data: () => data }
-    },
-  })
-  const rows = (prefix, filter = () => true) =>
-    [...store.entries()]
-      .filter(([p]) => p.startsWith(`${prefix}/`) && !p.slice(prefix.length + 1).includes('/'))
-      .filter(([, d]) => filter(d))
-      .map(([p, d]) => ({ id: p.split('/').pop(), data: () => d, ref: ref(p) }))
-  const col = (prefix, filter) => ({
-    doc: (id) => ref(`${prefix}/${id}`),
-    where(field, op, value) {
-      const cmp =
-        op === '=='
-          ? (a) => a === value
-          : (a) => {
-              const n = typeof a === 'number' ? a : (a?.toMillis?.() ?? NaN)
-              return n <= value.getTime()
-            }
-      return col(prefix, (d) => cmp(d[field]))
-    },
-    limit: () => col(prefix, filter),
-    async get() {
-      const docs = rows(prefix, filter)
-      return { docs, empty: !docs.length, size: docs.length }
-    },
-  })
-  return { store, deleted, collection: (n) => col(n) }
-}
 

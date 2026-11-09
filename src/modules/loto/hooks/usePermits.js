@@ -1,10 +1,8 @@
 import { useEffect, useState } from 'react'
-import { useAuth } from '../context/AuthContext'
 import { subscribePermit, subscribePermitEvents, subscribePermits } from '../services/permits'
 
 /** Real-time list of the current org's LOTO permits, newest first. */
 export function usePermits() {
-  const { profile } = useAuth()
   const [permits, setPermits] = useState([])
   const [loading, setLoading] = useState(true)
 
@@ -23,7 +21,6 @@ export function usePermits() {
 
 /** One permit, live. `permit` is null once loaded if it does not exist. */
 export function usePermit(permitNo) {
-  const { profile } = useAuth()
   const [state, setState] = useState({ permit: undefined, loading: true })
 
   useEffect(() => {
@@ -50,7 +47,6 @@ export function useNow(intervalMs = 60_000) {
 
 /** The timeline of one permit, oldest first. */
 export function usePermitEvents(permitNo) {
-  const { profile } = useAuth()
   const [events, setEvents] = useState([])
   useEffect(() => {
     if ((!permitNo)) return undefined

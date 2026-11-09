@@ -105,6 +105,6 @@ describe('FAS panel page', () => {
     getFas.mockResolvedValue(null)
     renderAt('missing')
     expect(await screen.findByRole('heading', { name: /panel not found/i })).toBeTruthy()
-    expect(getFas).toHaveBeenCalledWith('org-1', 'missing')
+    expect(getFas).toHaveBeenCalledWith('missing')
   })
 })

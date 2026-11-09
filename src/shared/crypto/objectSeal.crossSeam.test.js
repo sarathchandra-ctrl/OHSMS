@@ -51,7 +51,6 @@ import {
   SEALED_SUFFIX,
 } from '../../../stack/lib/objectSeal.js'
 
-const ORG = 'org-alpha'
 const PDF = new Uint8Array([37, 80, 68, 70, 45, 49, 46, 52, 10, 200, 0, 255])
 
 const pair = await generateWrapKeyPair()

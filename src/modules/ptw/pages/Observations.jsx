@@ -3,7 +3,6 @@ import { Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { Eye, CheckCircle2, AlertTriangle, FileText, QrCode, Monitor } from 'lucide-react'
 import { PageHeader, EmptyState, Spinner } from '../components/ui'
-import { useAuth } from '../context/AuthContext'
 import { subscribeObservations } from '../lib/firestore'
 import { readableOnTint } from '../../../shared/lib/contrast'
 
@@ -20,7 +19,6 @@ const FILTERS = [
 ]
 
 export default function Observations() {
-  const { profile } = useAuth()
   const [obs, setObs] = useState(null)
   const [filter, setFilter] = useState('all')
 

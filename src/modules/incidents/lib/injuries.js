@@ -49,7 +49,7 @@ import { AUDIT } from './audit'
 // key would have had to hand every writer the key that opens every colleague's
 // record, undoing the gate this file exists to enforce. See
 // src/shared/crypto/policy.js.
-import { sealDoc, openDoc, openSnapshots } from '../../../shared/crypto'
+import { sealDoc, openSnapshots } from '../../../shared/crypto'
 
 /** The collection path shared/crypto/policy.js keys this collection's rules on. */
 const SEALED = 'injuries'

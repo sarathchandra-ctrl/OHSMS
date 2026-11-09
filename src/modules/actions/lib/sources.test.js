@@ -10,7 +10,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 const listeners = {}
 
-vi.mock('../../../shared/firebase', () => ({ db: {} }))
+vi.mock('../../../shared/db', () => ({ db: {} }))
 // The tracker opens each source before emitting. What that decryption DOES is
 // covered by src/shared/crypto/index.test.js against the real crypto; what
 // matters here is only that the callback is asynchronous, because the notice

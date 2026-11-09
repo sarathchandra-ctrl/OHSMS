@@ -93,9 +93,8 @@ describe('Sites site type', () => {
     fireEvent.change(select, { target: { value: 'Warehouse' } })
     fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))
     await waitFor(() => expect(updateSite).toHaveBeenCalled())
-    expect(updateSite.mock.calls[0][0]).toBe('org-1')
-    expect(updateSite.mock.calls[0][1]).toBe('n')
-    expect(updateSite.mock.calls[0][2].facility).toBe('Warehouse')
+    expect(updateSite.mock.calls[0][0]).toBe('n')
+    expect(updateSite.mock.calls[0][1].facility).toBe('Warehouse')
   })
 
   it('sets one site type on the sites that were selected', async () => {
@@ -107,9 +106,7 @@ describe('Sites site type', () => {
     fireEvent.change(screen.getByLabelText('Site type'), { target: { value: 'Warehouse' } })
     fireEvent.click(screen.getByRole('button', { name: 'Apply site type' }))
     await waitFor(() => expect(assignSiteType).toHaveBeenCalled())
-    expect(assignSiteType).toHaveBeenCalledWith(
-      'org-1',
-      [
+    expect(assignSiteType).toHaveBeenCalledWith([
         { id: 'n', name: 'North', facility: 'Warehouse' },
         { id: 's', name: 'South', facility: 'Warehouse' },
       ],

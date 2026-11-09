@@ -1,5 +1,4 @@
 import { createContext, useContext, useEffect, useMemo, useState } from 'react'
-import { useAuth } from './AuthContext'
 import {
   subscribeTemplates,
   subscribeRecords,

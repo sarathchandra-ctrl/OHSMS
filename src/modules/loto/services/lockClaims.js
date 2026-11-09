@@ -34,7 +34,7 @@
 // prefix is pinned to the payload's org so a stranger cannot take out a claim
 // at another tenant's address and make a padlock permanently unusable there.
 // ─────────────────────────────────────────────────────────────────────────────
-import { collection, doc, getDoc, getDocs, limit, query, serverTimestamp, where, writeBatch } from '../../../shared/data/client.js'
+import { collection, doc, getDoc, getDocs, limit, query, serverTimestamp, writeBatch } from '../../../shared/data/client.js'
 import { db } from '../../../shared/db'
 import { COLLECTION_READ_CAP } from '../../../shared/org/orgData'
 

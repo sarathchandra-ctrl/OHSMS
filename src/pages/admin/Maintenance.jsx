@@ -1,14 +1,11 @@
 import { useState } from 'react'
 import toast from 'react-hot-toast'
-import { ShieldCheck, FileStack, Play, Check, Bug, Unlock, QrCode, HeartPulse, Stethoscope, FileLock2, MapPin, Lock, UserSearch, Download } from 'lucide-react'
+import { Play, Check, Bug, QrCode, Lock } from 'lucide-react'
 import { Card, Button } from '../../shared/ui'
 import { reportError } from '../../shared/monitoring'
-import { useAuth } from '../../shared/auth/AuthContext'
 import { backfillProcedureMirrors } from '../../modules/loto/services/procedures'
 import { backfillLockClaims } from '../../modules/loto/services/lockClaims'
 import { backfillAll } from '../../shared/crypto/backfill'
-import { sealingEnabled } from '../../shared/crypto/keyring'
-import { downloadBlob } from '../../shared/lib/download'
 
 /**
  * Maintenance jobs an administrator runs from the browser. Each is idempotent
@@ -372,35 +369,5 @@ function Job({ icon: Icon, title, children, result, actions }) {
   )
 }
 
-/**
- * Why a row could not be handled, said the way an admin can act on.
- *
- * The reason codes are the whole point of the report and none of them used to
- * reach the screen: this card printed `blockedFields.join(', ')`, and
- * blockedFields is a COUNT, so the line silently rendered nothing and `reason`
- * was never shown at all. A run that reported one blocked row looked, on screen,
- * like a run that had simply found nothing to do.
- */
-const BLOCK_REASONS = {
-  'no-injury-record': 'no injury record exists yet — run step 1',
-  'missing-in-injury': 'the injury record does not hold this detail yet — run step 1',
-  'no-person-id': 'the row names no person, so there is no injury record to write to',
-  'sign-in-id-only': 'the person is identified only by sign-in id — set the person on the incident first',
-  'injury-record-verified': 'the injury record is verified and locked',
-  'injury-record-deleted': 'the injury record is in the Recycle Bin',
-  'differs-in-injury': 'the injury record says something different — only a person can say which is right',
-  // Step 3's reasons. It files each document under the injured person it belongs
-  // to, and the old shape never recorded whose it was.
-  'several-people': 'more than one person was injured, and nothing says whose document this is',
-  'foreign-path': 'the file is stored outside this organization — it will not be touched',
-}
 
-/** Blocked rows collapsed to "n × plain english", newest concern first. */
-const blockedLines = (rows = []) => {
-  const counts = new Map()
-  for (const r of rows) counts.set(r.reason, (counts.get(r.reason) || 0) + 1)
-  return [...counts.entries()]
-    .sort((a, b) => b[1] - a[1])
-    .map(([reason, n]) => `  · ${n} × ${BLOCK_REASONS[reason] || reason}`)
-}
 

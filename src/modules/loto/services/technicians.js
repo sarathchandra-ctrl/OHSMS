@@ -8,7 +8,6 @@ import {
   serverTimestamp,
   Timestamp,
   updateDoc,
-  where,
   limit,
 } from '../../../shared/data/client.js'
 import { db } from '../../../shared/db'

@@ -7,7 +7,7 @@ vi.mock('../../../shared/data/client.js', () => ({
   query: vi.fn(), runTransaction: vi.fn(), serverTimestamp: vi.fn(), where: vi.fn(),
   writeBatch: vi.fn(), limit: vi.fn(),
 }))
-vi.mock('../../../shared/firebase', () => ({ db: {} }))
+vi.mock('../../../shared/db', () => ({ db: {} }))
 vi.mock('../../../shared/storage', () => ({ putFile: vi.fn(), removeFile: vi.fn(), fileUrl: vi.fn() }))
 vi.mock('../../../shared/org/orgData', () => ({ COLLECTION_READ_CAP: 500 }))
 

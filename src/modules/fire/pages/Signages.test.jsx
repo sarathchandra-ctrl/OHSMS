@@ -113,7 +113,7 @@ describe('Signage form — the Deployed requirement', () => {
     expect(save(dlg).disabled).toBe(false)
     fireEvent.click(save(dlg))
     await waitFor(() => expect(updateSignage).toHaveBeenCalledTimes(1))
-    const [, id, payload, , prev] = updateSignage.mock.calls[0]
+    const [id, payload, , prev] = updateSignage.mock.calls[0]
     expect(id).toBe('s1')
     expect(payload).toMatchObject({ status: 'Deployed', lastChecked: '2026-09-01', photos: [expect.stringMatching(/^data:image\/jpeg/)] })
     expect(payload.photo).toBeNull()

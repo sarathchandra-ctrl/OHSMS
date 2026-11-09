@@ -15,7 +15,6 @@ vi.mock('./index', () => ({
 
 const { resolveSealedFiles, resolveSubscription } = await import('./resolveFiles')
 
-const ORG = 'org-alpha'
 const COL = 'incidents/photos'
 
 const sealed = (path) => ({

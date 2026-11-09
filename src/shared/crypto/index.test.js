@@ -30,7 +30,6 @@ const { generateWrapKeyPair, toB64u } = await import('./envelope')
 const { sealDoc, openDoc, openDocs, isRestricted, RESTRICTED_KEY, sealFileBytes, openFileBytes } = await import('./index')
 const { clearKeyring } = await import('./keyring')
 
-const ORG = 'org-alpha'
 const pair = await generateWrapKeyPair()
 const generalKey = toB64u(new Uint8Array(32).fill(3))
 

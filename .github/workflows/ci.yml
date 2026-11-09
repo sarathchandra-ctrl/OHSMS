@@ -1,8 +1,5 @@
-# Runs the checks that were being run by hand on every change: lint, unit
-# tests, the Firestore rules suite, and a production build.
-#
-# The rules job is separate because it needs a JDK — the Firestore emulator is
-# a Java process — and there is no reason to make the fast checks wait for one.
+# Lint, unit tests (app + server, including the Postgres row-level-security
+# suite on embedded PGlite), dependency advisories, and a production build.
 name: CI
 
 on:
@@ -16,93 +13,31 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
-# Least privilege. None of these jobs push, comment, or open PRs — they only
-# read the tree. Without this block the GITHUB_TOKEN inherits the repository
-# default, which on a lot of repos is still `write`, and a compromised Action
-# (ISO 27001 LOW-28) would inherit that. contents:read is all checkout needs.
+# Least privilege: these jobs only read the tree (ISO 27001 LOW-28).
 permissions:
   contents: read
 
 jobs:
-  # ── Dependency advisories ───────────────────────────────────────────────────
-  # Nothing scanned the tree, so every advisory in it was invisible: an ISO
-  # 27001 audit found 2 critical and 9 high sitting there unnoticed, and the
-  # only reason none of them mattered much is luck — almost all were in
-  # devDependencies, which never reach a user.
-  #
-  # That distinction is the whole design of this job. `--omit=dev` scans what
-  # ACTUALLY SHIPS. A critical in vitest is a fact about this repository's
-  # toolchain; a high in a runtime dependency is a fact about the deployed
-  # product, and only the second should stop a merge. Failing on the first
-  # would train everyone to ignore a red build, which is how the real one gets
-  # missed.
-  #
-  # The dev tree is still reported, as a warning that never blocks, so it does
-  # not become invisible again.
-  #
-  # Both trees go through scripts/audit-gate.mjs, which parses the JSON report
-  # rather than reading npm's exit code — see the note on the Cloud Functions
-  # step below, and the retry in the script itself.
-  #
-  # Blocking at HIGH via scripts/audit-gate.mjs, which allows a NAMED list of
-  # advisories rather than lowering the threshold. The first version blocked at
-  # critical only, because one unfixable high (xlsx) would have made the gate red
-  # on the day it shipped — but that hid every other high too, which is most of
-  # what a dependency gate is for. The allowlist entry has to say why it is
-  # tolerable and what closes it, and a stale entry is reported. If the list
-  # grows, that is the signal, not the workaround.
+  # `--omit=dev` scans what actually ships and blocks at high; the whole tree
+  # is reported as a warning that never blocks. scripts/audit-gate.mjs reads
+  # the JSON report rather than npm's exit code.
   audit:
     name: Dependency advisories
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
-      # Vitest 5 will not start on Node 20. The audit job does not run it,
-      # but it installs the same tree, and 22 is the major the rest of CI uses.
       - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
       - run: npm ci
-
-      - name: Runtime dependencies (blocking)
+      - name: App runtime dependencies (blocking)
         run: node scripts/audit-gate.mjs
-
-      - name: Cloud Functions dependencies
-        working-directory: functions
-        run: npm ci
-
-      # Through audit-gate rather than a bare `npm audit --audit-level=high`.
-      # That command reads its verdict from npm's EXIT CODE, which is 1 both
-      # when the tree holds a high advisory and when the registry refuses to
-      # answer — opposite facts, reported identically. A 400 from the retiring
-      # quick-audit endpoint took this required check red on a branch that
-      # changed no dependency, no package.json and no lockfile.
-      #
-      # The allowlist for this tree is empty, deliberately: the functions tree
-      # is clean at high and should stay that way. If this goes red, fix it
-      # rather than exempting it.
-      - name: Cloud Functions (blocking)
-        run: node scripts/audit-gate.mjs functions
-
-      # "Does not block" must not be implemented as "is not mentioned": eleven
-      # advisories once sat in these trees with nothing ever printing them.
-      #
-      # These two were `npm audit || true`. Unable to fail, which was right —
-      # and unable to say anything reliable, which was not. `|| true` turned a
-      # registry error into an empty scan, which on screen is indistinguishable
-      # from a clean tree, and the output they printed came from the same
-      # retiring quick-audit endpoint the blocking steps just moved off. Through
-      # audit-gate they parse the same JSON report, group it by severity, and
-      # say so out loud when they could not check at all.
-      #
-      # Both widened from --omit=dev to the WHOLE tree, so the toolchain's own
-      # advisories are visible too. That is strictly more than either printed
-      # before, and it is the half no blocking step looks at.
-      - name: Cloud Functions, including tooling (advisory only)
-        if: always()
-        run: node scripts/audit-gate.mjs functions-all
-
+      - name: Server dependencies
+        run: npm ci --prefix stack
+      - name: Server runtime dependencies (blocking)
+        run: node scripts/audit-gate.mjs stack
       - name: Whole tree, including tooling (advisory only)
         if: always()
         run: node scripts/audit-gate.mjs root-all
@@ -113,24 +48,18 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
-
-      # Vitest 5 refuses Node 20 (^22.12.0 || ^24 || >=26). Vite 8 accepts
-      # 20.19+, but the suite and the build run on 22 so they match the
-      # Cloud Functions runtime.
+      # Vitest 5 refuses Node 20.
       - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
-
-      # npm ci needs the lockfile to match package.json, which is what we want
-      # CI to enforce — it fails loudly rather than quietly resolving something
-      # different from what anyone has installed locally.
       - run: npm ci
+      # The root suite drives the server (stack/) on PGlite, which needs the
+      # server's own dependencies.
+      - run: npm ci --prefix stack
 
-      # macOS checks out a case-insensitive tree. `./WhatsAppConnect` then bound
-      # whatsappConnect.js (probed before .jsx) and the production build died
-      # with "default" is not exported. Linux is the only image that can see
-      # both names at once, so the guard lives in this step.
+      # macOS checks out a case-insensitive tree; Linux is the only image that
+      # can see two names differing by case at once.
       - name: Lint
         run: |
           npm run lint
@@ -139,174 +68,9 @@ jobs:
       - name: Unit tests
         run: npm test
 
-      # The deploy retry is bash, with a fake CLI, so it does not need a
-      # project or a JDK. It lives in this job because a tag deploys whatever
-      # commit it points at: the assertion that a compilation error is not
-      # retried, and that hosting stays gated on the rules step, has to fail
-      # here before that tag exists. prepare-functions-deploy.test.sh is the
-      # same shape of check for the functions env: v2.0.7 died because two
-      # defineString params were absent from that file, and the code default
-      # is not consulted in --non-interactive.
-      - name: Deploy script tests
-        run: |
-          bash scripts/deploy-rules.test.sh
-          bash scripts/apply-storage-cors.test.sh
-          bash scripts/prepare-functions-deploy.test.sh
-          node --test scripts/rules-live.test.mjs
-
       - name: Build
         run: npm run build
 
-  # The `npm test` above cannot reach this suite: vitest.config.js includes only
-  # src/**, and functions/ has its own config, its own lockfile and its own
-  # dependency tree. So the notification tier's tests ran in exactly one place —
-  # deploy.yml, on a version tag — which means a merge could break the triggers
-  # and the digest and nothing said so until someone cut a release. Same two
-  # commands deploy.yml runs, moved to where they can still stop a merge.
-  functions:
-    name: Cloud Functions tests
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@v7
-
-      # functions/package.json engines.node is 22 — that is the Cloud Functions
-      # runtime this suite is a stand-in for. The SPA jobs use 22 as well,
-      # because Vitest 5 will not start on 20. An older major here would let
-      # a Node-22-only failure reach asia-south1 uncaught.
-      # cache-dependency-path is load-bearing: the default looks at the *root*
-      # lockfile, so this job was caching the SPA tree and installing the
-      # functions tree, which is a cache that cannot hit.
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 22
-          cache: npm
-          cache-dependency-path: functions/package-lock.json
-
-      - name: Install
-        working-directory: functions
-        run: npm ci
-
-      - name: Unit tests
-        working-directory: functions
-        run: npm test
-
-  rules:
-    name: Firestore rules
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    steps:
-      - uses: actions/checkout@v7
-
-      # Node 22: the rules suite is Vitest 5, which will not start on 20.
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 22
-          cache: npm
-
-      # The Firestore emulator runs on the JVM. firebase-tools 15 exits
-      # before the suite starts when JAVA_HOME is older than 21 — both this
-      # job and the smoke job died on that message while the rules themselves
-      # were green on JDK 21.
-      - uses: actions/setup-java@v5
-        with:
-          distribution: temurin
-          java-version: 21
-
-      - run: npm ci
-
-      # /reports accepts unauthenticated writes by design, so these tests are
-      # the check on how far that permission actually reaches.
-      - name: Rules tests
-        run: npm run test:rules
-
-  e2e:
-    name: Smoke (Playwright)
-    runs-on: ubuntu-latest
-    timeout-minutes: 40
-    steps:
-      - uses: actions/checkout@v7
-
-      # Node 22: Vite 8's dev server is what Playwright starts. 20.19+ would
-      # satisfy Vite alone; 22 matches the jobs that also run Vitest 5.
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 22
-          cache: npm
-
-      # Auth and Firestore emulators are JVM processes. firebase-tools 15
-      # refuses a JDK before 21, which is the error this job failed with
-      # while it was still on 17.
-      - uses: actions/setup-java@v5
-        with:
-          distribution: temurin
-          java-version: 21
-
-      - run: npm ci
-
-      - name: Install Chromium
-        run: npx playwright install --with-deps chromium
-
-      # Emulators up → seed the demo org → drive the browser through the money
-      # flows. Playwright's webServer starts the Vite dev server itself.
-      #
-      # e2e/accessibility.spec.js runs in the same pass, and it is here rather
-      # than beside the lint job for a reason: it is the half of the
-      # accessibility gate that eslint structurally cannot be. The dominant form
-      # control in this app is `<Field label=…><input/></Field>`, where the label
-      # is bound to the control at RUNTIME, so whether the binding happened is
-      # invisible to a static rule and plain to axe. Static lint for what is
-      # statically visible; axe, against the rendered DOM, for the rest.
-      - name: Smoke tests
-        env:
-          VITE_USE_EMULATORS: 'true'
-          VITE_FIREBASE_PROJECT_ID: ohsms-demo
-          # Not a credential — the Auth emulator accepts any key and validates
-          # none. It has to be PRESENT though: with it absent the Firebase app
-          # never initialises, so every flow fails at whatever it touched first
-          # and the run reads as four broken features rather than one missing
-          # variable. Locally .env supplies this, which is why the suite passed
-          # on a laptop and had never once been green here.
-          #
-          # isFirebaseConfigured only requires a projectId under emulators
-          # (src/shared/firebase.js), so nothing warns that this is missing.
-          VITE_FIREBASE_API_KEY: demo-api-key
-        # The specs are named rather than left to the default glob, so that
-        # capped-reads is visibly the OTHER step's job. Run as a glob it would
-        # skip itself here and report "7 skipped", which reads like something is
-        # broken and hides the fact that it runs properly a few lines below.
-        run: >
-          npx firebase-tools emulators:exec --only auth,firestore
-          --project ohsms-demo
-          "node scripts/seed.mjs && npx playwright test
-          e2e/smoke.spec.js e2e/accessibility.spec.js e2e/console-sweep.spec.js
-          e2e/scan-preview.spec.js e2e/field-home.spec.js"
-
-      # e2e/capped-reads.spec.js asserts that screens totalling a capped
-      # collection actually RENDER the "these figures are incomplete" notice —
-      # the difference between the notice existing and the page asking for it.
-      # Portal home is the exception: it must NOT show that notice.
-      #
-      # It skips itself unless VITE_TEST_READ_CAP is set, because at the real
-      # 5 000 no fixture can trip the cap. The step above did not set it, so all
-      # seven of those tests reported as "skipped" and the gate protected
-      # nothing in CI — which is exactly the failure the spec was written to
-      # catch, wearing the spec's own clothes.
-      #
-      # A SEPARATE step, not another grep on the one above, because the cap is a
-      # Vite env var baked into the dev server at start-up: the two runs need
-      # two dev servers. playwright.config.js sets reuseExistingServer only
-      # when CI is unset, so a leftover process on 5173 cannot be reused with
-      # the wrong cap (which would make every assertion pass for the wrong
-      # reason).
-      - name: Capped-read notices
-        env:
-          VITE_USE_EMULATORS: 'true'
-          VITE_FIREBASE_PROJECT_ID: ohsms-demo
-          VITE_FIREBASE_API_KEY: demo-api-key
-          # Two, so the seeded org is already past it on every register.
-          VITE_TEST_READ_CAP: '2'
-        run: >
-          npx firebase-tools emulators:exec --only auth,firestore
-          --project ohsms-demo
-          "node scripts/seed.mjs && npx playwright test e2e/capped-reads.spec.js"
+      # The Cloudflare Worker that serves the app and forwards the API.
+      - name: Worker syntax
+        run: node --check worker/index.js

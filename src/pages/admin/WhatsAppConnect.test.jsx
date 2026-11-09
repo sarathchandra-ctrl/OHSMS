@@ -137,9 +137,7 @@ describe('Connect with WhatsApp', () => {
         false
       )
     )
-    expect(logAudit).toHaveBeenCalledWith(
-      'orgA',
-      { uid: 'admin1', name: 'Ada Admin' },
+    expect(logAudit).toHaveBeenCalledWith({ uid: 'admin1', name: 'Ada Admin' },
       AUDIT.ORG_SETTINGS,
       expect.objectContaining({ module: 'core', target: 'whatsapp' })
     )

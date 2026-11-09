@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { OPEN_POINT_TERMINAL, auditPopulation, day0Of, lastSiteAudit, n7Of } from './auditScore.js'
+import { auditPopulation, lastSiteAudit } from './auditScore.js'
 
 // Invented centres. Nothing here is a real site or a real person.
 const site = { id: 's1', name: 'Demo North Hub', code: 'DEMO001', region: 'North' }

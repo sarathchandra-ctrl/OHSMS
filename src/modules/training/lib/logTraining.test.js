@@ -40,7 +40,7 @@ vi.mock('../../../shared/data/client.js', () => ({
   writeBatch: () => makeBatch(),
   runTransaction: vi.fn(),
 }))
-vi.mock('../../../shared/firebase', () => ({ db: {} }))
+vi.mock('../../../shared/db', () => ({ db: {} }))
 vi.mock('../../../shared/org/orgData', () => ({ logAudit: vi.fn(), COLLECTION_READ_CAP: 5000 }))
 vi.mock('../../../shared/org/readError', () => ({ onReadError: () => () => {} }))
 vi.mock('../../../shared/docId/reserve', () => ({ reserveDocId: async () => 'TRN-ACME_0001' }))

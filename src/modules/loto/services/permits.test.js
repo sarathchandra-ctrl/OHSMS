@@ -32,12 +32,12 @@ vi.mock('../../../shared/data/client.js', () => {
     },
   }
 })
-vi.mock('../../../shared/firebase', () => ({ db: {} }))
+vi.mock('../../../shared/db', () => ({ db: {} }))
 vi.mock('../../../shared/org/orgData', () => ({ COLLECTION_READ_CAP: 500 }))
 vi.mock('../../../shared/crypto', () => ({
   // Sealing is its own suite; here it must only be CALLED, on the right path.
-  sealDoc: vi.fn(async (_org, col, data) => ({ ...data, __sealedAs: col })),
-  openDoc: vi.fn(async (_org, _col, data) => data),
+  sealDoc: vi.fn(async (col, data) => ({ ...data, __sealedAs: col })),
+  openDoc: vi.fn(async (_col, data) => data),
   openSnapshots: vi.fn(() => () => {}),
 }))
 
@@ -66,14 +66,14 @@ describe('createPermit', () => {
     expect(state.txCount).toBe(1)
     const paths = state.writes.map((w) => w.path)
     expect(paths).toEqual([
-      `organizations/o1/docSeq/lotoPermit-${YEAR}`,
-      `organizations/o1/lotoPermits/LP-${YEAR}-0001`,
+      `docSeq/lotoPermit-${YEAR}`,
+      `lotoPermits/LP-${YEAR}-0001`,
     ])
     expect(state.writes[0].data).toEqual({ n: 1 })
   })
 
   it('continues from the counter', async () => {
-    state.docs.set(`organizations/o1/docSeq/lotoPermit-${YEAR}`, { n: 41 })
+    state.docs.set(`docSeq/lotoPermit-${YEAR}`, { n: 41 })
     const no = await createPermit({ user: { id: 'u1' }, permit: permit() })
     expect(no).toBe(`LP-${YEAR}-0042`)
     expect(state.writes[0].data).toEqual({ n: 42 })
@@ -97,7 +97,7 @@ describe('createPermit', () => {
   })
 
   it('refuses a padlock that is already applied on other equipment, and writes nothing', async () => {
-    state.docs.set('lockClaims/o1__D-1', { procedureId: 'other', equipment: 'Press 4' })
+    state.docs.set('lockClaims/org__D-1', { procedureId: 'other', equipment: 'Press 4' })
     await expect(createPermit({ user: { id: 'u1' }, permit: permit() })).rejects.toThrow(
       /already applied on Press 4/,
     )
@@ -105,14 +105,10 @@ describe('createPermit', () => {
   })
 
   it('does not treat a claim held by the same procedure as a clash', async () => {
-    state.docs.set('lockClaims/o1__D-1', { procedureId: 'p1' })
+    state.docs.set('lockClaims/org__D-1', { procedureId: 'p1' })
     await expect(createPermit({ user: { id: 'u1' }, permit: permit() })).resolves.toMatch(/^LP-/)
   })
 
-  it('needs a signed-in user with an organization', async () => {
-    await expect(createPermit({ user: { id: 'u' }, permit: permit() })).rejects.toThrow(/organization/)
-    await expect(createPermit({ user: null, permit: permit() })).rejects.toThrow(/organization/)
-  })
 })
 
 describe('stored shapes', () => {

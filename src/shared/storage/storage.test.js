@@ -65,9 +65,9 @@ describe('safeFileName', () => {
 describe('storagePath', () => {
   const fixed = () => 'abcd1234'
 
-  it('scopes by org first — that is what the storage rules match on', () => {
+  it('files everything under files/<kind>/ — the only prefix the server signs', () => {
     expect(storagePath('training-content', 'a.pdf', fixed)).toBe(
-      'orgs/org1/training-content/abcd1234-a.pdf'
+      'files/training-content/abcd1234-a.pdf'
     )
   })
 
@@ -77,22 +77,17 @@ describe('storagePath', () => {
     expect(a).not.toBe(b)
   })
 
-  it('refuses to build an unscoped path', () => {
-    // A file outside /orgs/{orgId}/ would be invisible to the tenancy rules.
-    expect(() => storagePath('k', 'a')).toThrow()
+  it('refuses to build a path with no kind', () => {
     expect(() => storagePath('', 'a')).toThrow()
   })
 
   it('sanitises every segment, not only the filename', () => {
-    // The org segment is what the storage rules match tenancy on: an orgId
-    // carrying a slash must not be able to escape its own folder.
     const p = storagePath('kind/../x', 'a.pdf', () => 'r')
-    expect(p).toBe('orgs/org____other/kind____x/r-a.pdf')
-    expect(p.split('/').length).toBe(4)
+    expect(p).toBe('files/kind____x/r-a.pdf')
+    expect(p.split('/').length).toBe(3)
   })
 
   it('refuses a segment that sanitises to nothing', () => {
-    expect(() => storagePath('k', 'a')).toThrow()
     expect(() => storagePath('???', 'a')).toThrow()
   })
 })

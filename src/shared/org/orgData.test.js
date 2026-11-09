@@ -7,7 +7,6 @@ import {
   readAnswered,
   collectionsReady,
   collectionsAnswered,
-  orgFromIndex,
 } from './orgData'
 
 // Firestore faked at the module boundary. onSnapshot hands back the success and
@@ -15,7 +14,7 @@ import {
 // recorded so the cap being applied at all is observable.
 const captured = { listeners: {}, unsubs: [] }
 
-vi.mock('../firebase', () => ({ db: {}, default: {} }))
+vi.mock('../db', () => ({ db: {}, default: {} }))
 vi.mock('../data/client.js', () => ({
   collection: (_db, ...path) => ({ path: path.join('/') }),
   doc: () => ({}),
@@ -294,28 +293,3 @@ describe('subscribeCollections', () => {
   })
 })
 
-describe('orgFromIndex', () => {
-  it('reads a WEEHS organization as a joinable tenant', () => {
-    expect(orgFromIndex({ name: 'Acme' })).toEqual({
-      id: 'org-1',
-      name: 'Acme',
-      stack: 'weehs',
-    })
-  })
-
-  it('reads an own-database reservation as a name with no tenant to join', () => {
-    // A missing orgId used to look like "no such organization", and the next
-    // person founded a WEEHS tenant under the reserved name.
-    expect(orgFromIndex({ name: 'Northwind Metals', stack: 'own', requestId: 'req1' })).toEqual({
-      id: null,
-      name: 'Northwind Metals',
-      stack: 'own',
-      requestId: 'req1',
-    })
-  })
-
-  it('returns null when the row is absent or has neither door', () => {
-    expect(orgFromIndex(null)).toBeNull()
-    expect(orgFromIndex({ name: 'Orphan' })).toBeNull()
-  })
-})

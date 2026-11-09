@@ -23,12 +23,12 @@ const fake = vi.hoisted(() => {
     writes,
     refTo,
     reset() { store.clear(); writes.length = 0; autoId = 0 },
-    /** Everything written under a collection path, e.g. 'organizations/acme/injuries'. */
+    /** Everything written under a collection path, e.g. 'injuries'. */
     writesUnder: (prefix) => writes.filter((w) => w.path.startsWith(`${prefix}/`)),
   }
 })
 
-vi.mock('../firebase', () => ({ db: {} }))
+vi.mock('../db', () => ({ db: {} }))
 // logAudit writes its own document; it is not what these tests are about.
 vi.mock('./firestore', () => ({ logAudit: vi.fn(async () => {}) }))
 // purgeInjury deletes the clinical documents out of Cloud Storage as well as
@@ -120,9 +120,8 @@ const {
 const { removeFile, putFile } = await import('../../../shared/storage')
 const { createIncident, updateIncident, addIncidentPhoto } = await import('./incidents')
 
-const ORG = 'acme'
-const INCIDENTS = `organizations/${ORG}/incidents`
-const INJURIES = `organizations/${ORG}/injuries`
+const INCIDENTS = `incidents`
+const INJURIES = `injuries`
 const actor = { uid: 'u1', name: 'Alex Admin' }
 
 // One person's injury as Step 1a hands it over: join key plus the clinical half.
@@ -369,7 +368,6 @@ describe('filing a medical record', () => {
     const id = await addMedicalRecord(incident(), 'EMP-104', file)
     expect(id).toBeTruthy()
     expect(putFile).toHaveBeenCalledWith(
-      ORG,
       'medical-records',
       file.dataUrl,
       file.name,
@@ -414,8 +412,8 @@ describe('purging an injury report', () => {
     fake.store.set(`${INJURIES}/${ID}`, {
       incidentId: 'inc1', incidentRefNo: 'IRA-2026-9001', deletedAt: 'TS',
     })
-    fake.store.set(`${RECORDS}/r1`, { name: 'sealed', path: `orgs/${ORG}/medical-records/ab12-gp-letter.pdf` })
-    fake.store.set(`${RECORDS}/r2`, { name: 'sealed', path: `orgs/${ORG}/medical-records/cd34-fit-note.pdf` })
+    fake.store.set(`${RECORDS}/r1`, { name: 'sealed', path: `files/medical-records/ab12-gp-letter.pdf` })
+    fake.store.set(`${RECORDS}/r2`, { name: 'sealed', path: `files/medical-records/cd34-fit-note.pdf` })
   })
 
   it('destroys the clinical documents, their pointers and the record itself', async () => {
@@ -423,8 +421,8 @@ describe('purging an injury report', () => {
 
     expect(removeFile).toHaveBeenCalledTimes(2)
     expect(removeFile.mock.calls.map((c) => c[0]).sort()).toEqual([
-      `orgs/${ORG}/medical-records/ab12-gp-letter.pdf`,
-      `orgs/${ORG}/medical-records/cd34-fit-note.pdf`,
+      `files/medical-records/ab12-gp-letter.pdf`,
+      `files/medical-records/cd34-fit-note.pdf`,
     ])
     expect(fake.store.has(`${RECORDS}/r1`)).toBe(false)
     expect(fake.store.has(`${RECORDS}/r2`)).toBe(false)
@@ -438,8 +436,8 @@ describe('purging an injury report', () => {
     await purgeInjury(ID, actor, 'IRA-2026-9001')
     const askedFor = removeFile.mock.calls.map((c) => c[0])
     for (const path of [
-      `orgs/${ORG}/medical-records/ab12-gp-letter.pdf`,
-      `orgs/${ORG}/medical-records/cd34-fit-note.pdf`,
+      `files/medical-records/ab12-gp-letter.pdf`,
+      `files/medical-records/cd34-fit-note.pdf`,
     ]) expect(askedFor).toContain(path)
   })
 

@@ -114,10 +114,9 @@ export function safeFileName(name) {
  */
 export function storagePath(kind, fileName, rand = defaultRand) {
   if (!kind) throw new Error('storagePath needs a kind')
-  // Every segment is sanitised, not only the filename. orgId is a Firestore
-  // auto-id and kind a literal today, but a path builder that trusts its inputs
-  // is one refactor away from a traversal — and the org segment is what the
-  // storage rules match tenancy on, so nothing may be able to distort it.
+  // Every segment is sanitised, not only the filename. kind is a literal today,
+  // but a path builder that trusts its inputs is one refactor away from a
+  // traversal, and files/ is the only prefix the server will sign.
   const seg = (v) => {
     const s = String(v).replace(/[^A-Za-z0-9_-]/g, '_')
     if (!/[A-Za-z0-9]/.test(s)) throw new Error('storagePath segment carries no information')

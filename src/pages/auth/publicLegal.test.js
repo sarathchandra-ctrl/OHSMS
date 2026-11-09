@@ -6,24 +6,15 @@ const read = (path) => readFileSync(path, 'utf8')
 describe('public legal pages', () => {
   const privacy = read('public/privacy.html')
   const terms = read('public/terms.html')
-  const hosting = JSON.parse(read('firebase.json')).hosting
+  const wrangler = read('wrangler.jsonc')
   const login = read('src/pages/auth/Login.jsx')
 
   it('serves /privacy and /terms as static files ahead of the app shell', () => {
-    const rewrites = hosting.rewrites
-    const catchAll = rewrites.findIndex((rule) => rule.source === '**')
-    expect(catchAll).toBeGreaterThan(0)
-    for (const [source, destination] of [
-      ['/privacy', '/privacy.html'],
-      ['/privacy/', '/privacy.html'],
-      ['/terms', '/terms.html'],
-      ['/terms/', '/terms.html'],
-    ]) {
-      const at = rewrites.findIndex((rule) => rule.source === source)
-      expect(at).toBeGreaterThanOrEqual(0)
-      expect(at).toBeLessThan(catchAll)
-      expect(rewrites[at].destination).toBe(destination)
-    }
+    // Cloudflare's default html_handling resolves /privacy to privacy.html
+    // before the single-page fallback; the files only have to exist.
+    expect(wrangler).toMatch(/single-page-application/)
+    expect(privacy).toMatch(/<html/i)
+    expect(terms).toMatch(/<html/i)
   })
 
   it('puts the privacy policy in the file a crawler receives, with no script', () => {

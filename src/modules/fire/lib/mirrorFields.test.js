@@ -27,7 +27,7 @@ vi.mock('../../../shared/data/client.js', () => ({
   serverTimestamp: () => 'TS', writeBatch: () => ({}), runTransaction: vi.fn(),
   limit: () => ({}), increment: (n) => n, where: () => ({}),
 }))
-vi.mock('../../../shared/firebase', () => ({ db: {} }))
+vi.mock('../../../shared/db', () => ({ db: {} }))
 
 const { liveFields, withdrawnFields } = await import('../../ptw/lib/publicPermit')
 

@@ -35,11 +35,11 @@ vi.mock('../../hooks/useLocks', () => ({
   useLocks: () => ({ locks: [{ id: 'l1', lockNo: 'D-1', type: 'department', active: true }, { id: 'l2', lockNo: 'D-2', type: 'department', active: true }] }),
 }))
 vi.mock('../../../../shared/org/orgData', () => ({
-  subscribeOrgUsers: (_o, cb) => { cb([{ uid: 'u2', name: 'Asha', status: 'approved' }]); return () => {} },
+  subscribeOrgUsers: (cb) => { cb([{ uid: 'u2', name: 'Asha', status: 'approved' }]); return () => {} },
 }))
 vi.mock('../../services/permits', () => ({ createPermit: h.create }))
 vi.mock('../../services/shiftSettings', () => ({
-  subscribeShiftSettings: (_org, cb) => { cb(null); return () => {} },
+  subscribeShiftSettings: (cb) => { cb(null); return () => {} },
 }))
 vi.mock('react-hot-toast', () => ({ default: { error: vi.fn(), success: vi.fn() } }))
 vi.mock('../../../../shared/lib/toastCaught', () => ({ toastCaught: vi.fn() }))

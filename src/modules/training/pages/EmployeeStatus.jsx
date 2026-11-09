@@ -4,7 +4,6 @@ import { toastCaught } from '../../../shared/lib/toastCaught'
 import { UsersRound, Search, Download, BadgeCheck, AlertTriangle, CalendarClock, ShieldAlert } from 'lucide-react'
 import { PageHeader, Card, Field, Input, Select, Button, Modal, Badge, StatCard, EmptyState, SkeletonTable, Pager } from '../../../shared/ui'
 import { formatDate } from '../../../shared/lib/format'
-import { useAuth } from '../../../shared/auth/AuthContext'
 import { useTraining } from '../context/TrainingContext'
 import { fetchAllRecords, fetchAllAssignments } from '../lib/firestore'
 import {

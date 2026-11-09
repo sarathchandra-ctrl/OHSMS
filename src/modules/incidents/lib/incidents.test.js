@@ -52,7 +52,7 @@ const store = makeStore()
 
 // The module reaches for the initialised Firebase app at import time, which a
 // unit test has no business booting.
-vi.mock('../firebase', () => ({ db: {} }))
+vi.mock('../db', () => ({ db: {} }))
 
 // Everything else stays real; only the transaction runner is swapped for the
 // fake store above, so the code under test is the code that ships.
@@ -63,7 +63,7 @@ vi.mock('../../../shared/data/client.js', async (importOriginal) => ({
 
 const { formatRefNo, nextRefSeq, reserveRefNo } = await import('./incidents')
 
-const counter = { path: 'organizations/acme/meta/stats' }
+const counter = { path: 'meta/stats' }
 const YEAR = new Date().getFullYear()
 
 beforeEach(() => {
@@ -143,7 +143,7 @@ describe('reserveRefNo', () => {
   })
 
   it('is the same reserver for illnesses, on their own counter', async () => {
-    const illCounter = { path: 'organizations/acme/meta/illness' }
+    const illCounter = { path: 'meta/illness' }
     store.seed(counter.path, { nextSeq: 100 })
     store.seed(illCounter.path, { nextSeq: 2 })
     expect(await reserveRefNo(illCounter, 'ILL')).toBe(`ILL-${YEAR}-0003`)

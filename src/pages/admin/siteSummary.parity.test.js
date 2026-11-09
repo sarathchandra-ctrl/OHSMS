@@ -15,7 +15,7 @@ import { describe, it, expect, vi } from 'vitest'
 
 // sources.js reaches Firestore and the keyring at import; only its pure
 // extract / toNorm / isOverdue are used here.
-vi.mock('../../shared/firebase', () => ({ db: {} }))
+vi.mock('../../shared/db', () => ({ db: {} }))
 vi.mock('../../shared/crypto', () => ({ openSnapshots: () => () => {} }))
 vi.mock('../../shared/data/client.js', () => ({ doc: () => ({}), getDoc: vi.fn(), updateDoc: vi.fn() }))
 vi.mock('../../shared/org/orgData', () => ({

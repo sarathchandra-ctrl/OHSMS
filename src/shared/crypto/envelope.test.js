@@ -19,7 +19,6 @@ import {
   hybridSealer,
 } from './envelope'
 
-const ORG = 'org-alpha'
 const rawKey = (fill) => new Uint8Array(KEY_BYTES).fill(fill)
 
 // Every test seals with a real key against the real WebCrypto in the test

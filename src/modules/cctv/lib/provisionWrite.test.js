@@ -20,7 +20,7 @@ vi.mock('../../../shared/data/client.js', () => ({
   writeBatch: () => makeBatch(),
   getDocs: (...args) => getDocsMock(...args),
 }))
-vi.mock('../../../shared/firebase', () => ({ db: {} }))
+vi.mock('../../../shared/db', () => ({ db: {} }))
 vi.mock('../../../shared/sessionEnd', () => ({ isSessionEnd: () => false }))
 vi.mock('../../../shared/org/orgData', () => ({
   logAudit: (...args) => audits.push(args),
@@ -62,8 +62,8 @@ describe('provisionSiteMerakis', () => {
     const n = await provisionSiteMerakis([site(), site({ id: 's2', name: 'Pune' })], [], {})
     expect(n).toBe(2)
     expect(paths()).toEqual([
-      'organizations/org1/cctvMeraki/site_s1',
-      'organizations/org1/cctvMeraki/site_s2',
+      'cctvMeraki/site_s1',
+      'cctvMeraki/site_s2',
     ])
     expect(committed.every((w) => w.auto === false)).toBe(true)
   })
@@ -87,7 +87,7 @@ describe('provisionSiteMerakis', () => {
       {}
     )
     expect(n).toBe(1)
-    expect(paths()).toEqual(['organizations/org1/cctvMeraki/site_s1'])
+    expect(paths()).toEqual(['cctvMeraki/site_s1'])
   })
 
   // Two runs that genuinely overlap both read an empty collection, so neither
@@ -99,8 +99,8 @@ describe('provisionSiteMerakis', () => {
       provisionSiteMerakis([site()], [], {}),
     ])
     expect(paths()).toEqual([
-      'organizations/org1/cctvMeraki/site_s1',
-      'organizations/org1/cctvMeraki/site_s1',
+      'cctvMeraki/site_s1',
+      'cctvMeraki/site_s1',
     ])
     expect(new Set(paths()).size).toBe(1)
   })
@@ -108,7 +108,7 @@ describe('provisionSiteMerakis', () => {
   it('does not write twice for a site handed in twice in one call', async () => {
     const n = await provisionSiteMerakis([site(), site()], [], {})
     expect(n).toBe(1)
-    expect(paths()).toEqual(['organizations/org1/cctvMeraki/site_s1'])
+    expect(paths()).toEqual(['cctvMeraki/site_s1'])
   })
 
   // The siteId check and the doc-id check fail differently, which is why both
@@ -141,12 +141,11 @@ describe('provisionSiteMerakis', () => {
     getDocsMock = collectionOf([stored()])
     await provisionSiteMerakis([site(), site({ id: 's2', name: 'Pune' })], [], {})
     expect(audits).toHaveLength(1)
-    expect(audits[0][3].summary).toMatch(/for 1 site\(s\)/)
+    expect(audits[0][2].summary).toMatch(/for 1 site\(s\)/)
   })
 
   it('logs nothing and reads nothing when there are no sites', async () => {
     expect(await provisionSiteMerakis([], [], {})).toBe(0)
-    expect(await provisionSiteMerakis([site()], [], {})).toBe(0)
     expect(getDocsMock).not.toHaveBeenCalled()
     expect(audits).toEqual([])
   })
@@ -168,7 +167,7 @@ describe('provisionSiteMerakis', () => {
 describe('provisionMerakisForNewSites', () => {
   it('provisions a newly created site', async () => {
     expect(await provisionMerakisForNewSites([site()], {})).toBe(1)
-    expect(paths()).toEqual(['organizations/org1/cctvMeraki/site_s1'])
+    expect(paths()).toEqual(['cctvMeraki/site_s1'])
   })
 
   // A hook fired twice, or a retried write, must not double up.
@@ -178,8 +177,7 @@ describe('provisionMerakisForNewSites', () => {
     expect(committed).toEqual([])
   })
 
-  it('does nothing without an org or sites', async () => {
-    expect(await provisionMerakisForNewSites([site()], {})).toBe(0)
+  it('does nothing without sites', async () => {
     expect(await provisionMerakisForNewSites([], {})).toBe(0)
     expect(getDocsMock).not.toHaveBeenCalled()
   })

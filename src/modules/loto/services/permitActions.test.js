@@ -40,10 +40,10 @@ vi.mock('../../../shared/data/client.js', () => ({
     return b
   },
 }))
-vi.mock('../../../shared/firebase', () => ({ db: {} }))
+vi.mock('../../../shared/db', () => ({ db: {} }))
 vi.mock('../../../shared/crypto', () => ({
-  sealDoc: vi.fn(async (_o, _c, data) => data),
-  openDoc: vi.fn(async (_o, _c, data) => data),
+  sealDoc: vi.fn(async (_c, data) => data),
+  openDoc: vi.fn(async (_c, data) => data),
 }))
 vi.mock('./procedures', () => ({
   publicRef: (id) => ({ __path: `procedureQr/${id}` }),
@@ -55,7 +55,7 @@ const A = await import('./permitActions')
 const user = { id: 'u1', displayName: 'Req Uester' }
 const admin = { id: 'adm', displayName: 'Ad Min' }
 const NOW = Date.now()
-const PERMIT = 'organizations/o1/lotoPermits/LP-2026-0001'
+const PERMIT = 'lotoPermits/LP-2026-0001'
 
 const basePermit = (over = {}) => ({
   permitNo: 'LP-2026-0001', status: 'approved', requestedBy: 'u1',
@@ -111,7 +111,7 @@ describe('startIsolation — permit and procedure in ONE transaction', () => {
 
     // One global padlock claim per lock, and an audit row per point, plus the timeline.
     expect(h.committed.filter((w) => w.path.startsWith('lockClaims/')).map((w) => w.path).sort())
-      .toEqual(['lockClaims/o1__D-1', 'lockClaims/o1__D-2'])
+      .toEqual(['lockClaims/org__D-1', 'lockClaims/org__D-2'])
     const events = h.committed.filter((w) => w.path.startsWith('lotoEvents/'))
     expect(events).toHaveLength(2)
     expect(events[0].data).toMatchObject({ action: 'lock', permitNo: 'LP-2026-0001', procedureId: 'p1', pointId: 'E-1' })
@@ -127,7 +127,7 @@ describe('startIsolation — permit and procedure in ONE transaction', () => {
 
   it('writes NOTHING when a padlock is already on other equipment', async () => {
     seed()
-    h.docs.set('lockClaims/o1__D-2', { procedureId: 'other', equipment: 'Press 4' })
+    h.docs.set('lockClaims/org__D-2', { procedureId: 'other', equipment: 'Press 4' })
     await expect(A.startIsolation({ permit: { id: 'LP-2026-0001' }, scans, user, ...ready }))
       .rejects.toThrow(/already applied on Press 4/)
     expect(h.committed).toEqual([])
@@ -192,7 +192,7 @@ describe('returning and removing — every lock off, permit closed, ONE transact
     expect(wrote('procedureQr/p1')[0].data).toMatchObject({ locked: 0, held: null })
 
     const released = h.committed.filter((w) => w.op === 'delete' && w.path.startsWith('lockClaims/')).map((w) => w.path)
-    expect(new Set(released)).toEqual(new Set(['lockClaims/o1__D-1', 'lockClaims/o1__D-2']))
+    expect(new Set(released)).toEqual(new Set(['lockClaims/org__D-1', 'lockClaims/org__D-2']))
     const events = h.committed.filter((w) => w.path.startsWith('lotoEvents/'))
     expect(events.map((e) => e.data.action)).toEqual(['unlock', 'unlock'])
     expect(events[0].data.pointId).toBe('E-1')

@@ -59,18 +59,14 @@ jobs:
           cache: npm
 
       # The same gate CI runs, on the exact commit being released.
+      # stack/ has its own dependencies (pg, SAML); the root suite imports it.
       - name: Install
-        run: npm ci --no-audit --no-fund
+        run: |
+          npm ci --no-audit --no-fund
+          npm ci --prefix stack --no-audit --no-fund
       - name: Lint and test
         run: |
           npm run lint
-          npm test
-      # The image carries functions/lib (stack/ imports its policy helpers),
-      # and the root suite does not reach functions/. CI's functions job, here.
-      - name: Functions tests
-        working-directory: functions
-        run: |
-          npm ci --no-audit --no-fund
           npm test
 
       - name: Names
@@ -84,7 +80,7 @@ jobs:
           fi
           OWNER="${GITHUB_REPOSITORY_OWNER,,}"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "image=ghcr.io/$OWNER/weehs-dedicated" >> "$GITHUB_OUTPUT"
+          echo "image=ghcr.io/$OWNER/ohsms-server" >> "$GITHUB_OUTPUT"
 
       - name: Build and push the image
         id: image

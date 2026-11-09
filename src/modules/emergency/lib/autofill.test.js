@@ -301,14 +301,13 @@ describe('autofillSite', () => {
     expect(result.skipped).toBe(1)
     expect(result.added).toBe(0)
     expect(mocks.updateContact).toHaveBeenCalledTimes(1)
-    expect(mocks.updateContact.mock.calls[0][1]).toBe('old')
-    expect(mocks.updateContact.mock.calls[0][2].name).toBe('J M J Hospital')
+    expect(mocks.updateContact.mock.calls[0][0]).toBe('old')
+    expect(mocks.updateContact.mock.calls[0][1].name).toBe('J M J Hospital')
     expect(mocks.deleteContact).toHaveBeenCalledWith(
-      'org',
       'dup',
       { uid: 'u' },
       expect.stringContaining('Hospital')
     )
-    expect(mocks.updateContact.mock.calls.some((c) => c[1] === 'hand')).toBe(false)
+    expect(mocks.updateContact.mock.calls.some((c) => c[0] === 'hand')).toBe(false)
   })
 })

@@ -74,10 +74,6 @@ describe('a dedicated environment before its handoff', () => {
 })
 
 describe('builds that do sign in with a password here', () => {
-  it('keeps the password form on the shared WEEHS build', () => {
-    render(<Login />)
-    expect(screen.getByLabelText('Password')).toBeTruthy()
-  })
 
   it('keeps it on an own-stack build that uses Supabase Auth', () => {
     vi.stubEnv('VITE_DATA_DRIVER', 'postgres')

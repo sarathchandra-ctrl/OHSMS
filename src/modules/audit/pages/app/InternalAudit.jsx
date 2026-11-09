@@ -1184,7 +1184,7 @@ function PrintPlan({ plan, rows, siteName }) {
 // MASTER HUB
 // ============================================================================
 export default function InternalAudit() {
-  const { profile, org, isAdmin } = useAuth()
+  const { profile, isAdmin } = useAuth()
   const { sites: rawSites, users: rawUsers, locations, siteInventory } = useOrgData()
   const [view, setView] = useState('hub')
   const [plans, setPlans] = useState([])

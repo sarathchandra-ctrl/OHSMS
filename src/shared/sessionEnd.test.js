@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
-const { authMock } = vi.hoisted(() => ({ authMock: { currentUser: null } }))
-vi.mock('./firebase', () => ({ auth: authMock }))
+const { session } = vi.hoisted(() => ({ session: { token: '' } }))
+vi.mock('./auth/ownStackSession', () => ({ currentAccessToken: () => session.token }))
 
 const { isSessionEnd } = await import('./sessionEnd')
 
@@ -15,7 +15,7 @@ describe('isSessionEnd', () => {
   afterEach(() => debug.mockRestore())
 
   it('claims the refusals that arrive as a session ends', () => {
-    authMock.currentUser = null
+    session.token = ''
     expect(isSessionEnd('incidents', denied)).toBe(true)
     expect(debug).toHaveBeenCalledWith('[OHS MS] incidents listener closed with the session')
   })
@@ -23,13 +23,13 @@ describe('isSessionEnd', () => {
   it('leaves a refusal alone while somebody is still signed in', () => {
     // The case worth keeping loud: a rule is wrong and a safety module is about
     // to show an empty list to someone who should be seeing rows.
-    authMock.currentUser = { uid: 'u1' }
+    session.token = 'signed-in'
     expect(isSessionEnd('incidents', denied)).toBe(false)
     expect(debug).not.toHaveBeenCalled()
   })
 
   it('claims nothing that is not a refusal, signed out or not', () => {
-    authMock.currentUser = null
+    session.token = ''
     for (const err of [{ code: 'unavailable' }, { code: 'deadline-exceeded' }, new Error('boom'), null]) {
       expect(isSessionEnd('incidents', err)).toBe(false)
     }

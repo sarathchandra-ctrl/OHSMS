@@ -11,7 +11,7 @@ const getDoc = vi.fn()
 const commit = vi.fn()
 const reportError = vi.fn()
 
-vi.mock('../../../shared/firebase', () => ({ db: {} }))
+vi.mock('../../../shared/db', () => ({ db: {} }))
 vi.mock('../../../shared/monitoring', () => ({ reportError: (...a) => reportError(...a) }))
 vi.mock('../../../shared/storage', () => ({
   putFile: vi.fn(), removeFile: vi.fn(), MAX_INLINE_BYTES: 1, tooLargeForInline: () => false,

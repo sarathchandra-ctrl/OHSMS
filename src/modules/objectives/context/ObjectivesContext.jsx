@@ -1,5 +1,4 @@
 import { createContext, useContext, useEffect, useMemo, useState } from 'react'
-import { useAuth } from '../../../shared/auth/AuthContext'
 import { subscribeOrgCollection, incompleteReadNotice } from '../../../shared/org/orgData'
 import { useAccessibleSites, useSiteFacets } from '../../../shared/org/useAccessibleSites'
 import { subscribeActions } from '../../actions/lib/sources'

@@ -16,7 +16,7 @@ const OrgDataContext = createContext(null)
  * listeners. Mounted inside the protected app shell.
  */
 export function OrgDataProvider({ children }) {
-  const { profile, isApproved, isAdmin } = useAuth()
+  const { profile, isAdmin } = useAuth()
 
   const [sites, setSites] = useState([])
   const [audits, setAudits] = useState([])

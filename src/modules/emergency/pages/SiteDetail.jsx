@@ -22,7 +22,7 @@ import SosPoster from '../components/SosPoster'
 import {
   subscribeContacts, subscribeLayouts, subscribeRescuePlans, saveFloors, deleteLayout, floorsOf, INTERNAL_ROLES,
 } from '../lib/firestore'
-import { putFile, removeFile, MAX_UPLOAD_BYTES, formatSize } from '../../../shared/storage'
+import { MAX_UPLOAD_BYTES, formatSize } from '../../../shared/storage'
 import { safeHref, safeSrc } from '../../../shared/safeUrl'
 
 // Floor plans go to cloud storage. The old 900KB ceiling was the Firestore

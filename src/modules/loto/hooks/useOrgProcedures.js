@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react'
-import { useAuth } from '../context/AuthContext'
 import {
   subscribeOrgEvents,
   subscribeOrgProcedures,
@@ -7,7 +6,6 @@ import {
 
 /** Real-time list of the current org's procedures. */
 export function useOrgProcedures() {
-  const { profile } = useAuth()
   const [procedures, setProcedures] = useState([])
   const [loading, setLoading] = useState(true)
 
@@ -27,7 +25,6 @@ export function useOrgProcedures() {
 
 /** Real-time append-only LOTO activity log for the current org. */
 export function useOrgEvents() {
-  const { profile } = useAuth()
   const [events, setEvents] = useState([])
   const [loading, setLoading] = useState(true)
 

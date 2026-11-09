@@ -20,7 +20,7 @@ const STATUS_TONE = { approved: 'green', pending: 'amber', suspended: 'red' }
 const emptyScope = { sites: [], regions: [], entities: [] }
 
 export default function Users() {
-  const { orgName, actor, user, org } = useAuth()
+  const { actor, user, org } = useAuth()
   const [users, setUsers] = useState(null)
   const [sites, setSites] = useState([])
   const [manage, setManage] = useState(null) // user being managed | null

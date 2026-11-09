@@ -89,7 +89,7 @@ describe('dedicated environment across a restart', () => {
     const stateKey = randomBytes(32)
     const keys = makeIdpKeys('northwind-idp')
     const first = await start(db, { stateKey })
-    const { token, intake } = await fileAndHandOff(first.origin, {
+    const { intake } = await fileAndHandOff(first.origin, {
       databaseUrl: DB_URL,
       dataKeyMaster: MASTER,
       samlIdpCert: keys.cert,

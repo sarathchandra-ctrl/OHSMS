@@ -12,7 +12,7 @@ vi.mock('../data/client.js', () => ({
   collection: (_db, ...p) => ({ __path: p.join('/') }),
   doc: (_db, ...p) => ({ __path: p.join('/') }),
   getDoc: async (ref) => {
-    const data = ref.__path.includes('/meta/docSeq') ? legacy : undefined
+    const data = ref.__path === 'meta/docSeq' ? legacy : undefined
     return { exists: () => data !== undefined, data: () => data }
   },
   getDocs: async () => ({ docs: [] }),
@@ -26,11 +26,10 @@ vi.mock('../data/client.js', () => ({
       set: (ref, data) => { store[ref.__path] = data },
     }),
 }))
-vi.mock('../firebase', () => ({ db: {} }))
 
 const { reserveSeq, reserveDocId, _clearOrgCodeCache } = await import('./reserve')
 
-const SEQ = 'organizations/org1/docSeq/aed'
+const SEQ = 'docSeq/aed'
 
 beforeEach(() => {
   store = {}
@@ -76,7 +75,7 @@ describe('reserveSeq', () => {
     expect(await reserveSeq('aed', { floor: 10 })).toBe(43)
   })
 
-  it('respects a legacy per-org counter so ids continue past it', async () => {
+  it('respects a legacy counter so ids continue past it', async () => {
     legacy = { aed: 77 }
     expect(await reserveSeq('aed')).toBe(78)
   })

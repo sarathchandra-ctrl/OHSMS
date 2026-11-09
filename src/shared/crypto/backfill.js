@@ -63,7 +63,7 @@
 // attempted with sealing off would report every document as "nothing to do" and
 // look like a success, which is why that is checked first and refused loudly.
 // ─────────────────────────────────────────────────────────────────────────────
-import { collection, getDocs, query, updateDoc, where } from '../data/client.js'
+import { collection, getDocs, query, updateDoc } from '../data/client.js'
 import { db } from '../db'
 import { POLICY, policyFor, leafRefs, MEDICAL } from './policy'
 import { sealDoc, openDoc } from './index'

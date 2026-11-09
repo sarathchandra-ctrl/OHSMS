@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
 const currentUser = { value: null }
-vi.mock('../firebase', () => ({
+vi.mock('../db', () => ({
   auth: {
     get currentUser() {
       return currentUser.value

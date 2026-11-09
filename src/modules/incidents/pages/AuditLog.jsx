@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
 import { ScrollText, Search } from 'lucide-react'
 import { PageHeader, Badge, EmptyState } from '../components/ui'
-import { useAuth } from '../context/AuthContext'
 import { subscribeAuditLogs } from '../lib/firestore'
 import { auditMeta } from '../lib/audit'
 

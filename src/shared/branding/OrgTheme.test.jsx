@@ -71,7 +71,7 @@ describe('OrgTheme', () => {
     await waitFor(() => {
       expect(updateOrgSettings).toHaveBeenCalledTimes(1)
     })
-    const patch = updateOrgSettings.mock.calls[0][1]
+    const patch = updateOrgSettings.mock.calls[0][0]
     expect(patch.theme.canvasSource).toBe('logo')
     expect(patch.theme.accent).toBe('#c43d32')
   })

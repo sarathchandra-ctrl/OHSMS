@@ -10,7 +10,7 @@ import Button from '../../components/ui/Button'
 import Spinner from '../../components/ui/Spinner'
 
 export default function GroupNumbers() {
-  const { profile, platformRole } = useAuth()
+  const { platformRole } = useAuth()
   const isAdmin = platformRole === 'admin'
   const [rows, setRows] = useState(null)
   const [no, setNo] = useState('')

@@ -17,7 +17,6 @@ import {
 
 const MASTER = toB64u(new Uint8Array(KEY_BYTES).fill(11))
 const OTHER_MASTER = toB64u(new Uint8Array(KEY_BYTES).fill(22))
-const ORG = 'org-alpha'
 
 const profile = (role, status = 'approved') => ({ role, status })
 

@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { isOverdueDate } from '../../../../shared/lib/dates'
 import { Search, Wrench, Download } from 'lucide-react'
-import { useAuth } from '../../context/AuthContext'
 import { subscribeAuditFindings } from '../../services/auditModule'
 import PageHeader from '../../components/PageHeader'
 import Card from '../../components/ui/Card'
@@ -27,7 +26,6 @@ const capaState = (recordStatus) =>
 const isOverdue = (target, verified) => isOverdueDate(target, { closed: verified })
 
 export default function CapaRegister() {
-  const { org } = useAuth()
   const [records, setRecords] = useState([])
   const [filters, setFilters] = useState({ q: '', state: '' })
 

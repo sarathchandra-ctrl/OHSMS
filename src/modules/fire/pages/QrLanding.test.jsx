@@ -31,7 +31,7 @@ vi.mock('../../../shared/data/client.js', () => ({
     })
   },
 }))
-vi.mock('../../../shared/firebase', () => ({ db: {} }))
+vi.mock('../../../shared/db', () => ({ db: {} }))
 vi.mock('../context/AuthContext', () => ({ useAuth: () => auth.value }))
 vi.mock('../lib/firestore', () => ({
   restoreExtinguisher: vi.fn(() => Promise.resolve()),
@@ -116,7 +116,7 @@ describe('scanning a QR', () => {
 
   it('offers restore to a manager whose site holds the unit', async () => {
     docs.value['qr/tok-1'] = deletedMirror
-    docs.value['organizations/org-1/extinguishers/e1'] = {
+    docs.value['extinguishers/e1'] = {
       id: 'e1',
       serialNo: 'FE-0007',
       siteId: 'site-a',
@@ -140,7 +140,7 @@ describe('scanning a QR', () => {
     const button = await screen.findByRole('button', { name: /^restore$/i })
     fireEvent.click(button)
     await waitFor(() =>
-      expect(restoreExtinguisher).toHaveBeenCalledWith('org-1', 'Acme', 'e1', {
+      expect(restoreExtinguisher).toHaveBeenCalledWith('Acme', 'e1', {
         uid: 'm1',
         name: 'Site lead',
       })
@@ -149,7 +149,7 @@ describe('scanning a QR', () => {
 
   it('does not offer restore to a manager of a different site', async () => {
     docs.value['qr/tok-1'] = deletedMirror
-    docs.value['organizations/org-1/extinguishers/e1'] = {
+    docs.value['extinguishers/e1'] = {
       id: 'e1',
       siteId: 'site-a',
       region: 'South',

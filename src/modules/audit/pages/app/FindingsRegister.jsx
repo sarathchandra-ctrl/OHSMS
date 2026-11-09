@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Search, AlertTriangle } from 'lucide-react'
-import { useAuth } from '../../context/AuthContext'
 import { subscribeAuditFindings } from '../../services/auditModule'
 import PageHeader from '../../components/PageHeader'
 import Card from '../../components/ui/Card'
@@ -20,7 +19,6 @@ const RECORD_LABEL = {
 }
 
 export default function FindingsRegister() {
-  const { org } = useAuth()
   const [records, setRecords] = useState([])
   const [filters, setFilters] = useState({ q: '', type: '', status: '' })
 

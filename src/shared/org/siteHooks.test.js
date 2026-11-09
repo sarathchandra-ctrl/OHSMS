@@ -84,11 +84,10 @@ describe('notifySiteCreated never breaks the site creation', () => {
 })
 
 describe('notifySiteCreated does nothing when there is nothing to do', () => {
-  it('skips with no hooks, no sites, or no org', async () => {
+  it('skips with no sites', async () => {
     let calls = 0
     onSiteCreated('a', () => { calls += 1 })
     await notifySiteCreated([])
-    await notifySiteCreated([site()])
     await notifySiteCreated()
     expect(calls).toBe(0)
   })

@@ -133,7 +133,7 @@ describe('Recently deleted search', () => {
     fireEvent.click(screen.getByRole('checkbox', { name: 'Select Extinguisher FE-0002' }))
     fireEvent.click(screen.getByRole('button', { name: 'Restore 1 shown' }))
     await waitFor(() => expect(restoreExtinguishers).toHaveBeenCalledTimes(1))
-    expect(restoreExtinguishers).toHaveBeenCalledWith('org-1', 'Acme', ['e2'], expect.anything())
+    expect(restoreExtinguishers).toHaveBeenCalledWith('Acme', ['e2'], expect.anything())
     expect(restoreAeds).not.toHaveBeenCalled()
     expect(
       screen.getByText('2 selected are hidden by this search and will not be restored.')

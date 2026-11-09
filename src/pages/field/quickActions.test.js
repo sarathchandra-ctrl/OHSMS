@@ -61,22 +61,7 @@ describe('fieldQuickActions', () => {
     expect(fieldQuickActions(ext, { role: 'auditor' }).actions).toEqual([])
   })
 
-  it('refuses a code that belongs to another organisation', () => {
-    const result = fieldQuickActions(
-      { ...ext, orgName: 'Other' },
-      {
-        role: 'admin',
-      }
-    )
-    expect(result.state).toBe('foreign')
-    expect(result.actions).toEqual([])
-  })
 
-  it('refuses a mirror that never recorded an organisation', () => {
-    const unstamped = { ...ext }
-    delete unstamped.orgId
-    expect(fieldQuickActions(unstamped, { role: 'admin' }).state).toBe('unscoped')
-  })
 
   it('does not offer actions on a retired unit', () => {
     expect(
