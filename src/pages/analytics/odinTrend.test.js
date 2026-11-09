@@ -14,7 +14,7 @@ import {
   ticketAgeing, ticketTrend as trend, auditPopulation, ownerOf, observationsPerSite, isFls, flsCategories, quarterName, quarterOnQuarter, quarterSpans, quarterSeries,
 } from './odinAnalytics'
 
-/** The shape functions/lib/metabase.js hands back, with the fields these tests need. */
+/** The shape stack/lib/metabase.js hands back, with the fields these tests need. */
 const row = (over = {}) => ({
   siteId: '', site: 'Plant 2', region: 'South', entity: 'Retail',
   status: 'open', rawStatus: 'Open', category: '', subCategory: '',

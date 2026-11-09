@@ -1,6 +1,5 @@
-# Build context for Dockerfile.emulators (JDK + firebase-tools only) and
-# stack/Dockerfile. The emulator image bind-mounts the app at runtime; the
-# stack image installs its own dependencies, so no node_modules goes in.
+# Build context for stack/Dockerfile. The image installs its own
+# dependencies, so no node_modules goes in.
 node_modules
 **/node_modules
 recordings
@@ -10,8 +9,8 @@ dist
 coverage
 playwright-report
 test-results
-emulator-data
-.firebase
+stack/data
+.wrangler
 .vendor
 Vedio
 *.log

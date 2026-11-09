@@ -49,7 +49,7 @@ Two files describe the same personal data for different purposes and live in
 different npm packages, so no import can tie them together:
 
 - `src/shared/crypto/policy.js` — which fields get sealed
-- `functions/lib/subjectData.js` — where a person's records are, for subject access
+- `stack/lib/subjectData.js` — where a person's records are, for subject access
 
 A collection added to one and not the other is a silent gap: unsealed personal
 data in the first case, a person's records missing from their own legal export in

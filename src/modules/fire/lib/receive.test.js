@@ -6,7 +6,7 @@ import { deriveExtinguisherDefects } from './derivedExtDefects'
 import { isInProcess, isToBeRefilled, severityLabel } from './extinguisherLogic'
 import { STATUS, STATUS_LABEL } from './constants'
 import { buildExtinguisherExportRows } from './exporter'
-import { defectRows } from '../../../../functions/lib/siteSummary.js'
+import { defectRows } from '../../../../stack/lib/siteSummary.js'
 
 const today = new Date(2026, 9, 15)
 const out = {

@@ -3,7 +3,7 @@
 // There is no alerts collection. A row here is a document the product already
 // stores — a defect report, an incident, a committee meeting, a mock drill —
 // or a weather reading assessed the same way the six-hour digest is. The
-// digest itself is a mail, not a table (functions/lib/weatherDigest.js), so a
+// digest itself is a mail, not a table (stack/lib/weatherDigest.js), so a
 // weather row is the current Medium-or-worse picture for a site, keyed to
 // that digest's slot. It comes back unread when the slot or the hazard changes.
 //

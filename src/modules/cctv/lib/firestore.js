@@ -17,7 +17,7 @@ import {
   collection, doc, addDoc, updateDoc, deleteDoc, onSnapshot, query, orderBy, limit, serverTimestamp,
   writeBatch, getDocs,
 } from '../../../shared/data/client.js'
-import { db } from '../../../shared/firebase'
+import { db } from '../../../shared/db'
 import { isSessionEnd } from '../../../shared/sessionEnd'
 import { isPermissionDenied } from '../../../shared/lib/permissionDenied'
 import { logAudit, COLLECTION_READ_CAP } from '../../../shared/org/orgData'

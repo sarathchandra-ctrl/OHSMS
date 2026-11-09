@@ -11,7 +11,7 @@ import {
   writeBatch,
   limit,
 } from '../../../shared/data/client.js'
-import { db } from '../../../shared/firebase'
+import { db } from '../../../shared/db'
 import { putFile, removeFile, fileUrl } from '../../../shared/storage'
 import { PROCEDURE_STATUS, computeLockSummary, mergeRevisedPoints } from '../constants/procedures'
 import { PUBLIC_COL, publicProcedure } from '../utils/publicProcedure'

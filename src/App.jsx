@@ -2,7 +2,6 @@ import { lazy, Suspense } from 'react'
 import { Routes, Route, Navigate, useParams } from 'react-router-dom'
 import { isAppConfigured } from './shared/appConfigured'
 import ProtectedRoute from './shared/auth/ProtectedRoute'
-import PlatformRoute from './shared/auth/PlatformRoute'
 import ModuleGate from './shared/modules/ModuleGate'
 import AppChrome from './shared/layout/AppChrome'
 import ModuleLoading from './shared/layout/ModuleLoading'
@@ -16,9 +15,6 @@ const PublicPermit = lazy(() => import('./modules/ptw/pages/PublicPermit'))
 // Public / auth pages (eager — small, first paint).
 import SetupNeeded from './pages/SetupNeeded'
 import Login from './pages/auth/Login'
-import RegisterOrg from './pages/auth/RegisterOrg'
-import Signup from './pages/auth/Signup'
-import ForgotPassword from './pages/auth/ForgotPassword'
 import PendingApproval from './pages/auth/PendingApproval'
 import NotFound from './pages/NotFound'
 
@@ -33,16 +29,6 @@ const Maintenance = lazy(() => import('./pages/admin/Maintenance'))
 
 // The platform console — which modules each ORGANIZATION may use.
 //
-// A separate application in every sense that matters: its own sign-in page, its
-// own shell, its own guard, and an account that belongs to no organization. It
-// shares this bundle and nothing else. Deciding what other customers may use
-// while signed in as an admin of one of them is how the wrong organization gets
-// edited, so the tenant app offers no way in and this offers no way out.
-const PlatformLogin = lazy(() => import('./pages/platform/PlatformLogin'))
-const PlatformShell = lazy(() => import('./pages/platform/PlatformShell'))
-const PlatformModuleAccess = lazy(() => import('./pages/platform/ModuleAccess'))
-const PlatformOrganizations = lazy(() => import('./pages/platform/Organizations'))
-const PlatformProvisioning = lazy(() => import('./pages/platform/ProvisioningRequests'))
 
 // Modules (lazy — several pull heavy libs like react-flow / three / xlsx).
 const Incidents = lazy(() => import('./modules/incidents'))
@@ -133,9 +119,6 @@ export default function App() {
     <Routes>
       {/* Public */}
       <Route path="/login" element={<Login />} />
-      <Route path="/register-org" element={<RegisterOrg />} />
-      <Route path="/signup" element={<Signup />} />
-      <Route path="/forgot-password" element={<ForgotPassword />} />
       {/* Scanned from a printed extinguisher label — deliberately public. */}
       <Route path="/qr/:token" element={<ErrorBoundary><Suspense fallback={<SamLoading />}><QrLanding /></Suspense></ErrorBoundary>} />
       {/* The QR printed on every work permit. Public: whoever scans a permit
@@ -214,55 +197,6 @@ export default function App() {
       <Route path="/maintenance" element={<Protected requireCap="org.settings"><Maintenance /></Protected>} />
       <Route path="/users" element={<Protected requireAdmin><Users /></Protected>} />
       <Route path="/settings" element={<Protected requireAdmin><OrgSettings /></Protected>} />
-
-      {/* ── Platform operator ────────────────────────────────────────────────
-          Outside Protected and outside AppChrome entirely. ProtectedRoute
-          demands a tenant profile the operator deliberately does not have, and
-          AppChrome would put a customer's name above a list of every other
-          customer. */}
-      <Route
-        path="/platform/login"
-        element={
-          <ErrorBoundary>
-            <Suspense fallback={<SamLoading />}><PlatformLogin /></Suspense>
-          </ErrorBoundary>
-        }
-      />
-      <Route
-        path="/platform"
-        element={
-          <Suspense fallback={<SamLoading />}>
-            <PlatformRoute>
-              <PlatformShell />
-            </PlatformRoute>
-          </Suspense>
-        }
-      >
-        <Route
-          index
-          element={
-            <Suspense fallback={<SamLoading />}>
-              <PlatformModuleAccess />
-            </Suspense>
-          }
-        />
-        <Route
-          path="organizations"
-          element={
-            <Suspense fallback={<SamLoading />}>
-              <PlatformOrganizations />
-            </Suspense>
-          }
-        />
-        <Route
-          path="provisioning"
-          element={
-            <Suspense fallback={<SamLoading />}>
-              <PlatformProvisioning />
-            </Suspense>
-          }
-        />
-      </Route>
 
       {/* Fallbacks */}
       {/* The portal is everyone's home. Anyone with a role above plain member

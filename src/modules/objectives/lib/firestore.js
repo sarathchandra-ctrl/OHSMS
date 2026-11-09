@@ -3,7 +3,7 @@
 import {
   addDoc, collection, deleteDoc, doc, limit, onSnapshot, orderBy, query, serverTimestamp, updateDoc, writeBatch,
 } from '../../../shared/data/client.js'
-import { db } from '../../../shared/firebase'
+import { db } from '../../../shared/db'
 import { reserveDocId } from '../../../shared/docId/reserve'
 import { logAudit, COLLECTION_READ_CAP } from '../../../shared/org/orgData'
 import { KPIS } from './kpis'

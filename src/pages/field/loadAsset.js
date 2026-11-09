@@ -1,5 +1,5 @@
 import { doc, getDoc } from '../../shared/data/client.js'
-import { db } from '../../shared/firebase'
+import { db } from '../../shared/db'
 
 const COLLECTION = {
   extinguisher: 'extinguishers',

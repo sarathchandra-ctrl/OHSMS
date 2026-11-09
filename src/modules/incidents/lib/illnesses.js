@@ -22,7 +22,7 @@ import {
   limit,
   increment,
 } from '../../../shared/data/client.js'
-import { db } from '../../../shared/firebase'
+import { db } from '../../../shared/db'
 import { onReadError } from '../../../shared/org/readError'
 import { logAudit } from './firestore'
 import { AUDIT, diffSummary } from './audit'

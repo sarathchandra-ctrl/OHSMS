@@ -28,7 +28,7 @@ purpose is to describe how to operate the thing.
   `.env`, `.env.production` and `.firebaserc`.
 - **The reasoning that belongs with the code stayed with the code.** Roughly
   seventeen files cite this runbook from comments — `firestore.rules`,
-  `functions/index.js`, `functions/lib/retention.js`,
+  `functions/index.js`, `stack/lib/retention.js`,
   `src/shared/storage/adapters/firebase.js`, both deploy workflows and others.
   Those references are still correct; they now resolve to this note, and the
   section numbers they cite are unchanged in the private copy.

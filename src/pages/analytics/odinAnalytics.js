@@ -2,7 +2,7 @@
 // ODIN — the arithmetic, with no React and no network in it.
 //
 // The rows arrive already mapped onto a canonical shape by the server
-// (functions/lib/metabase.js), so nothing here knows what a warehouse column is
+// (stack/lib/metabase.js), so nothing here knows what a warehouse column is
 // called. What it does know is the awkward middle: a Metabase question rarely
 // carries coordinates, statuses come back in whatever words the source system
 // uses, and a pass percentage averaged across sites of wildly different size is
@@ -20,7 +20,7 @@
 //   Percentages are weighted where the data allows it. Averaging "100% of 4
 //   checks" with "50% of 400" gives 75%, and the honest answer is 50.5%.
 // ─────────────────────────────────────────────────────────────────────────────
-import { normSiteName, resolveOdinRows, SITE_CODE_FIELDS } from '../../../functions/lib/odinJoin.js'
+import { normSiteName, resolveOdinRows, SITE_CODE_FIELDS } from '../../../stack/lib/odinJoin.js'
 import {
   auditPopulation,
   checksTotalOf,
@@ -28,7 +28,7 @@ import {
   hasPassData,
   n7Of,
   toDateOf,
-} from '../../../functions/lib/auditScore.js'
+} from '../../../stack/lib/auditScore.js'
 
 // The join and the pass-rate readers live in functions/ so the site-lookup
 // bot scores an audit with the same functions this tab does. Re-exported so
@@ -44,7 +44,7 @@ export {
   toDateOf,
 }
 
-// Mirrors STATUSES in functions/lib/metabase.js, which is the authority on the
+// Mirrors STATUSES in stack/lib/metabase.js, which is the authority on the
 // mapping. Duplicated rather than imported because functions/ is a separate
 // package with its own node_modules and is not part of the browser bundle; the
 // four keys are a contract between them, and odinAnalytics.test.js pins them.
@@ -62,7 +62,7 @@ export const STATUS_META = [
 /**
  * Statuses where nothing further is going to happen.
  *
- * Mirrors TERMINAL_STATUSES in functions/lib/metabase.js. A rejected ticket is
+ * Mirrors TERMINAL_STATUSES in stack/lib/metabase.js. A rejected ticket is
  * finished, so it is not part of any "still open" count — and it is not closed
  * either, so it must never be added to remediation figures. `status !==
  * 'closed'` was the old test everywhere and now quietly counts rejections as

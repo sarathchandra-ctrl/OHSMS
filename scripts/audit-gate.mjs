@@ -17,17 +17,15 @@
  * ── Which tree ──────────────────────────────────────────────────────────────
  *
  *   node scripts/audit-gate.mjs                  # the app's runtime tree
- *   node scripts/audit-gate.mjs functions        # the Cloud Functions tree
+ *   node scripts/audit-gate.mjs stack            # the server tree
  *
- * and the same two including devDependencies, which report everything and never
- * block — a critical in the toolchain is not a fact about the shipped product:
+ * and the app tree including devDependencies, which reports everything and
+ * never blocks — a critical in the toolchain is not a fact about the shipped
+ * product:
  *
  *   node scripts/audit-gate.mjs root-all
- *   node scripts/audit-gate.mjs functions-all
  *
- * The functions tree used to be gated by a bare
- * `npm audit --omit=dev --audit-level=high` in the workflow. Running both trees
- * through one script is not tidying: that bare command reads its verdict from
+ * Why a script rather than a bare `npm audit --omit=dev --audit-level=high`: that bare command reads its verdict from
  * npm's EXIT CODE, which is 1 both when the tree has a high advisory and when
  * npm could not reach the advisory service at all. Those are opposite facts —
  * "the product ships a known vulnerability" and "we learned nothing today" —
@@ -58,17 +56,14 @@ const TREES = {
   root: {
     dir: '.', label: 'runtime tree', omitDev: true, blocking: true, allowed: ROOT_ALLOWED,
   },
-  // No allowlist, deliberately: the functions tree is clean at high and should
-  // stay that way. If this goes red, fix it rather than exempting it.
-  functions: {
-    dir: 'functions', label: 'Cloud Functions tree', omitDev: true, blocking: true, allowed: {},
+  // No allowlist, deliberately: the server tree is small and should stay clean.
+  stack: {
+    dir: 'stack', label: 'server tree', omitDev: true, blocking: true, allowed: {},
   },
   'root-all': {
     dir: '.', label: 'whole tree, including tooling', omitDev: false, blocking: false, allowed: {},
   },
-  'functions-all': {
-    dir: 'functions', label: 'Cloud Functions tree, including tooling', omitDev: false, blocking: false, allowed: {},
-  },
+
 }
 
 const treeName = process.argv[2] || 'root'

@@ -14,7 +14,7 @@
 // exactly what the server-side design exists to avoid.
 // ─────────────────────────────────────────────────────────────────────────────
 import { doc, setDoc, serverTimestamp } from '../data/client.js'
-import { db } from '../firebase'
+import { db } from '../db'
 import { logAudit } from './orgData'
 import { AUDIT } from '../audit/audit'
 

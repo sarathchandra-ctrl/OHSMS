@@ -1,8 +1,9 @@
-// Dedicated-environment host. It is not a policy service: data calls set the
+// The organization's server. It is not a policy service: data calls set the
 // session uid and run SQL, and RLS decides. Presign and the workers re-read
 // the profile. The OIDC routes exist so a demo issuer can live on the same
-// host; a company issuer is just the URL in the request. Company SAML has no
-// demo IdP here: the host is only ever the service provider.
+// host for local development; a company issuer is the URL given at /setup.
+// Company SAML has no demo IdP here: the host is only ever the service
+// provider.
 
 import { createServer } from 'node:http'
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto'
@@ -31,19 +32,8 @@ import {
   sweepLoto,
   productMail,
 } from './workers.mjs'
-import {
-  checkIntake,
-  handoffLink,
-  handoffMessage,
-  hashIntakeToken,
-  newIntakeToken,
-  publicOutcome,
-  takePublicRequest,
-  takeSecrets,
-} from './intake.mjs'
-import { renderHandoffForm, renderHandoffRefusal, renderHandoffResult } from './handoffPage.mjs'
 import { renderSetupClosed, renderSetupDone, renderSetupForm } from './setupPage.mjs'
-import { fulfillRequest } from './fulfill.mjs'
+import { initializeOrganization, readOrganization } from './setup.mjs'
 
 const WORKER = { role: 'ohsms_worker', uid: '' }
 
@@ -58,7 +48,7 @@ function send(res, status, body, headers = {}) {
 }
 
 // Every route that reads a body is reachable before any session exists
-// (/handoff, /intake, /auth/saml, /auth/supabase), so an uncapped read lets
+// (/setup, /auth/saml, /auth/supabase), so an uncapped read lets
 // anyone hold an arbitrary upload in this process's memory. The cap sits above
 // the largest legitimate body: a /data commit carrying an inline file of up to
 // MAX_INLINE_BYTES (700 KB) as base64, with room for the rest of the batch.
@@ -117,39 +107,6 @@ function challenge(verifier) {
   return createHash('sha256').update(verifier).digest('base64url')
 }
 
-/**
- * The sign-in configuration a fulfilled request puts this host into. The
- * public half (issuer, client id) is on the request; the secret half arrived
- * on the handoff and nowhere else. null when the request names no IdP this
- * host serves, which leaves the configuration it started with.
- */
-export function adoptAuth(request, secrets = {}) {
-  if (request?.authMethod === 'saml') {
-    return {
-      method: 'saml',
-      clientId: request.authClientId || '',
-      idpCert: secrets.samlIdpCert,
-      entryPoint: secrets.samlEntryPoint,
-    }
-  }
-  if (request?.authMethod === 'oidc') {
-    return {
-      method: 'oidc',
-      issuer: request.authIssuer || '',
-      clientId: request.authClientId || '',
-      clientSecret: secrets.oidcClientSecret || '',
-    }
-  }
-  if (request?.authMethod === 'supabase') {
-    return {
-      method: 'supabase',
-      issuer: request.authIssuer || '',
-      anonKey: secrets.supabaseAnonKey || '',
-    }
-  }
-  return null
-}
-
 export function createOwnStackServer({
   engine,
   db,
@@ -158,13 +115,13 @@ export function createOwnStackServer({
   origin = '',
   dataKeyMaster = '',
   mail = null,
-  blobs = new Map(),
+  // Stored files (stack/blobs.mjs). null serves no uploads.
+  blobStore = null,
   codes = new Map(),
-  intake = new Map(),
-  requests = new Map(),
+  // The setup code /setup asks for: CONTROL_TOKEN.
   controlToken = '',
-  // Called with the sign-in configuration whenever fulfillment adopts one, so
-  // a deployment can keep it across a restart (stack/state.mjs).
+  // Called with the sign-in configuration whenever /setup connects one, so a
+  // deployment can keep it across a restart (stack/state.mjs).
   onAuthChange = null,
   // The built-in OIDC issuer under /oidc signs in whoever types an address.
   // It exists so the local demo needs no IdP, and it is the issuer an
@@ -205,6 +162,14 @@ export function createOwnStackServer({
       }
       if (req.method === 'POST' && url.pathname === '/presign') {
         await onPresign(req, res)
+        return
+      }
+      if (url.pathname === '/blob') {
+        if (!blobStore) {
+          send(res, 404, { code: 'not-found', message: 'file storage is not configured' })
+          return
+        }
+        await blobStore.handle(req, res, url)
         return
       }
       if (req.method === 'POST' && url.pathname.startsWith('/rpc/')) {
@@ -280,35 +245,11 @@ export function createOwnStackServer({
         return
       }
       if (req.method === 'GET' && url.pathname === '/setup') {
-        onSetupGet(res)
+        await onSetupGet(res)
         return
       }
       if (req.method === 'POST' && url.pathname === '/setup') {
         await onSetupPost(req, res)
-        return
-      }
-      if (req.method === 'POST' && url.pathname === '/requests') {
-        await onFile(req, res)
-        return
-      }
-      if (req.method === 'POST' && url.pathname === '/intake/start') {
-        await onIntakeStart(req, res)
-        return
-      }
-      if (req.method === 'GET' && url.pathname === '/handoff') {
-        onHandoffGet(url, res)
-        return
-      }
-      if (req.method === 'POST' && url.pathname === '/handoff') {
-        await onHandoffPost(req, res)
-        return
-      }
-      if (req.method === 'POST' && url.pathname === '/intake') {
-        await onIntake(req, res)
-        return
-      }
-      if (req.method === 'POST' && url.pathname === '/fulfill') {
-        await onFulfill(req, res)
         return
       }
       send(res, 404, { code: 'not-found', message: 'not found' })
@@ -612,15 +553,18 @@ export function createOwnStackServer({
       send(res, 403, { code: 'permission-denied', message: 'refused' })
       return
     }
-    if (body.op === 'delete') {
-      blobs.delete(body.path)
-      send(res, 200, { deleteUrl: `${origin}/blob?path=${encodeURIComponent(body.path)}` })
+    if (!blobStore) {
+      send(res, 503, { code: 'unavailable', message: 'file storage is not configured' })
       return
     }
-    const id = randomBytes(8).toString('hex')
+    if (body.op === 'delete') {
+      await blobStore.remove(body.path)
+      send(res, 200, { ok: true })
+      return
+    }
     send(res, 200, {
-      uploadUrl: `${origin}/blob?path=${encodeURIComponent(body.path)}&id=${id}`,
-      publicUrl: `${origin}/blob?path=${encodeURIComponent(body.path)}`,
+      uploadUrl: blobStore.uploadUrl(body.path),
+      publicUrl: blobStore.downloadUrl(body.path),
     })
   }
 
@@ -641,10 +585,10 @@ export function createOwnStackServer({
           idp,
         }),
       getDataKeys: () => releaseDataKeys(engine, { uid, master: dataKeyMaster }),
-      deleteOrgFile: () => deleteOrgFile(engine, blobs, { uid, path: body.path }),
-      purgeSoftDeleted: () => runRetention(engine, { orgId: body.orgId }),
+      deleteOrgFile: () => deleteOrgFile(engine, blobStore, { uid, path: body.path }),
+      purgeSoftDeleted: () => runRetention(engine, { uid }),
       withdrawStalePermitMirrors: () => withdrawStaleMirrors(engine),
-      sweepLotoPermits: () => sweepLoto(engine, { orgId: body.orgId }),
+      sweepLotoPermits: () => sweepLoto(engine, { uid }),
       notifyIncidentReported: () => productMail(mail, body),
       inviteMember: () =>
         inviteMember(engine, db, {
@@ -728,266 +672,10 @@ export function createOwnStackServer({
     send(res, 200, { sub: user.sub, email: user.email, email_verified: true, name: user.email })
   }
 
-  function operator(req) {
-    const header = String(req.headers.authorization || '')
-    return Boolean(controlToken) && header === `Bearer ${controlToken}`
-  }
-
-  function contactOf(request) {
-    return String(request?.handoffContact || request?.contactEmail || '')
-      .trim()
-      .toLowerCase()
-  }
-
-  function tokenMatches(request, token) {
-    const slot = intake.get(request?.id)
-    return checkIntake({
-      email: contactOf(request),
-      request,
-      token,
-      tokenHash: slot?.hash,
-      used: slot?.used,
-    }).ok
-  }
-
-  // Filing and starting intake share this. The token is mailed to the handoff
-  // contact. It is returned to the operator only when that mail was not sent,
-  // so the one showing is whichever channel actually delivered it.
-  async function openIntake(request) {
-    if (!request?.id) return { http: 404, body: { code: 'not-found', message: 'unknown request' } }
-    if (request.status !== 'requested') {
-      return {
-        http: 409,
-        body: {
-          code: 'failed-precondition',
-          message: 'that request is not waiting',
-          reason: request.status === 'live' ? 'already-live' : 'status',
-        },
-      }
-    }
-    if (intake.get(request.id)?.secrets) {
-      return {
-        http: 409,
-        body: {
-          code: 'failed-precondition',
-          message: 'secrets have already arrived',
-          reason: 'already-ingested',
-        },
-      }
-    }
-    const to = contactOf(request)
-    if (!to) {
-      return {
-        http: 400,
-        body: { code: 'invalid-argument', message: 'no handoff contact', reason: 'email' },
-      }
-    }
-    const token = newIntakeToken()
-    const link = handoffLink({ origin, requestId: request.id, token })
-    if (!link.ok) {
-      return {
-        http: 400,
-        body: {
-          code: 'failed-precondition',
-          message: 'the handoff link was not sent',
-          reason: link.reason,
-        },
-      }
-    }
-    intake.set(request.id, { hash: hashIntakeToken(token), secrets: null, used: false })
-    // Stored before the link leaves: a restart between the two would mail a
-    // token the host no longer recognises.
-    await intake.flush?.()
-    let sent = false
-    if (mail) {
-      const mailed = await mail(
-        handoffMessage({ to, orgName: request.orgName, requestId: request.id, url: link.url })
-      )
-      sent = mailed?.sent === true
-    }
-    const body = { ok: true, emailed: sent, requestId: request.id }
-    if (!sent) body.token = token
-    return { http: 200, body }
-  }
-
-  async function ingest({ requestId, email, token, secrets }) {
-    const request = requests.get(requestId)
-    const slot = intake.get(requestId)
-    const gate = checkIntake({
-      email,
-      request,
-      token,
-      tokenHash: slot?.hash,
-      used: slot?.used,
-    })
-    if (!gate.ok) {
-      return {
-        http: 403,
-        body: {
-          ok: false,
-          code: 'permission-denied',
-          message: 'the handoff was refused',
-          reason: gate.reason,
-        },
-      }
-    }
-    const taken = takeSecrets(secrets)
-    if (!taken.ok) {
-      return {
-        http: 400,
-        body: {
-          ok: false,
-          code: 'invalid-argument',
-          message: 'nothing to store',
-          reason: taken.reason,
-        },
-      }
-    }
-    // Consume before the await. A second request with the same token must not
-    // pass the check while fulfillment is still running.
-    slot.used = true
-    slot.hash = null
-    slot.secrets = taken.value
-    // The slot is mutated in place; set it again so a persistent store sees the
-    // consumed token and the secrets, and wait for that before fulfilling.
-    intake.set(requestId, slot)
-    await intake.flush?.()
-    return runFulfill(request, slot.secrets)
-  }
-
-  async function runFulfill(request, secrets) {
-    let result
-    try {
-      result = await fulfillRequest({
-        request,
-        secrets,
-        engine,
-        db,
-        admin: {
-          update: async (id, patch) => {
-            const current = requests.get(id)
-            requests.set(id, { ...current, ...patch })
-            await requests.flush?.()
-          },
-        },
-        mail,
-        dedicatedUrl: origin,
-        gatewayUrl: origin,
-      })
-    } catch {
-      return { http: 500, body: { ok: false, reason: 'fulfill' } }
-    }
-    const body = publicOutcome(result, secrets)
-    // The IdP certificate and entry point arrive on the handoff and nowhere
-    // else: they are not on the request and not in the public env. Once the
-    // environment is live, this host is that company's service provider, so it
-    // takes them from the intake it just accepted.
-    if (body.ok) {
-      const adopted = adoptAuth(request, secrets)
-      if (adopted) {
-        // requestId says which request this sign-in came from, so what the
-        // app is told (stack/app.mjs) follows the same request.
-        auth = { ...auth, ...adopted, requestId: request.id }
-        saml = null
-        await onAuthChange?.(auth)
-      }
-    }
-    return { http: body.ok ? 200 : 400, body }
-  }
-
-  async function onFile(req, res) {
-    if (!operator(req)) {
-      send(res, 401, { code: 'unauthenticated', message: 'operator token required' })
-      return
-    }
-    const body = await readBody(req)
-    const accepted = takePublicRequest(body)
-    if (!accepted.ok) {
-      send(res, 400, {
-        code: 'invalid-argument',
-        message: 'request refused',
-        reason: accepted.reason,
-      })
-      return
-    }
-    const prior = requests.get(accepted.value.id)
-    if (prior?.status === 'live' || intake.get(accepted.value.id)?.secrets) {
-      send(res, 409, {
-        code: 'failed-precondition',
-        message: 'that request is no longer waiting',
-        reason: prior?.status === 'live' ? 'already-live' : 'already-ingested',
-      })
-      return
-    }
-    requests.set(accepted.value.id, accepted.value)
-    await requests.flush?.()
-    const opened = await openIntake(requests.get(accepted.value.id))
-    send(res, opened.http, opened.body)
-  }
-
-  async function onIntakeStart(req, res) {
-    if (!operator(req)) {
-      send(res, 401, { code: 'unauthenticated', message: 'operator token required' })
-      return
-    }
-    const body = await readBody(req)
-    const request = requests.get(body.requestId)
-    if (!request) {
-      send(res, 404, { code: 'not-found', message: 'unknown request' })
-      return
-    }
-    const opened = await openIntake(request)
-    send(res, opened.http, opened.body)
-  }
-
-  function onHandoffGet(url, res) {
-    const requestId = url.searchParams.get('request') || ''
-    const token = url.searchParams.get('token') || ''
-    const request = requests.get(requestId)
-    if (!tokenMatches(request, token)) {
-      send(res, 403, renderHandoffRefusal())
-      return
-    }
-    send(res, 200, renderHandoffForm({ requestId, token, orgName: request.orgName }))
-  }
-
-  async function onHandoffPost(req, res) {
-    const body = await readBody(req)
-    const requestId = body.request || body.requestId
-    const outcome = await ingest({
-      requestId,
-      email: body.email,
-      token: body.token,
-      secrets: body,
-    })
-    const request = requests.get(requestId)
-    send(
-      res,
-      outcome.http,
-      renderHandoffResult({
-        ok: outcome.body.ok,
-        orgName: request?.orgName,
-        dedicatedUrl: outcome.body.dedicatedUrl,
-        reason: outcome.body.reason,
-      })
-    )
-  }
-
-  async function onIntake(req, res) {
-    const body = await readBody(req)
-    const outcome = await ingest({
-      requestId: body.requestId,
-      email: body.email,
-      token: body.token,
-      secrets: body.secrets,
-    })
-    send(res, outcome.http, outcome.body)
-  }
-
   // ── First-run setup in the browser (setupPage.mjs) ─────────────────────────
-  // One organization per environment: once any request is live, /setup is
-  // closed for good, whoever knows the code.
-  const isLive = () => [...(requests.values?.() || [])].some((r) => r?.status === 'live')
+  // One organization per server: once it exists, /setup is closed for good,
+  // whoever knows the code.
+  const isLive = async () => Boolean(await readOrganization(engine))
   // CONTROL_TOKEN is 32 random bytes, so guessing it is not the risk; a cap on
   // wrong codes still stops this page from being a free oracle.
   const SETUP_FAILURES_MAX = 10
@@ -995,8 +683,8 @@ export function createOwnStackServer({
   let setupFailures = []
   let setupBusy = false
 
-  function onSetupGet(res) {
-    send(res, 200, isLive() ? renderSetupClosed({ origin }) : renderSetupForm({ origin }))
+  async function onSetupGet(res) {
+    send(res, 200, (await isLive()) ? renderSetupClosed({ origin }) : renderSetupForm({ origin }))
   }
 
   function setupValues(body) {
@@ -1032,7 +720,7 @@ export function createOwnStackServer({
   async function onSetupPost(req, res) {
     const refuse = (status, reason, values) =>
       send(res, status, renderSetupForm({ origin, values, reason }))
-    if (isLive()) {
+    if (await isLive()) {
       send(res, 409, renderSetupClosed({ origin }))
       return
     }
@@ -1061,26 +749,28 @@ export function createOwnStackServer({
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(values.contactEmail)) {
       return refuse(400, 'contactEmail', values)
     }
-    let secrets
-    let authFields
+    let nextAuth
     if (values.method === 'saml') {
       const cert = typeof body.samlIdpCert === 'string' ? body.samlIdpCert.trim() : ''
       if (!values.samlEntryPoint || !cert) return refuse(400, 'saml', values)
       if (!httpsUrl(values.samlEntryPoint)) return refuse(400, 'samlUrl', values)
-      secrets = { samlIdpCert: cert, samlEntryPoint: values.samlEntryPoint }
-      // The SP entity id the setup page tells the IdP to expect.
-      authFields = { authMethod: 'saml', authIssuer: '', authClientId: origin }
+      // The SP entity id the setup page tells the IdP to expect is this origin.
+      nextAuth = { method: 'saml', clientId: origin, idpCert: cert, entryPoint: values.samlEntryPoint }
     } else if (values.method === 'oidc') {
       const secret = typeof body.oidcClientSecret === 'string' ? body.oidcClientSecret.trim() : ''
       if (!values.authIssuer || !values.authClientId || !secret) {
         return refuse(400, 'oidc', values)
       }
       if (!httpsUrl(values.authIssuer)) return refuse(400, 'oidcIssuer', values)
-      secrets = { oidcClientSecret: secret }
-      authFields = {
-        authMethod: 'oidc',
-        authIssuer: values.authIssuer,
-        authClientId: values.authClientId,
+      nextAuth = {
+        method: 'oidc',
+        issuer: values.authIssuer,
+        clientId: values.authClientId,
+        clientSecret: secret,
+        // Microsoft Entra sends no email_verified claim. Its single-tenant
+        // registration's email is set by the tenant's own admins, and the
+        // installer said so on the form.
+        ...(values.entraSingleTenant ? { acceptUnverifiedEmail: true } : {}),
       }
     } else {
       return refuse(400, 'method', values)
@@ -1089,54 +779,24 @@ export function createOwnStackServer({
     if (setupBusy) return refuse(409, 'already-live', values)
     setupBusy = true
     try {
-      const accepted = takePublicRequest({
-        id: `setup${randomBytes(12).toString('hex')}`,
-        status: 'requested',
+      const created = await initializeOrganization({
+        engine,
+        db,
         orgName: values.orgName,
         address: values.address,
-        contactName: values.contactName,
-        contactEmail: values.contactEmail,
-        handoffContact: values.contactEmail,
-        mode: 'bring',
-        engine: 'postgres',
-        ...authFields,
-        bucketMode: 'provision',
-        bucketName: '',
-        bucketRegion: '',
-        presignUrl: '',
+        adminEmail: values.contactEmail,
+        adminName: values.contactName,
       })
-      if (!accepted.ok)
-        return refuse(400, accepted.reason === 'email' ? 'contactEmail' : 'shape', values)
-      const taken = takeSecrets(secrets)
-      if (!taken.ok) return refuse(400, values.method, values)
-      const request = accepted.value
-      requests.set(request.id, request)
-      await requests.flush?.()
-      // Recorded as a used intake, exactly as a handoff leaves it, so a
-      // restart finds the secrets and no token is left that could reuse them.
-      intake.set(request.id, { hash: null, used: true, secrets: taken.value })
-      await intake.flush?.()
-      const outcome = await runFulfill(requests.get(request.id), taken.value)
-      if (!outcome.body.ok) {
-        // Not live: drop the half-made request so the next attempt starts clean.
-        requests.delete?.(request.id)
-        intake.delete?.(request.id)
-        await requests.flush?.()
-        await intake.flush?.()
-        return refuse(
-          400,
-          outcome.body.reason in { saml: 1, oidc: 1 } ? outcome.body.reason : 'fulfill',
-          values
-        )
+      if (!created.ok) {
+        if (created.reason === 'already-live') {
+          send(res, 409, renderSetupClosed({ origin }))
+          return
+        }
+        return refuse(400, created.reason === 'adminEmail' ? 'contactEmail' : 'fulfill', values)
       }
-      // Microsoft Entra sends no email_verified claim. Its single-tenant
-      // registration's email is set by the tenant's own admins, and the
-      // installer said so on the form; this is the deployment-wide
-      // OIDC_ACCEPT_UNVERIFIED_EMAIL, chosen where nobody has a terminal.
-      if (values.method === 'oidc' && values.entraSingleTenant) {
-        auth = { ...auth, acceptUnverifiedEmail: true }
-        await onAuthChange?.(auth)
-      }
+      auth = { ...nextAuth }
+      saml = null
+      await onAuthChange?.(auth)
       send(
         res,
         200,
@@ -1145,22 +805,6 @@ export function createOwnStackServer({
     } finally {
       setupBusy = false
     }
-  }
-
-  async function onFulfill(req, res) {
-    if (!operator(req)) {
-      send(res, 401, { code: 'unauthenticated', message: 'operator token required' })
-      return
-    }
-    const body = await readBody(req)
-    const request = requests.get(body.requestId)
-    const slot = intake.get(body.requestId)
-    if (!request || !slot?.secrets) {
-      send(res, 400, { code: 'failed-precondition', message: 'secrets have not arrived' })
-      return
-    }
-    const outcome = await runFulfill(request, slot.secrets)
-    send(res, outcome.http, outcome.body)
   }
 
   return server

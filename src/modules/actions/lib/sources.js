@@ -10,7 +10,7 @@
 // Normalized status: 'open' | 'in_progress' | 'done'.
 // ─────────────────────────────────────────────────────────────────────────────
 import { doc, getDoc, updateDoc } from '../../../shared/data/client.js'
-import { db } from '../../../shared/firebase'
+import { db } from '../../../shared/db'
 import { subscribeOrgCollection, incompleteReadNotice } from '../../../shared/org/orgData'
 import { releaseDefectLocks } from '../../fire/lib/firestore'
 // The tracker is a cross-module READER, so it has to open what each module

@@ -22,7 +22,7 @@ with the architecture.
 Processing of personal data, including special-category health data, that the
 Controller's users enter into the System, for the duration of the subscription
 and any retention period counsel signs in `docs/DATA-RIGHTS.md` / 
-`functions/lib/retentionPolicy.js`.
+`stack/lib/retentionPolicy.js`.
 
 Retention periods in that table that still read `NEEDS_LEGAL_SIGN_OFF` are
 **not** processor policy. They are an engineering reading waiting on counsel.
@@ -39,7 +39,7 @@ purpose and a new subprocessor, not a configuration toggle.
 
 ## 4. Types of personal data
 
-As inventoried in `functions/lib/subjectData.js` and sealed per
+As inventoried in `stack/lib/subjectData.js` and sealed per
 `src/shared/crypto/policy.js`:
 
 - Identity and employment: names, uids, site/department assignment, training

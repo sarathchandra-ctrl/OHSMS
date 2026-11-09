@@ -35,7 +35,7 @@
 // at another tenant's address and make a padlock permanently unusable there.
 // ─────────────────────────────────────────────────────────────────────────────
 import { collection, doc, getDoc, getDocs, limit, query, serverTimestamp, where, writeBatch } from '../../../shared/data/client.js'
-import { db } from '../../../shared/firebase'
+import { db } from '../../../shared/db'
 import { COLLECTION_READ_CAP } from '../../../shared/org/orgData'
 
 export const CLAIMS_COL = 'lockClaims'

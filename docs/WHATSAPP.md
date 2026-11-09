@@ -39,7 +39,7 @@ Reply with another Centre ID or Centre Name.
 | Emergency contacts | `erpContacts` for the site plus org-wide ones, external services first; the org helpline; 112                                                                                                                                         |
 
 `functions/` cannot import `src/`, so the definitions are ported to
-`functions/lib/siteSummary.js` and pinned by
+`stack/lib/siteSummary.js` and pinned by
 `src/pages/admin/siteSummary.parity.test.js`, which computes every number both
 ways over one fixture. A module switched off in `moduleEntitlements` drops its
 line. WhatsApp's 4,096-character body limit is enforced by adding contacts until

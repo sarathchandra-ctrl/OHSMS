@@ -22,7 +22,7 @@ import {
   runTransaction,
   arrayUnion,
 } from '../../../shared/data/client.js'
-import { db } from '../../../shared/firebase'
+import { db } from '../../../shared/db'
 import { onReadError } from '../../../shared/org/readError'
 import { reserveDocId } from '../../../shared/docId/reserve'
 import { putFile, removeFile, MAX_INLINE_BYTES, tooLargeForInline } from '../../../shared/storage'

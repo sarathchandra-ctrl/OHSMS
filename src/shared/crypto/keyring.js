@@ -163,7 +163,7 @@ export async function loadKeys(orgId) {
       }
     } catch (e) {
       // A key that arrived but will not import is a real defect — a format
-      // disagreement between functions/lib/dataKeys.js and envelope.js — and
+      // disagreement between stack/lib/dataKeys.js and envelope.js — and
       // must not be quietly downgraded to "this user has no keys".
       reportError(e, { source: 'crypto.loadKeys.import' })
     }

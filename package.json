@@ -3,28 +3,22 @@
   "private": true,
   "version": "1.0.0",
   "type": "module",
-  "description": "OHS Management System — unified Occupational Health & Safety platform (incidents, HIRA, inspections, audits, permit-to-work, LOTO, fire marshal, HSE committee, training, documents/SDS).",
+  "description": "OHS Management System \u2014 single-organization Occupational Health & Safety platform (incidents, HIRA, inspections, audits, permit-to-work, LOTO, fire marshal, HSE committee, training, documents/SDS), self-hosted on the organization's own server and Postgres database.",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "emulators": "firebase emulators:start",
-    "emulators:rules": "node scripts/reload-emulator-rules.mjs",
-    "seed": "node scripts/seed.mjs",
-    "platform:grant": "node scripts/grant-platform-admin.mjs",
-    "dev:full": "concurrently -k -n emu,web -c magenta,cyan \"npm:emulators\" \"npm:dev\"",
     "test": "vitest run",
     "test:watch": "vitest",
-    "pretest:rules": "node scripts/rules-preflight.mjs",
-    "test:rules": "firebase emulators:exec --only firestore,storage --config firebase.rulestest.json \"vitest run --config vitest.rules.config.js\"",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "deploy:staging": "node scripts/deploy-staging.mjs",
     "mobile:sync": "npm run build && npx cap sync",
     "mobile:android": "npx cap open android",
-    "mobile:ios": "npx cap open ios"
+    "mobile:ios": "npx cap open ios",
+    "server": "node stack/main.mjs",
+    "deploy:cloudflare": "npm run build && wrangler deploy"
   },
   "dependencies": {
     "@capacitor-mlkit/barcode-scanning": "^8.2.1",
@@ -34,11 +28,9 @@
     "@capacitor/splash-screen": "^8.0.2",
     "@fontsource/open-sans": "^5.3.0",
     "@fontsource/roboto": "^5.3.0",
-    "@node-saml/node-saml": "^5.2.0",
     "@sentry/browser": "^10.69.0",
     "@xyflow/react": "^12.0.4",
     "date-fns": "^3.6.0",
-    "firebase": "^10.12.4",
     "framer-motion": "^11.3.19",
     "html-to-image": "^1.11.11",
     "html5-qrcode": "^2.3.8",
@@ -66,18 +58,13 @@
     "node-gyp": {
       "undici": "^8.12.3"
     },
-    "@grpc/grpc-js": "^1.13.6",
-    "uuid": "^11.1.1",
-    "firebase-tools": {
-      "@google-cloud/pubsub": "^6.3.1"
-    }
+    "uuid": "^11.1.1"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.13.0",
     "@capacitor/cli": "^8.5.3",
     "@electric-sql/pglite": "^0.3.16",
     "@eslint/js": "^8.57.0",
-    "@firebase/rules-unit-testing": "^3.0.4",
     "@playwright/test": "^1.62.1",
     "@tailwindcss/postcss": "^4.3.3",
     "@testing-library/dom": "^10.4.0",
@@ -89,7 +76,6 @@
     "eslint-plugin-react": "^7.35.0",
     "eslint-plugin-react-hooks": "^4.6.2",
     "eslint-plugin-react-refresh": "^0.4.9",
-    "firebase-tools": "^15.34.1",
     "globals": "^15.9.0",
     "jsdom": "^24.1.1",
     "postcss": "^8.4.40",

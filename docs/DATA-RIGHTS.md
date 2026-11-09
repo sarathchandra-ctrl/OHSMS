@@ -15,7 +15,7 @@ engineering one.
 
 ## 1. Where a person's data actually is
 
-`functions/lib/subjectData.js` is the inventory, and it is the foundation of
+`stack/lib/subjectData.js` is the inventory, and it is the foundation of
 everything else here. It exists because neither question — "show me my data",
 "delete my data" — can be answered without first knowing every place the data
 is, and this system denormalises people heavily.
@@ -123,7 +123,7 @@ different tenants may sit under different regimes. Specifically:
 
 - Exposure and health-surveillance records carry the longest statutory periods
   and the exact number varies by jurisdiction and by agent.
-- A period table now exists (`functions/lib/retentionPolicy.js`) but every
+- A period table now exists (`stack/lib/retentionPolicy.js`) but every
   personal-data row is `NEEDS_LEGAL_SIGN_OFF`. A record classed `STATUTORY` is
   currently kept forever, which is itself a data-protection finding: indefinite
   retention is not lawful merely because some retention is. Counsel must sign
@@ -143,7 +143,7 @@ existed.
 
 **That half is now built**: `deleteInjury` / `restoreInjury` / `purgeInjury`
 (`src/modules/incidents/lib/injuries.js`), the Recycle Bin shows injury reports,
-and `functions/lib/retention.js` purges them thirty days after deletion together
+and `stack/lib/retention.js` purges them thirty days after deletion together
 with the `records` subcollection and the Storage objects behind it. Writing
 `deletedAt` on an injury is manager-only in `firestore.rules`
 (`keepsInjuryDeletion`), because it now schedules an irreversible deletion rather
@@ -162,7 +162,7 @@ rather than engineering:
    period belongs on the organization document rather than in the code.
 
 When answered, the change is small and the place is already prepared:
-`planPurge()` in `functions/lib/retention.js` takes `days` per call, so enforcing
+`planPurge()` in `stack/lib/retention.js` takes `days` per call, so enforcing
 a period is a `days` on the `injuries` entry in `PURGEABLE` plus one line in
 `purgeOrgCollection`, which currently passes the shared 30-day constant.
 `retention.test.js` asserts the absence of that field today, so adding one is a
@@ -180,11 +180,11 @@ that test is where to start.
 
 - **Execution of erasure.** Classification only. See the warning above.
 - **Retention periods.** Only the Recycle Bin's 30-day purge exists
-  (`functions/lib/retention.js`), and it now covers `injuries` and their
+  (`stack/lib/retention.js`), and it now covers `injuries` and their
   clinical documents as well as incidents and illnesses. Live records still have
   no expiry — see the injury-retention decision in §3, which is the sharpest
   case of exactly this gap. The period table that was missing is now
-  `functions/lib/retentionPolicy.js`: every personal-data class is marked
+  `stack/lib/retentionPolicy.js`: every personal-data class is marked
   `NEEDS_LEGAL_SIGN_OFF`, live age-purge is off, and `counselSignOffQuestions()`
   is the list counsel must actually answer. A number in that file is a
   proposal, not a rule.

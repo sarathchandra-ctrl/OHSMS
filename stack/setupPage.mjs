@@ -1,23 +1,27 @@
-// First-run setup in the browser (/setup). Whoever installed the environment
-// connects the organization and its sign-in here, instead of filing a request
-// with curl and opening a handoff link: on a self-hosted install the operator
-// and the organization are the same people, and nobody should need a terminal
-// to get from "installed" to "signed in".
+// First-run setup in the browser (/setup). Whoever installed the server
+// connects the organization and its sign-in here, once. Nobody should need a
+// terminal to get from "installed" to "signed in".
 //
-// The setup code is CONTROL_TOKEN, which the installer already has: the
-// hosting dashboard shows the environment's settings, and install.sh wrote
-// it to .env. It is the same proof /requests asks for.
+// The setup code is CONTROL_TOKEN, which the installer already has:
+// install.sh wrote it to .env.
 //
 // The form never echoes a secret back. On a refusal it keeps what was public
 // (names, addresses, URLs) and empties the code, the certificate and the
 // client secret.
 
-import { escapeHtml } from './handoffPage.mjs'
+export function escapeHtml(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
 
 export const SETUP_REASONS = {
-  code: 'That setup code is not right. It is CONTROL_TOKEN in this environment’s settings.',
+  code: 'That setup code is not right. It is CONTROL_TOKEN in this server’s .env file.',
   'too-many': 'Too many wrong setup codes. Wait a few minutes and try again.',
-  'already-live': 'This environment is already set up.',
+  'already-live': 'This server is already set up.',
   orgName: 'Enter the organization’s name.',
   contactName: 'Enter your name.',
   contactEmail: 'Enter your work email address.',
@@ -76,7 +80,7 @@ const value = (v) => `value="${escapeHtml(v || '')}"`
 
 /**
  * @param {object} o
- * @param {string} o.origin  this environment's address, for the values the
+ * @param {string} o.origin  this server's address, for the values the
  *   identity provider needs
  * @param {object} [o.values] public values to keep after a refusal
  * @param {string} [o.reason]
@@ -90,11 +94,11 @@ export function renderSetupForm({ origin, values = {}, reason = '' }) {
   return page(
     'Set up WEEHS',
     `<h1>Set up WEEHS</h1>
-<p class="muted">Connect your organization and its sign-in. This is done once, by whoever installed this environment, and takes a few minutes.</p>
+<p class="muted">Connect your organization and its sign-in. This is done once, by whoever installed this server, and takes a few minutes.</p>
 ${error}
 <form method="post" action="/setup" autocomplete="off">
 <label for="code">Setup code
-<span class="hint">Filled in when you come from the WEEHS Installer. Otherwise: CONTROL_TOKEN in this environment’s settings.</span>
+<span class="hint">Filled in when you come from the WEEHS Installer. Otherwise: CONTROL_TOKEN in this server’s .env file.</span>
 <input id="code" name="code" type="password" required spellcheck="false">
 </label>
 
@@ -191,7 +195,7 @@ export function renderSetupClosed({ origin }) {
   return page(
     'Already set up',
     `<h1>Already set up</h1>
-<p>This environment is connected to its organization. Sign in with your company account.</p>
+<p>This server is connected to its organization. Sign in with your company account.</p>
 <a class="button" href="${escapeHtml(origin)}/login">Go to sign in</a>`
   )
 }

@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest'
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Parity: the WhatsApp site summary (functions/lib/siteSummary.js) against the
+// Parity: the WhatsApp site summary (stack/lib/siteSummary.js) against the
 // app's own helpers, over one fixture.
 //
 // functions/ cannot import src/, so the server carries copies. This is the test
@@ -31,7 +31,7 @@ const { deriveStatus, isDeleted } = await import('../../modules/fire/lib/extingu
 const { derivePhysicalDefectLog } = await import('../../modules/fire/lib/defectReports')
 const { deriveExtinguisherDefects } = await import('../../modules/fire/lib/derivedExtDefects')
 const { SOURCES, isOverdue, todayISO } = await import('../../modules/actions/lib/sources')
-const { summariseSites, istDay: serverIstDay } = await import('../../../functions/lib/siteSummary.js')
+const { summariseSites, istDay: serverIstDay } = await import('../../../stack/lib/siteSummary.js')
 const { istDay: appIstDay } = await import('../../shared/lib/dates')
 
 // 12 Oct 2026, noon in Asia/Kolkata. Hydrostatic due dates use that calendar

@@ -5,10 +5,10 @@ import {
   STATUS_KEYS, TERMINAL_STATUSES, isTerminal, isOutstanding, paletteColor, day0Of, n7Of, checksTotalOf, passTotals, PASS_MARK,
   auditPopulation,
 } from './odinAnalytics'
-import { day0Of as sharedDay0, auditPopulation as sharedPop } from '../../../functions/lib/auditScore.js'
-import { resolveOdinRows as sharedJoin } from '../../../functions/lib/odinJoin.js'
+import { day0Of as sharedDay0, auditPopulation as sharedPop } from '../../../stack/lib/auditScore.js'
+import { resolveOdinRows as sharedJoin } from '../../../stack/lib/odinJoin.js'
 
-// The shape functions/lib/metabase.js hands back, with the fields a test needs.
+// The shape stack/lib/metabase.js hands back, with the fields a test needs.
 const finding = (over = {}) => ({
   siteId: '', site: 'Plant 2', region: 'South', entity: 'Retail',
   status: 'open', rawStatus: 'Open', category: '', subCategory: 'Blocked fire exit',
@@ -37,7 +37,7 @@ describe('the dashboard and the site lookup share one implementation', () => {
 
 describe('the statuses are a contract with the server', () => {
   it('is exactly the five the dashboard draws, in escalation order', () => {
-    // functions/lib/metabase.js normalizes onto these keys. If either side
+    // stack/lib/metabase.js normalizes onto these keys. If either side
     // renames one, every bar for that status silently becomes zero.
     //
     // `rejected` is the fifth and was added late: on a real ticket dump it was

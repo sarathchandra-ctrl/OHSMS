@@ -17,7 +17,7 @@ import {
   precautionText,
   siteTypeOptions,
   siteTypeRows,
-} from '../../../functions/lib/weatherPrecautions.js'
+} from '../../../stack/lib/weatherPrecautions.js'
 import {
   CULT_OWNERSHIP_SITE_TYPES,
   LEGACY_ENTITY_LABELS,
@@ -26,7 +26,7 @@ import {
   packSiteTypeByEntity,
   planSiteTypeBackfill,
   rowsFromSiteTypeByEntity,
-} from '../../../functions/lib/siteTypeBackfill.js'
+} from '../../../stack/lib/siteTypeBackfill.js'
 
 export {
   ALERTS,

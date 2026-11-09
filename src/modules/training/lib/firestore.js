@@ -8,7 +8,7 @@ import {
   addDoc, deleteDoc, doc, getDoc, getDocs, limit, onSnapshot, orderBy, query, serverTimestamp,
   updateDoc, where, writeBatch, collection,
 } from '../../../shared/data/client.js'
-import { db } from '../../../shared/firebase'
+import { db } from '../../../shared/db'
 import { logAudit } from '../../../shared/org/orgData'
 import { isPermissionDenied } from '../../../shared/lib/permissionDenied'
 import { computeExpiry, todayISO } from './status'

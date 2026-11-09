@@ -15,7 +15,7 @@ import { Database, ExternalLink } from 'lucide-react'
 import { Card } from '../../shared/ui'
 import MetabaseConnect from '../../shared/integrations/MetabaseConnect'
 
-// Mirrors COLUMN_ALIASES in functions/lib/metabase.js. Kept as prose rather
+// Mirrors COLUMN_ALIASES in stack/lib/metabase.js. Kept as prose rather
 // than imported: the server file is the authority on the matching, and this is
 // the human-readable half — the aliases it accepts are broader than what is
 // worth printing on a settings screen.

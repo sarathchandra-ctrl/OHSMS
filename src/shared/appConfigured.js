@@ -1,18 +1,10 @@
-import { isFirebaseConfigured } from './firebase'
-import { isOwnStackBuild, ownStackGateway } from './auth/ownStackSession'
+import { ownStackGateway } from './auth/ownStackSession'
 
 /**
- * Whether this build has a backend to talk to, or can only show SetupNeeded.
- *
- * A dedicated own-stack build has no Firebase project at all: its data,
- * sign-in and files go to the company's host (docs/CUSTOM-STACK.md), so its
- * backend is the gateway. Gating it on a Firebase project id, as App.jsx did,
- * made every such deploy carry a placeholder id to get past the setup screen.
+ * Whether this build has a server to talk to, or can only show SetupNeeded.
+ * The server is the gateway the deployment names (runtime-config.js, or
+ * VITE_DATA_GATEWAY at build time).
  */
-export function isAppConfigured({
-  ownStack = isOwnStackBuild(),
-  gateway = ownStackGateway(),
-  firebase = isFirebaseConfigured,
-} = {}) {
-  return ownStack ? Boolean(gateway) : firebase
+export function isAppConfigured({ gateway = ownStackGateway() } = {}) {
+  return Boolean(gateway)
 }

@@ -15,7 +15,7 @@
 // handing the same number out twice — is not.
 // ─────────────────────────────────────────────────────────────────────────────
 import { collection, doc, getDoc, getDocs, runTransaction, setDoc } from '../data/client.js'
-import { db } from '../firebase'
+import { db } from '../db'
 import { formatDocId, deriveOrgCode, normalizeOrgCode } from './format'
 
 // One document per kind holding a single integer `n`, at

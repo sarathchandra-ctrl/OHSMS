@@ -3,7 +3,7 @@
 // the same commit as the permit (firestore.rules). This file only creates
 // empty numbers and lists them.
 import { collection, doc, onSnapshot, query, setDoc, limit } from '../../../shared/data/client.js'
-import { db } from '../../../shared/firebase'
+import { db } from '../../../shared/db'
 import { COLLECTION_READ_CAP } from '../../../shared/org/orgData'
 
 const col = (orgId) => collection(db, 'organizations', orgId, 'lotoGroupNumbers')

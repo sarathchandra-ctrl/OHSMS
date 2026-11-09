@@ -5,7 +5,7 @@
 // change a value already printed on exports and stored on records that point
 // at the site by the code they saved. Comparison folds; the document does not.
 //
-// Same fold as functions/lib/whatsapp/resolve.js centreIdKey. The two packages
+// Same fold as stack/lib/whatsapp/resolve.js centreIdKey. The two packages
 // cannot import each other, and a third spelling is how the WhatsApp lookup
 // and the register start answering different questions.
 

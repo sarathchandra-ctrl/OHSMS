@@ -1,57 +1,21 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Callable Cloud Functions.
+// Server jobs ("callables").
 //
-// Pinned to the region the functions are deployed in. Firebase defaults
-// callables to us-central1, and a mismatch fails with a CORS error rather than
-// anything naming the region — so this is the one place that knows, and callers
-// never pass it.
+// Each one is a POST to /rpc/<name> on this installation's server
+// (stack/server.mjs), carrying the session token. The server re-reads the
+// caller's live profile for every job; the token proves who signed in, not
+// what they may do.
 //
-// Loaded lazily: firebase/functions is dead weight in every bundle that never
-// calls one, and most of them do not. The maintenance screen was once the only
-// caller; the ODIN analytics tab is the other one, and it is why the emulator
-// wiring below had to exist at all.
+// A job the server does not implement answers 404 "no such job", and the
+// screen that asked reports it as unavailable rather than failing silently.
 // ─────────────────────────────────────────────────────────────────────────────
-import app, { emulatorFunctions } from './firebase'
-import { currentAccessToken, isOwnStackBuild, ownStackGateway } from './auth/ownStackSession'
-
-// Must match REGION in functions/index.js.
-export const FUNCTIONS_REGION = 'asia-south1'
-
-// The Functions instance, built once. The emulator connection has to happen
-// HERE rather than in firebase.js because this SDK is loaded lazily — and until
-// it did, every callable in local development quietly went to the DEPLOYED
-// production functions instead of the ones running on the developer's machine.
-// The suite would start, register the functions, log nothing, and the app would
-// report a bare "internal".
-let functionsPromise = null
-async function getFns() {
-  if (!functionsPromise) {
-    functionsPromise = import('firebase/functions').then((mod) => {
-      const fns = mod.getFunctions(app, FUNCTIONS_REGION)
-      if (emulatorFunctions) {
-        mod.connectFunctionsEmulator(fns, emulatorFunctions.host, emulatorFunctions.port)
-      }
-      return { mod, fns }
-    })
-  }
-  return functionsPromise
-}
+import { currentAccessToken, ownStackGateway } from './auth/ownStackSession'
 
 /**
- * A callable, with an optional client-side deadline.
- *
- * The Firebase client gives up after 70 seconds by default, which is generous
- * for everything here except a warehouse query: a saved question over a quarter
- * of a large estate takes a minute on its own, and the browser was abandoning
- * calls the server went on to complete successfully. The tab then showed "the
- * connector did not answer" about a request that had answered — the worst kind
- * of wrong, because the logs say it worked.
- *
- * The deadline stays at the default for everything that does not ask.
+ * A server job, with an optional client-side deadline.
  */
 async function callable(name, { timeout } = {}) {
-  if (isOwnStackBuild()) {
-    return async (data) => {
+  return async (data) => {
       const gateway = ownStackGateway()
       const token = currentAccessToken()
       const res = await fetch(`${gateway}/rpc/${name}`, {
@@ -74,9 +38,6 @@ async function callable(name, { timeout } = {}) {
       }
       return { data: body }
     }
-  }
-  const { mod, fns } = await getFns()
-  return mod.httpsCallable(fns, name, timeout ? { timeout } : undefined)
 }
 
 /**
@@ -389,7 +350,7 @@ export async function exportSubjectData({ uid, personId, encryptionOn } = {}) {
 // it to a browser hands it to everyone who can open a tab, and no Firestore
 // rule can take it back — so it stays server-side, and none of these functions
 // can return it. metabaseSettings() reads the connection back for an admin with
-// the key REMOVED (functions/lib/metabase.js redactConfig), not masked.
+// the key REMOVED (stack/lib/metabase.js redactConfig), not masked.
 //
 // The second reason is duller and just as binding: a browser cannot call a
 // self-hosted Metabase at all unless that instance sets CORS headers for this
@@ -543,23 +504,4 @@ export async function sendWhatsAppOrgTest(phone) {
 export async function fetchSiteWeather({ lat, lng } = {}) {
   const fn = await callable('fetchSiteWeather')
   return (await fn({ lat, lng })).data
-}
-
-/**
- * Every organization, for the platform console.
- *
- * Takes no argument. The operator's identity is the signed-in user, and the
- * function decides from platformAdmins/{uid} — not from a role on a tenant
- * profile the operator does not have. Passing an organization id would imply
- * this was a tenant-scoped read. It is not.
- *
- * `{ rows, recentWindowDays, truncated, orgTruncated, userTruncated, partial }`.
- * Each row's `activityTypes` is the last 30 days of audit events grouped by
- * the module (or, for user administration, by that action). `recentActivity`
- * is the newest of those. A null count, or a null type list, means that read
- * failed. It is not a zero.
- */
-export async function listPlatformOrganizations() {
-  const fn = await callable('listPlatformOrganizations', { timeout: 120_000 })
-  return (await fn()).data
 }

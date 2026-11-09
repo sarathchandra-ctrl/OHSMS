@@ -8,7 +8,7 @@
 // It is the only tab that does not read Firestore. The rows come from Metabase
 // through a callable, because the API key that fetches them is a bearer
 // credential for an entire analytics warehouse and must never reach a browser —
-// see functions/lib/metabase.js. That has two consequences visible here: the
+// see stack/lib/metabase.js. That has two consequences visible here: the
 // data is FETCHED rather than subscribed, so there is a refresh button and a
 // timestamp saying how old the numbers are; and every failure mode is a
 // different screen, because "nobody has connected Metabase" and "the audits
@@ -149,7 +149,7 @@ export default function OdinTab({ view = 'scores', sites = [], orgId, actor, isA
   // The redacted connection, for admins only, and only to report how old the
   // API key is. On an instance that issues short-lived keys, the dashboard
   // breaking on a schedule is the thing this page can warn about before it
-  // happens — see keyAge in functions/lib/metabase.js. Never the key itself:
+  // happens — see keyAge in stack/lib/metabase.js. Never the key itself:
   // metabaseConfig strips it server-side.
   const [conn, setConn] = useState(null)
   // The two quarter windows, fetched alongside the main pair — see load().

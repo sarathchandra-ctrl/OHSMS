@@ -33,7 +33,7 @@ import {
   limit,
   writeBatch,
 } from '../../../shared/data/client.js'
-import { db } from '../../../shared/firebase'
+import { db } from '../../../shared/db'
 // purgeInjury destroys the clinical DOCUMENTS as well as the pointers to them.
 // A pointer deleted without its object leaves the GP letter in the bucket with
 // nothing left that names it — unreachable through the app and still there.
@@ -66,7 +66,7 @@ const injuryRef = (orgId, id) => doc(db, 'organizations', orgId, 'injuries', id)
 // seals with the MEDICAL keypair — the general key would hand the file back to
 // every member who can open an incident photo.
 //
-// MUST stay the same string as MEDICAL_RECORD_KIND in functions/lib/medicalRecords.js
+// MUST stay the same string as MEDICAL_RECORD_KIND in stack/lib/medicalRecords.js
 // and the literal in storage.rules. Three copies, three deployable units, no
 // import between them.
 const SEALED_RECORDS = 'injuries/records'
@@ -110,7 +110,7 @@ export function medicalAttachmentTarget(incidentId, personId) {
  * always shows "—"). It is named here so a dead field cannot quietly be revived
  * on the wrong document.
  *
- * Kept in step with MEDICAL_FIELDS in functions/lib/incidentMedical.js, which
+ * Kept in step with MEDICAL_FIELDS in stack/lib/incidentMedical.js, which
  * strips the same fields off documents written before this split. functions/
  * deploys as its own package and cannot import from src/, so the list exists
  * twice on purpose; change one and change the other.
@@ -522,10 +522,10 @@ export async function deleteMedicalRecord(orgId, id, recordId) {
 // and /injuries, the only home of a named colleague's clinical detail and the
 // documents behind it, was the one collection in this app with no way to remove
 // a record at all. An ISO 27001 audit found it under A.8.10; the sweep in
-// functions/lib/retention.js is the other half, and neither works without both.
+// stack/lib/retention.js is the other half, and neither works without both.
 //
 // Deliberately NOT reached by the incident purge. See the note on the
-// `injuries` entry in functions/lib/retention.js for why an injury outliving
+// `injuries` entry in stack/lib/retention.js for why an injury outliving
 // the incident it came from is the intended behaviour rather than the bug.
 
 /**

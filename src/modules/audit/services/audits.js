@@ -1,6 +1,6 @@
 import { collection, onSnapshot, orderBy, query, limit } from '../../../shared/data/client.js'
 import { onReadError } from '../../../shared/org/readError'
-import { db } from '../../../shared/firebase'
+import { db } from '../../../shared/db'
 
 // Reads only. The write path that used to live here — createAudit,
 // updateAudit, deleteAudit, subscribeAudit, and the ISO 45001 clause checklist

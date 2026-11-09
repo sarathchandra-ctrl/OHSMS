@@ -82,7 +82,7 @@ refuses the whole host, including an IPv4 carried inside an IPv6 form. The
 socket lookup returns only the addresses that passed, so a later answer for
 the same name is not what gets dialled. A 3xx fails the request and is not
 followed, and the API key stays in the `x-api-key` header.
-`functions/lib/metabase.test.js` covers the literal forms, the resolved
+`stack/lib/metabase.test.js` covers the literal forms, the resolved
 addresses, the pinned lookup, and the refused redirect.
 
 ### S-27 · A LOTO procedure mirror could carry the names it exists to hide — CLOSED

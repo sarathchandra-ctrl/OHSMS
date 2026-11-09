@@ -8,7 +8,7 @@ import {
   serverTimestamp,
   updateDoc,
 } from '../../../shared/data/client.js'
-import { db } from '../../../shared/firebase'
+import { db } from '../../../shared/db'
 import { onReadError } from '../../../shared/org/readError'
 import { reserveDocId } from '../../../shared/docId/reserve'
 import { COLLECTION_READ_CAP } from '../../../shared/org/orgData'

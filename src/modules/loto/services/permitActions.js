@@ -27,7 +27,7 @@ import {
   updateDoc,
   writeBatch,
 } from '../../../shared/data/client.js'
-import { db } from '../../../shared/firebase'
+import { db } from '../../../shared/db'
 import { openDoc, sealDoc } from '../../../shared/crypto'
 import {
   EVENT_TYPES,

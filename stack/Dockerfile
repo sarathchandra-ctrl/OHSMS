@@ -1,13 +1,12 @@
-# A dedicated environment: the control plane, the gateway, and the app, in
-# one container. docs/CONTROL-PLANE.md.
+# The organization's server: the gateway, first-run setup, file store and the
+# app, in one container. docs/SELF-HOSTING.md.
 #
-# One image serves every company. Nothing about a company is built in: the
-# host tells the app its gateway, sign-in and file store at start-up
-# (/runtime-config.js, stack/app.mjs), and everything else is environment
-# variables and secrets given to the container. Build from the repository
-# root (the app and stack/ both live there):
+# Nothing about the organization is built in: the server tells the app its
+# gateway and sign-in at start-up (/runtime-config.js, stack/app.mjs), and
+# everything else is environment variables given to the container. Build
+# from the repository root (the app and stack/ both live there):
 #
-#   docker build -f stack/Dockerfile -t weehs-dedicated .
+#   docker build -f stack/Dockerfile -t ohsms-server .
 
 # ── 1. The app ──────────────────────────────────────────────────────────────
 FROM node:22-bookworm-slim AS app
@@ -25,12 +24,15 @@ WORKDIR /srv
 COPY stack/package.json stack/package-lock.json stack/
 RUN cd stack && npm ci --omit=dev --no-audit --no-fund
 
-# stack/ imports the policy helpers it shares with Cloud Functions and the
-# app's wire format; those files, not their packages.
+# stack/ imports the app's wire format; that file, not its package.
 COPY stack/ stack/
-COPY functions/lib/ functions/lib/
 COPY src/shared/data/adapters/postgresWire.js src/shared/data/adapters/postgresWire.js
 COPY --from=app /src/dist stack/public
+
+# Uploaded files live here; mount a volume on it (selfhost/compose.yaml does).
+RUN mkdir -p /srv/stack/data/files && chown -R node:node /srv/stack/data
+ENV BLOB_DIR=/srv/stack/data/files
+VOLUME ["/srv/stack/data/files"]
 
 USER node
 WORKDIR /srv/stack

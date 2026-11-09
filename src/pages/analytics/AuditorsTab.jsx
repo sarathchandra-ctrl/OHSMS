@@ -8,7 +8,7 @@
 //
 // It reads the same Metabase `audits` question as the ODIN tab, through the
 // same callable, for the same reason: the API key is a bearer credential for a
-// whole warehouse and never reaches a browser. See functions/lib/metabase.js.
+// whole warehouse and never reaches a browser. See stack/lib/metabase.js.
 //
 // ── The line this page will not cross ────────────────────────────────────────
 //

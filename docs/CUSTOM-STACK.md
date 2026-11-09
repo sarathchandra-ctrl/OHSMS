@@ -138,7 +138,7 @@ not exist for that company until the stack is actually provisioned.
 On the shared suite, filing also mails the founder an acknowledgement (what
 was recorded, what happens next, and "ignore this if it was not you") and
 alerts each platform operator (`notifyProvisioningRequested`,
-`functions/lib/registrationMail.js`). That mail carries no link and no
+`stack/lib/registrationMail.js`). That mail carries no link and no
 secret, and it is not the handoff. The filing is anonymous and the address
 is whatever was typed, so the acknowledgement is throttled per address and
 per hour. A WEEHS-database registration gets a welcome mail instead
@@ -566,7 +566,7 @@ existing callable client at a non-Firebase URL and hope.
 Triggers today are Firestore `onWrite`. On Postgres they are triggers or a
 transactional outbox written in the same transaction as the row. A poller
 that can miss a write will miss an assignment. The pure planning functions
-under `functions/lib/` are what can move. The `onCall` wrappers are the
+under `stack/lib/` are what can move. The `onCall` wrappers are the
 Firebase binding.
 
 Before any tenant is served from path 3:
@@ -586,7 +586,7 @@ Before any tenant is served from path 3:
 - **Subject-access export** — `exportSubjectData`. Read
   `docs/DATA-RIGHTS.md` before porting the scan.
 - **Retention purge** — `purgeSoftDeleted`. It destroys records.
-  `functions/lib/retentionPolicy.js` marks personal-data rows
+  `stack/lib/retentionPolicy.js` marks personal-data rows
   `NEEDS_LEGAL_SIGN_OFF`. Do not start a new scheduler that deletes
   statutory records.
 - **Stale permit mirrors** — `withdrawStalePermitMirrors`. A stale mirror
@@ -607,7 +607,7 @@ Can follow the cutover. They are maintenance, analytics, or a channel:
   `linkEquipmentSites`, `seedInjuryRecords`, `stripIncidentMedicalDetail`,
   `confineMedicalRecords`, `clearOrphanedDefectLocks`
 - Metabase: `metabaseConfig`, `metabaseTest`, `metabaseQuery`. The URL
-  check in `functions/lib/metabase.js` exists so an admin setting cannot
+  check in `stack/lib/metabase.js` exists so an admin setting cannot
   become a request to a private network. A rehost keeps that check.
 - Weather: `fetchSiteWeather`, `sendWeatherRiskDigest`,
   `retryWeatherRiskDigest`

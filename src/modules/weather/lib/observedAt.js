@@ -1,4 +1,4 @@
-// The same label the digest mail prints (functions/lib/observedAt.js). The
+// The same label the digest mail prints (stack/lib/observedAt.js). The
 // functions package cannot import the SPA, so the two have to move together.
 // Asia/Kolkata is UTC+05:30 all year. The provider stamps UTC.
 

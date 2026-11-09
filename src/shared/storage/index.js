@@ -1,18 +1,10 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // File storage — the seam between the app and whichever backend holds bytes.
 //
-// Callers deal in {url, path} and never see the backend. Which backend that is
-// comes from VITE_STORAGE_DRIVER:
-//
-//   firebase  (default)  Firebase Storage           adapters/firebase.js
-//   s3                   any S3-compatible bucket   adapters/s3.js
-//
-// `s3` is the path 3 file driver, and it is registered. It is not, by itself,
-// a custom-stack deploy: adapters/s3.js still sends a Firebase ID token to
-// the presign endpoint, and the rest of the app still reads and writes
-// Firestore until docs/CUSTOM-STACK.md's remaining-work list is done.
-// Selecting s3 while the database is Firestore is a file-store swap, which
-// this seam allows. Describe it as that.
+// Callers deal in {url, path} and never see the backend. The backend is the
+// presign endpoint (adapters/s3.js): by default this installation's own server,
+// which keeps the bytes on its disk (stack/blobs.mjs). VITE_S3_PRESIGN_ENDPOINT
+// can point it at another presign host in front of an S3-compatible bucket.
 //
 // Adding a backend = one adapter file implementing { put(path, blob) -> {url},
 // remove(path) } plus a line in DRIVERS below. Nothing outside this folder
@@ -42,20 +34,19 @@ export class RejectedFileError extends Error {
   }
 }
 
-const DRIVER = String(runtimeEnv('STORAGE_DRIVER') || 'firebase')
+const DRIVER = String(runtimeEnv('STORAGE_DRIVER') || 's3')
   .trim()
   .toLowerCase()
 
 // Dynamic imports so only the selected driver's code (and its SDK) is loaded.
 const DRIVERS = {
-  firebase: () => import('./adapters/firebase.js'),
   s3: () => import('./adapters/s3.js'),
 }
 
 let adapterPromise = null
 function loadAdapter() {
   if (!adapterPromise) {
-    const load = DRIVERS[DRIVER] || DRIVERS.firebase
+    const load = DRIVERS[DRIVER] || DRIVERS.s3
     adapterPromise = load()
       .then((m) => m.default)
       .catch(() => null)
@@ -64,7 +55,7 @@ function loadAdapter() {
 }
 
 /** The active driver name — surfaced for diagnostics/admin screens. */
-export const storageDriver = DRIVER in DRIVERS ? DRIVER : 'firebase'
+export const storageDriver = DRIVER in DRIVERS ? DRIVER : 's3'
 
 // ── The two size limits, and why there are two ───────────────────────────────
 //
@@ -267,29 +258,13 @@ export async function putFile(orgId, kind, file, fileName, { collection } = {}) 
 /**
  * Delete by path. Best-effort: an orphaned file is a cost, not a correctness bug.
  *
- * On the Firebase driver this goes through the `deleteOrgFile` CALLABLE rather
- * than straight to the bucket, and `storage.rules` refuses client deletes
- * outright so there is no second route.
- *
- * The reason is SECURITY.md S-19. Storage rules can only read the caller's org
- * and role off their ID TOKEN — a Storage rule cannot query Firestore — and a
- * token stays valid for up to an hour. So a manager who had just been
- * suspended, demoted or moved to another tenant could still delete any file in
- * their old organization until it expired. Deleting is irreversible, the files
- * ARE the evidence, and nothing about it reaches the audit trail. The callable
- * reads the profile live on every request, so the database has the last word.
- *
- * Other drivers keep deleting directly: the callable is Firebase-specific, and
- * an S3-backed deployment has its own presign endpoint to authorise against.
+ * The delete is authorised by the server, which re-reads the caller's live
+ * profile rather than trusting the session token (SECURITY.md S-19): a manager
+ * suspended a minute ago must not be able to delete evidence.
  */
 export async function removeFile(path) {
   if (!path) return
   try {
-    if (storageDriver === 'firebase') {
-      const { deleteOrgFile } = await import('../functions')
-      await deleteOrgFile(path)
-      return
-    }
     const adapter = await loadAdapter()
     if (!adapter) return
     await adapter.remove(path)

@@ -24,7 +24,7 @@
 // paste the same secret three times.
 //
 // The API key is WRITE-ONLY throughout. Nothing reads one back — the callable
-// that reads the settings strips every key before answering (functions/lib/
+// that reads the settings strips every key before answering (stack/lib/
 // metabase.js redactConfig) — so this can say "a key is saved" and can never
 // show it. Leaving a key box empty keeps what is stored; typing replaces it.
 // ─────────────────────────────────────────────────────────────────────────────
@@ -141,7 +141,7 @@ export default function MetabaseConnect({ orgId, actor, onSaved, compact = false
       // When the key was last rotated, recorded only when one was actually
       // typed. An instance that issues short-lived keys turns "it stopped
       // working again" into a date somebody can read — see keyAge in
-      // functions/lib/metabase.js. Never the key, only when it changed.
+      // stack/lib/metabase.js. Never the key, only when it changed.
       if (settings.apiKey || settings.sources.some((s) => s.apiKey)) {
         settings.apiKeyUpdatedAt = new Date().toISOString()
       }

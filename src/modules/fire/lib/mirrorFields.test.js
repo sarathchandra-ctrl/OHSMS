@@ -12,7 +12,7 @@ import { describe, it, expect, vi } from 'vitest'
 // that stops updating, found by whoever scans it.
 //
 // So this test calls the REAL builders and fails with the missing key named.
-// Same idea as EXPECTED_SEALED in functions/lib/subjectData.js, which AGENTS.md
+// Same idea as EXPECTED_SEALED in stack/lib/subjectData.js, which AGENTS.md
 // describes for exactly this shape of problem: two files that must agree and
 // cannot be made to import each other.
 //

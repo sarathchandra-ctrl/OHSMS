@@ -10,24 +10,23 @@
 //   body  { op: 'put',    path, contentType }  ->  { uploadUrl, publicUrl }
 //   body  { op: 'delete', path }               ->  { deleteUrl }
 //
-// The endpoint is the security boundary — it must verify the user's session
-// and that `path` starts with the caller's own `orgs/<orgId>/` prefix, exactly
-// what storage.rules enforces on Firebase today.
-//
-// Activate with:  VITE_STORAGE_DRIVER=s3  and  VITE_S3_PRESIGN_ENDPOINT=<url>
+// The endpoint is the security boundary — it verifies the user's session and
+// the path. This installation's server is the default endpoint (/presign,
+// stack/server.mjs), and it stores files on its own disk.
 // ─────────────────────────────────────────────────────────────────────────────
-import { auth } from '../../firebase'
-import { currentAccessToken } from '../../auth/ownStackSession'
+import { currentAccessToken, ownStackGateway } from '../../auth/ownStackSession'
 import { runtimeEnv } from '../../runtimeConfig'
 
-const ENDPOINT = String(runtimeEnv('S3_PRESIGN_ENDPOINT') || '').trim()
+// Defaults to this installation's own server, which keeps the files on its disk.
+const ENDPOINT = String(
+  runtimeEnv('S3_PRESIGN_ENDPOINT') || (ownStackGateway() ? `${ownStackGateway()}/presign` : '')
+).trim()
 
 async function presign(body) {
-  // Own-stack sends the session token from the company's IdP host. The WEEHS
-  // build still sends the Firebase ID token. Neither token is a bucket
+  // The session token from this installation's server. It is not a storage
   // credential, and a delete is not authorised from the token alone: the
-  // presign host re-reads the live profile. docs/CUSTOM-STACK.md.
-  const token = currentAccessToken() || (await auth?.currentUser?.getIdToken?.().catch(() => null))
+  // server re-reads the live profile.
+  const token = currentAccessToken()
   const res = await fetch(ENDPOINT, {
     method: 'POST',
     headers: {

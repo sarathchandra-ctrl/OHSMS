@@ -28,7 +28,7 @@ import {
   serverTimestamp,
   setDoc,
 } from '../data/client.js'
-import { db } from '../firebase'
+import { db } from '../db'
 import { MODULES, ADDONS, OPT_IN_KEYS } from './registry'
 
 export const ENTITLEMENTS_COLLECTION = 'moduleEntitlements'

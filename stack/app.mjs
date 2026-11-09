@@ -1,16 +1,16 @@
-// One company's dedicated environment, as deployed: the control plane that
-// takes its provisioning request and secret handoff, the gateway its app talks
-// to, and the app itself, on one origin. docs/CONTROL-PLANE.md.
+// The organization's server, as deployed: the gateway the app talks to
+// (/data, /rpc, /presign, /blob, sign-in), first-run /setup, and the built app
+// itself, on one origin. docs/SELF-HOSTING.md.
 //
 // stack/main.mjs reads the environment and calls this. Everything here takes
 // its database and settings as arguments, so the tests run it on PGlite.
 //
-// What differs from stack/demo-provision.mjs, on purpose:
-//   - State survives a restart (stack/state.mjs). The demo forgets everything.
-//   - The demo OIDC issuer is off. It signs in whoever types an address.
-//   - The sign-in configuration a handoff adopts is restored at start-up.
-//   - The built app is served here, so the session redirect, the SAML
-//     assertion and the app's /data calls are all same-origin.
+// State survives a restart (stack/state.mjs), the demo OIDC issuer is off,
+// and the sign-in configuration connected at /setup is restored at start-up.
+// The built app is served here too, so the session redirect, the SAML
+// assertion and the app's /data calls are all same-origin. When the app is
+// served from Cloudflare instead (worker/index.js), the Worker forwards these
+// same paths here, so they stay same-origin to the browser.
 
 import { createReadStream } from 'node:fs'
 import { stat } from 'node:fs/promises'
@@ -18,19 +18,18 @@ import { extname, join, normalize, sep } from 'node:path'
 import { applySchema, createEngine } from './engine.mjs'
 import { createOwnStackServer } from './server.mjs'
 import { openState } from './state.mjs'
+import { blobKeyFrom, createBlobStore } from './blobs.mjs'
 
 // Paths the host answers. Anything else on GET is the app.
-const API_PREFIXES = [
+// worker/index.js forwards the same list; keep the two in step.
+export const API_PREFIXES = [
   '/data',
   '/auth/',
   '/presign',
+  '/blob',
   '/rpc/',
   '/oidc/',
   '/.well-known/',
-  '/requests',
-  '/intake',
-  '/handoff',
-  '/fulfill',
   '/setup',
   '/scim/',
   '/health',
@@ -67,27 +66,20 @@ const BASE_HEADERS = {
 
 /**
  * The settings the app reads before it starts (src/shared/runtimeConfig.js),
- * from what this environment is now rather than from how its image was
- * built. That is what lets one image serve every company: the sign-in method
- * follows the IdP the handoff adopted, the presign endpoint follows the
- * request, and the gateway is this origin.
+ * from what this server is now rather than from how its image was built: the
+ * sign-in method follows the IdP connected at /setup, and the gateway is this
+ * origin.
  *
  * Every value is a JSON string, and `<` is escaped, so nothing a request
  * carried can close the script or start another one.
  */
-export function runtimeConfigScript({ origin, auth, requests }) {
-  // The request whose sign-in this host adopted. Taking the first live one
-  // could pair one request's IdP with another's bucket if a host ever held two.
-  const adopted = auth?.requestId ? requests?.get?.(auth.requestId) : null
-  const live = adopted?.status === 'live' ? adopted : null
-  const brought =
-    live?.bucketMode === 'bring' && /^https:\/\/[^\s"'<>]+$/.test(live?.presignUrl || '')
+export function runtimeConfigScript({ origin, auth }) {
   const method = ['saml', 'oidc', 'supabase'].includes(auth?.method) ? auth.method : 'none'
   const config = {
     DATA_DRIVER: 'postgres',
     DATA_GATEWAY: origin,
     STORAGE_DRIVER: 's3',
-    S3_PRESIGN_ENDPOINT: brought ? live.presignUrl : `${origin}/presign`,
+    S3_PRESIGN_ENDPOINT: `${origin}/presign`,
     AUTH_METHOD: method,
     AUTH_TOTP: 'off',
   }
@@ -135,8 +127,9 @@ function serveFile(res, file, method) {
  * @param {Buffer} o.stateKey        32 bytes; seals secrets at rest
  * @param {string} o.origin          the public https origin of this environment
  * @param {string} o.sessionSecret
- * @param {string} o.controlToken    the operator's bearer token for /requests
+ * @param {string} o.controlToken    the one-time setup code for /setup
  * @param {string} o.dataKeyMaster
+ * @param {string} [o.blobDir]       where uploaded files are kept on disk
  * @param {Function|null} o.mail     ({ to, subject, text }) => { sent: boolean }
  * @param {string} [o.staticDir]     the built app; omitted means API only
  * @param {boolean} [o.oidcAcceptUnverifiedEmail]  OIDC_ACCEPT_UNVERIFIED_EMAIL
@@ -150,6 +143,7 @@ export async function createDedicatedApp({
   dataKeyMaster,
   mail = null,
   staticDir = '',
+  blobDir = '',
   oidcAcceptUnverifiedEmail = false,
 }) {
   await applySchema(db)
@@ -163,11 +157,12 @@ export async function createDedicatedApp({
     db,
     sessionSecret,
     origin,
-    // Before a handoff names an IdP, there is none: sign-in answers 503.
+    // Before /setup names an IdP, there is none: sign-in answers 503.
     auth: currentAuth,
-    requests: state.requests,
-    intake: state.intake,
     controlToken,
+    blobStore: blobDir
+      ? createBlobStore({ dir: blobDir, key: blobKeyFrom(sessionSecret), origin })
+      : null,
     dataKeyMaster,
     mail,
     oidcAcceptUnverifiedEmail,
@@ -193,13 +188,13 @@ export async function createDedicatedApp({
         res.writeHead(200, {
           ...BASE_HEADERS,
           'Content-Type': 'text/javascript; charset=utf-8',
-          // Changes the moment a handoff adopts an IdP.
+          // Changes the moment /setup connects an IdP.
           'Cache-Control': 'no-store',
         })
         return res.end(
           req.method === 'HEAD'
             ? undefined
-            : runtimeConfigScript({ origin, auth: currentAuth, requests: state.requests })
+            : runtimeConfigScript({ origin, auth: currentAuth })
         )
       }
       if (root && (req.method === 'GET' || req.method === 'HEAD') && !isApi(url.pathname)) {

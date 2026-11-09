@@ -52,5 +52,5 @@ A red uptime check is "Hosting did not serve `/health.json` in time", not
 
 Metrics, SLOs, on-call rotations, Cloud Monitoring dashboards. The Recycle
 Bin sweep already fails its Cloud Functions invocation when it had errors
-(`functions/lib/retention.js` `summarizeFailures`); that alert lives in the
+(`stack/lib/retention.js` `summarizeFailures`); that alert lives in the
 private production runbook (§2a), not in this file.

@@ -16,7 +16,7 @@ import {
   runTransaction,
   limit,
 } from '../../../shared/data/client.js'
-import { db } from '../../../shared/firebase'
+import { db } from '../../../shared/db'
 import { reserveDocId } from '../../../shared/docId/reserve'
 import { logAudit as logOrgAudit, COLLECTION_READ_CAP } from '../../../shared/org/orgData'
 import { onReadError } from '../../../shared/org/readError'

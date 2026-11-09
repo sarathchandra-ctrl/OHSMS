@@ -20,7 +20,7 @@ import {
   serverTimestamp,
   Timestamp,
 } from '../../../shared/data/client.js'
-import { db } from '../../../shared/firebase'
+import { db } from '../../../shared/db'
 import { COLLECTION_READ_CAP } from '../../../shared/org/orgData'
 import { openDoc, openSnapshots, sealDoc } from '../../../shared/crypto'
 import { PERMIT_COLLECTION, PERMIT_STATUS } from '../constants/permits'

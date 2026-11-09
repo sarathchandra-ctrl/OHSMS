@@ -1,7 +1,6 @@
-// Entry point for a deployed dedicated environment (Cloud Run, or any host
-// that runs a container). Reads the environment, refuses to start with a
-// setting missing or weak, and serves. docs/CONTROL-PLANE.md lists every
-// variable and where each comes from.
+// Entry point for the organization's server (Docker, or any host that runs
+// Node 22). Reads the environment, refuses to start with a setting missing or
+// weak, and serves. docs/SELF-HOSTING.md lists every variable.
 
 import nodemailer from 'nodemailer'
 import { createDedicatedApp } from './app.mjs'
@@ -26,9 +25,9 @@ const sessionSecret = required('SESSION_SECRET', { min: 32 })
 const dataKeyMaster = required('DATA_KEY_MASTER')
 const stateKeyRaw = required('STATE_KEY')
 
-// The handoff link and every session redirect are built on this origin, and
-// intake refuses an http one that is not loopback. Fail here, not on the
-// first company's handoff.
+// Every session redirect, SAML/OIDC callback and file URL is built on this
+// origin. Behind Cloudflare it is the Cloudflare hostname people type. Fail
+// here, not on the first sign-in.
 // Parsed, not pattern-matched: a pattern accepted `https://?x` and
 // `https://user@host`, which are not origins and produce broken links.
 if (origin) {
@@ -64,13 +63,13 @@ if (stateKeyRaw) {
 
 if (problems.length) {
   process.stderr.write(
-    `dedicated environment refused to start. Missing or invalid: ${problems.join(', ')}\n`
+    `OHSMS server refused to start. Missing or invalid: ${problems.join(', ')}\n`
   )
   process.exit(1)
 }
 
-// Mail is optional. Without it the control plane returns the handoff token to
-// the operator who filed the request, once, instead of mailing it.
+// Mail is optional. Without it invitations are not emailed; the administrator
+// tells people to sign in.
 let mail = null
 if (env.SMTP_HOST && env.SMTP_USER && env.SMTP_PASS && env.MAIL_FROM) {
   const port = Number(env.SMTP_PORT || 587)
@@ -109,17 +108,18 @@ const { server } = await createDedicatedApp({
   dataKeyMaster,
   mail,
   staticDir: env.STATIC_DIR || new URL('./public', import.meta.url).pathname,
+  blobDir: env.BLOB_DIR || new URL('./data/files', import.meta.url).pathname,
   oidcAcceptUnverifiedEmail: env.OIDC_ACCEPT_UNVERIFIED_EMAIL === 'true',
 })
 
 const port = Number(env.PORT || 8080)
 server.listen(port, '0.0.0.0', () => {
   process.stdout.write(
-    `dedicated environment listening on ${port} for ${origin}${mail ? '' : ' (mail off)'}\n`
+    `OHSMS server listening on ${port} for ${origin}${mail ? '' : ' (mail off)'}\n`
   )
 })
 
-// Cloud Run sends SIGTERM before it stops an instance.
+// Docker sends SIGTERM before it stops the container.
 process.on('SIGTERM', () => {
   server.close(() => db.end().finally(() => process.exit(0)))
   setTimeout(() => process.exit(0), 8000).unref()

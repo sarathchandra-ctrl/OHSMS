@@ -293,7 +293,7 @@ describe('mergeInjuryDetail', () => {
 // filter, and nothing anywhere ever set it — so /injuries, the only home of a
 // named colleague's clinical detail and of the documents behind it, was the one
 // collection in this app with no way to remove a record. The nightly sweep in
-// functions/lib/retention.js is the other half; these are the writes it acts on.
+// stack/lib/retention.js is the other half; these are the writes it acts on.
 // ─────────────────────────────────────────────────────────────────────────────
 describe('deleting an injury report', () => {
   const ID = 'inc1__EMP-104'

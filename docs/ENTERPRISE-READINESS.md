@@ -29,7 +29,7 @@ disagree, `SECURITY.md` is right.
 | Backups / disaster recovery | PITR (7d) + weekly schedule (30d), delete protection, **restore drilled** 2026-08-16 | **Ready** |
 | Observability | Sentry wired with a DSN. Hosting uptime is a GitHub Action curling `/health.json` (`docs/OBSERVABILITY.md`). No metrics, no on-call rotation | **Partial** |
 | Data lifecycle — export | Subject access implemented (`exportSubjectData`) | **Ready** |
-| Data lifecycle — erasure & retention | Recycle Bin purge covers incidents, illnesses **and injuries with their clinical documents**. Period table exists with `NEEDS_LEGAL_SIGN_OFF` (`functions/lib/retentionPolicy.js`). Live age-purge of statutory records is off. | **Partial** |
+| Data lifecycle — erasure & retention | Recycle Bin purge covers incidents, illnesses **and injuries with their clinical documents**. Period table exists with `NEEDS_LEGAL_SIGN_OFF` (`stack/lib/retentionPolicy.js`). Live age-purge of statutory records is off. | **Partial** |
 | Testing | 2466 unit, 584 rules, 448 functions, e2e smoke | **Ready** |
 | CI/CD | Lint, tests (all four suites), build, audit gate; ordered deploy | **Ready** |
 | Environments | Staging CI still cannot deploy functions (`iam.serviceAccounts.actAs` on the runtime SA — `DEPLOYMENT.md` §5). Production ships on `v*` tags through the `production` environment gate | **Partial** |
@@ -74,7 +74,7 @@ works. Erasure is classified but not executed, deliberately. Recycle Bin purge
 already destroys manager-deleted incidents, illnesses, injuries and equipment
 after 30 days. What a privacy review will still ask is **how long a live
 statutory record is kept**: that table now exists
-(`functions/lib/retentionPolicy.js`) with every personal-data row marked
+(`stack/lib/retentionPolicy.js`) with every personal-data row marked
 `NEEDS_LEGAL_SIGN_OFF`, and live age-purge is off until those questions are
 signed. See `DATA-RIGHTS.md` §3. A buyer's privacy review will ask.
 
@@ -135,7 +135,7 @@ Worth saying plainly, because gap lists read worse than the system is:
 ## Suggested order
 
 1. Retention periods signed off by someone with legal authority
-   (`docs/DATA-RIGHTS.md` §3, `functions/lib/retentionPolicy.js`) — the largest
+   (`docs/DATA-RIGHTS.md` §3, `stack/lib/retentionPolicy.js`) — the largest
    remaining gap, and the one a privacy review will find first
 2. Confirm the uptime Action is watched (`docs/OBSERVABILITY.md`) and that
    Sentry notifications actually reach someone

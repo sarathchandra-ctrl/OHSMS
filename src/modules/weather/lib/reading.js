@@ -1,7 +1,7 @@
 // Current conditions for a coordinate, via the fetchSiteWeather function.
 // The browser never calls Open-Meteo. Coordinates are still rounded to ~1 km
 // before they leave this page, the same two decimals as gridKey in
-// functions/lib/openMeteo.js. The server checks the point against a site's
+// stack/lib/openMeteo.js. The server checks the point against a site's
 // square, so the two roundings have to match or a site on an edge is refused
 // its own screen.
 //

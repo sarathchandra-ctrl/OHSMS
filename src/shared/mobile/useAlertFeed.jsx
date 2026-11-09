@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { doc, onSnapshot, serverTimestamp, setDoc } from '../data/client.js'
 import toast from 'react-hot-toast'
-import { db } from '../firebase'
+import { db } from '../db'
 import { useAuth } from '../auth/AuthContext'
 import { isModuleEnabled } from '../modules/entitlements'
 import { useAccessibleSitesRead } from '../org/useAccessibleSites'

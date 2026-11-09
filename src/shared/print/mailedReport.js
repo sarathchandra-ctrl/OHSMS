@@ -17,7 +17,7 @@
 // uses does not consult those rules. A member can create the object; they
 // already hold the text they just typed.
 //
-// `MAILED_REPORT_KIND` is duplicated in functions/lib/mailAttachments.js.
+// `MAILED_REPORT_KIND` is duplicated in stack/lib/mailAttachments.js.
 // The two packages cannot import each other. Both tests pin the same literal.
 import { reportError } from '../monitoring'
 import { putFile, removeFile } from '../storage'

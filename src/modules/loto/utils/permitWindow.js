@@ -8,7 +8,7 @@
 // The failure this avoids is the one a time-of-day comparison has — a 22:00–06:00
 // permit read at 01:00 looks like 01:00 < 22:00 and "not yet started".
 //
-// Pure. The scheduler (functions/lib/lotoPermitSweep.js) restates the same
+// Pure. The scheduler (stack/lib/lotoPermitSweep.js) restates the same
 // comparison with the SERVER clock; the browser uses its own clock for the
 // badge only, and the stored flag written by the scheduler wins when they differ.
 // ─────────────────────────────────────────────────────────────────────────────
@@ -122,7 +122,7 @@ export function localDateInput(ms = Date.now()) {
  * "overdue", it is history.
  *
  * `flags` are written by the server scheduler against the SERVER clock
- * (functions/lib/lotoPermitSweep.js: `dueAt`, `overdueCount`, keyed to the
+ * (stack/lib/lotoPermitSweep.js: `dueAt`, `overdueCount`, keyed to the
  * `windowEnd` they were computed for). They win over this browser's clock in the
  * escalating direction: a laptop whose clock is an hour slow must not show
  * "running" for a permit the server has already flagged overdue. They never make

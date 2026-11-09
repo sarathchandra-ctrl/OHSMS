@@ -49,7 +49,7 @@ import {
   pointerUpdate,
   FILE_TARGETS,
   SEALED_SUFFIX,
-} from '../../../functions/lib/objectSeal.js'
+} from '../../../stack/lib/objectSeal.js'
 
 const ORG = 'org-alpha'
 const PDF = new Uint8Array([37, 80, 68, 70, 45, 49, 46, 52, 10, 200, 0, 255])
@@ -248,7 +248,7 @@ describe('sameBytes', () => {
 
 describe('base64url agrees across the seam', () => {
   it('encodes the same bytes to the same string', async () => {
-    const { toB64u: serverB64u } = await import('../../../functions/lib/dataKeys.js')
+    const { toB64u: serverB64u } = await import('../../../stack/lib/dataKeys.js')
     const bytes = new Uint8Array(300)
     for (let i = 0; i < bytes.length; i += 1) bytes[i] = i % 256
     expect(serverB64u(bytes)).toBe(toB64u(bytes))

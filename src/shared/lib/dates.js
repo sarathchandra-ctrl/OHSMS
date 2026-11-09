@@ -20,7 +20,7 @@ export function todayISO(d = new Date()) {
 }
 
 // Hydrostatic due dates are counted on the Asia/Kolkata calendar, the same day
-// functions/lib/siteSummary.js uses for the WhatsApp site summary. The rest of
+// stack/lib/siteSummary.js uses for the WhatsApp site summary. The rest of
 // this file stays on the browser's calendar: a refill date and an incident
 // date are the day the user picked, and moving those would change every list.
 // 18:30 UTC is midnight in Kolkata, so a browser left on UTC calls a test due

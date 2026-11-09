@@ -10,7 +10,7 @@
 // Wind, visibility, UV, freezing rain and snow are not hazards here. A field
 // for one of them on an observation does not produce a row.
 //
-// The cuts match functions/lib/weatherBands.js. The functions package cannot
+// The cuts match stack/lib/weatherBands.js. The functions package cannot
 // import the SPA, so a cut-off has to move in both files.
 //
 // Pure — no network, no clock. `assessWeather` takes an already-normalised
@@ -65,7 +65,7 @@ const HEAT_CUTS = [40, 45, 51, 56]
 // Medium, but a feels-like that would be High (or severe) while the air
 // temperature is at or below 40°C is capped at Medium. Strictly above: 40.0 is
 // not High, 40.1 is. A reading with no air temperature cannot show the air is
-// above 40, so it is capped too. Keep in step with functions/lib/weatherBands.js.
+// above 40, so it is capped too. Keep in step with stack/lib/weatherBands.js.
 const HEAT_HIGH_MIN_AIR_C = 40
 
 function heatBand(feels, airC) {
@@ -100,7 +100,7 @@ export const RAIN_ALERT = {
 // CAPE in J/kg, used when the forecast has no thunderstorm code.
 // Below 1000 is not an alert. 1000–2500 is Medium. 2500 and above is High.
 // A code of 95, 96 or 99 is a thunderstorm (99 is heavy hail) and is severe
-// on its own. Keep in step with functions/lib/weatherBands.js.
+// on its own. Keep in step with stack/lib/weatherBands.js.
 const CAPE_MEDIUM = 1000
 const CAPE_HIGH = 2500
 

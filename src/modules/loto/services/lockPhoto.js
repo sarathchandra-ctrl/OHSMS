@@ -2,7 +2,7 @@
 // under the org prefix and a procedurePhotos document. The permit itself only
 // keeps the path, which the one-year purge deletes.
 import { doc, serverTimestamp, setDoc } from '../../../shared/data/client.js'
-import { db } from '../../../shared/firebase'
+import { db } from '../../../shared/db'
 import { putFile } from '../../../shared/storage'
 
 export async function storeLockPhoto({ orgId, permit, dataUrl }) {

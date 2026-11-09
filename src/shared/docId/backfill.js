@@ -17,7 +17,7 @@
 // backfill rather than colliding with it.
 // ─────────────────────────────────────────────────────────────────────────────
 import { collection, getDocs, writeBatch, doc } from '../data/client.js'
-import { db } from '../firebase'
+import { db } from '../db'
 import { formatDocId, highestSeq, parseDocId } from './format'
 import { getOrgCode, raiseCounter, readCounters } from './reserve'
 

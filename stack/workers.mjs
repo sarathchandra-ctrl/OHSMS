@@ -6,17 +6,17 @@
 // planLiveAgePurge stays empty while the period is NEEDS_LEGAL_SIGN_OFF.
 
 import { randomBytes, scryptSync, timingSafeEqual } from 'node:crypto'
-import { grantsFor, generateKeyset, releaseKeyset } from '../functions/lib/dataKeys.js'
-import { mayDeleteFile } from '../functions/lib/fileDelete.js'
-import { planPurge } from '../functions/lib/retention.js'
+import { grantsFor, generateKeyset, releaseKeyset } from '../stack/lib/dataKeys.js'
+import { mayDeleteFile } from '../stack/lib/fileDelete.js'
+import { planPurge } from '../stack/lib/retention.js'
 import {
   planLiveAgePurge,
   RECORD_CLASSES,
   NEEDS_LEGAL_SIGN_OFF,
-} from '../functions/lib/retentionPolicy.js'
+} from '../stack/lib/retentionPolicy.js'
 import { asWorker } from './engine.mjs'
-import { planWithdrawals, withdrawnFields } from '../functions/lib/permitMirror.js'
-import { planFlags } from '../functions/lib/lotoPermitSweep.js'
+import { planWithdrawals, withdrawnFields } from '../stack/lib/permitMirror.js'
+import { planFlags } from '../stack/lib/lotoPermitSweep.js'
 
 const WORKER = { role: 'ohsms_worker', uid: '' }
 

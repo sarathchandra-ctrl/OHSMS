@@ -7,7 +7,7 @@
 // that the plumbing calls a stub.
 //
 // The four roles below are the whole point of the file. Each one is given
-// exactly what functions/lib/dataKeys.js would release to it, and then asked to
+// exactly what stack/lib/dataKeys.js would release to it, and then asked to
 // read the same two documents. What comes back is the access control.
 // ─────────────────────────────────────────────────────────────────────────────
 import { describe, it, expect, beforeEach, vi } from 'vitest'

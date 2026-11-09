@@ -21,7 +21,7 @@ import {
   writeBatch,
   limit,
 } from '../data/client.js'
-import { db } from '../firebase'
+import { db } from '../db'
 import { isSessionEnd } from '../sessionEnd'
 import { onReadError } from './readError'
 import { isPermissionDenied } from '../lib/permissionDenied'

@@ -8,7 +8,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { collection, query, where, orderBy, limit, onSnapshot } from '../../../shared/data/client.js'
-import { db } from '../../../shared/firebase'
+import { db } from '../../../shared/db'
 import { createModuleService } from '../../../shared/module-kit/service'
 import { incompleteReadNotice } from '../../../shared/org/orgData'
 import { isPermissionDenied } from '../../../shared/lib/permissionDenied'

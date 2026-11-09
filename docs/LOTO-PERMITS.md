@@ -120,7 +120,7 @@ too and is covered by the backfill (`root: true` target). The technician name
 copied onto a procedure's `lockState` at lock time is a separate, still-open
 copy.
 
-Subject-access export / erasure: `functions/lib/subjectData.js` lists permits (by
+Subject-access export / erasure: `stack/lib/subjectData.js` lists permits (by
 `requestedBy` and by `personnelUids`), their events/attachments, technicians and
 locks. `exportSubjectData` constrains the root collections by their `orgId`
 field.

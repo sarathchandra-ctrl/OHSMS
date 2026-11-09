@@ -11,7 +11,7 @@ import {
   where,
   limit,
 } from '../../../shared/data/client.js'
-import { db } from '../../../shared/firebase'
+import { db } from '../../../shared/db'
 import { COLLECTION_READ_CAP } from '../../../shared/org/orgData'
 import { openSnapshots, sealDoc } from '../../../shared/crypto'
 

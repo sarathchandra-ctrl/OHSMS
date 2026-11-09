@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { doc, setDoc } from '../../../shared/data/client.js'
-import { db } from '../../../shared/firebase'
+import { db } from '../../../shared/db'
 import { useAuth } from '../../../shared/auth/AuthContext'
 import { normalizeSelection } from './catalog'
 
