@@ -7,8 +7,10 @@ arbitrary.
 
 ## Where the truth lives
 
-- **`stack/schema.sql` (Postgres row-level security) is the only enforcement
-  that cannot be bypassed.** The browser's `/data` calls run as a role with no
+- **`stack/policy.mjs` is the only enforcement that cannot be bypassed.**
+  SQLite (Cloudflare D1) has no row-level security: `stack/engine.mjs` asks the
+  policy before every read and every write op, and refuses the whole batch if
+  any op is refused. The browser's `/data` calls run as a role with no
   bypass, and the server only sets the session uid. Anything enforced in React
   — `can()`, a hidden button, a disabled field — is a usability feature. The
   same action succeeds from the browser console. If a change makes a
@@ -126,12 +128,11 @@ factory. Prefer it over hand-rolling `collection(db, …)`.
   `// @vitest-environment jsdom` docblock. **Put that docblock on any new test
   that touches the DOM**; without it the failure is immediate and obvious, which
   is the point.
-- RLS tests send hostile payloads, not well-behaved ones. A new policy needs a
+- Access-rule tests send hostile payloads, not well-behaved ones. A new policy needs a
   test that tries to defeat it, not one that confirms it works when used
   correctly.
-- The RLS and server suites run on embedded PGlite. Set `OHSMS_TEST_PG_URL`
-  and `OHSMS_TEST_PG_ADMIN_URL` to run the same assertions on a real Postgres
-  with a non-superuser app role (docs/SELF-HOSTING.md, "Testing locally").
+- The access-rule and server suites run on an in-memory SQLite through
+  `stack/sqlite.mjs`, the same D1-shaped interface the Worker uses.
 
 ## Accessibility is enforced, in two places that do not overlap
 
@@ -167,12 +168,12 @@ that has to carry white text.
 Both are documented in `docs/SECURITY.md` and both have bitten this codebase
 three times each:
 
-1. **The permissive union.** Permissive policies OR together. A narrow policy
-   that refuses something is worthless while a broader one grants it; the
-   strict case must be `AS RESTRICTIVE`.
-2. **The post-state branch.** `WITH CHECK` sees the row *after* the write. A
-   policy that authorises against it lets the writer supply the value that
-   authorises them; read the actor's profile and `OLD` instead.
+1. **The permissive union.** A narrow "allow" next to a broad one restricts
+   nothing. In `stack/policy.mjs` restrictions live in `restrictWrite`, which
+   every write passes in addition to an allow, never as one more allow.
+2. **The post-state branch.** On an update, `next` is what the writer sent. A
+   decision about privilege reads the actor's stored profile and `prev`
+   (`invariantProblem`), never the value being written.
 
 ## Style
 

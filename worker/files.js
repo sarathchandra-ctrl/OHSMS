@@ -37,7 +37,9 @@ export function createR2FileStore({ bucket, key, origin }) {
         const length = Number(request.headers.get('content-length') || 0)
         if (!length) return deny(411, 'Content-Length is required')
         if (length > MAX_BLOB_BYTES) return deny(413, 'file too large')
-        const type = String(request.headers.get('content-type') || 'application/octet-stream').slice(0, 200)
+        const type = String(
+          request.headers.get('content-type') || 'application/octet-stream'
+        ).slice(0, 200)
         await bucket.put(path, request.body, { httpMetadata: { contentType: type } })
         return new Response(JSON.stringify({ ok: true }), {
           headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' },

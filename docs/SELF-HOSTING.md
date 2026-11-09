@@ -2,14 +2,13 @@
 
 This runs Cult Fit SMS for one organization on a computer or server with
 Docker: a virtual machine on any cloud, or a server in your own building.
-Your records and uploaded files stay on that server and its Postgres
-database. People sign in with an email and password kept by the server; an
+Your records and uploaded files stay on that server, in one SQLite
+database file and a files folder. People sign in with an email and password kept by the server; an
 administrator adds them. One installation is one organization.
 
 Everything is in [`selfhost/`](../selfhost): `install.sh` (sets it all up in
-one command), `compose.yaml` (the app, Postgres, and an HTTPS front door),
-`.env.example` (every setting), and `init-db.sh` (the one-time database
-setup).
+one command), `compose.yaml` (the app and an HTTPS front door),
+`.env.example` (every setting).
 
 Two front doors, chosen by `COMPOSE_PROFILES` in `.env`:
 
@@ -155,29 +154,17 @@ Never change `DATA_KEY_MASTER` or `SESSION_SECRET` as part of an upgrade.
 
 ## Backups
 
-Back up the database daily, and keep copies off the server:
+Everything lives on the `data` volume: `ohsms.sqlite` (the database) and
+`files/` (uploads). Take a consistent copy of the database while it runs:
 
 ```bash
-docker compose exec -T db pg_dump -U postgres -Fc ehs > weehs-$(date +%F).dump
+docker compose exec app node -e "new (require('node:sqlite').DatabaseSync)('/srv/stack/data/ohsms.sqlite').exec(\"VACUUM INTO '/srv/stack/data/backup.sqlite'\")"
 ```
 
-Uploaded photos and documents are in the `files` volume, not the database:
-back that up too, for example with
-`docker run --rm -v weehs_files:/f -v "$PWD":/b alpine tar czf /b/files-$(date +%F).tgz -C /f .`
-
-Restore into a fresh install (same `.env`, empty database volume):
-
-```bash
-docker compose up -d db
-```
-
-```bash
-docker compose exec -T db pg_restore -U postgres -d ehs --clean --if-exists < weehs-2026-01-01.dump
-```
-
-```bash
-docker compose up -d
-```
+Then copy `backup.sqlite` and the `files/` folder off the server (for
+example with `docker compose cp app:/srv/stack/data ./backup-$(date +%F)`),
+together with `.env`. To restore, put them back on the volume before
+starting the app.
 
 Test a restore before you need one. A backup that has never been restored is
 a hope, not a backup.
@@ -191,30 +178,6 @@ a hope, not a backup.
   database and app are not exposed to the internet, only Caddy is.
 - **Disk:** watch free space; the database and its backups grow with use.
 
-## Using a managed Postgres instead of the bundled one
-
-Any Postgres 14+ works. Point `DATABASE_URL` at it and create the two roles
-the schema needs once, as the instance's administrator: `ohsms_browser`, which
-every request from the app runs as and which row-level security applies to,
-and `ohsms_worker`, which bypasses it for server jobs.
-
-```sql
-CREATE ROLE ohsms_browser NOLOGIN;
-CREATE ROLE ohsms_worker NOLOGIN BYPASSRLS;
-GRANT ohsms_browser, ohsms_worker TO ehs_app;
-ALTER DATABASE ehs OWNER TO ehs_app;
-```
-
-Then, connected to the `ehs` database as the administrator:
-
-```sql
-ALTER SCHEMA public OWNER TO ehs_app;
-```
-
-If `CREATE ROLE ... BYPASSRLS` is refused, the provider's admin role cannot
-grant it; use a provider or tier that allows it. The server creates its tables
-and policies itself, as `ehs_app`, every time it starts.
-
 ## Known limits
 
 - **No mail-based password reset.** The server sends no password-reset mail;
@@ -227,14 +190,8 @@ and policies itself, as `ehs_app`, every time it starts.
 
 ## Testing locally
 
-The policy tests can run against a real Postgres as well as the embedded one:
-
-```bash
-OHSMS_TEST_PG_URL=postgres://ehs_app:PASS@127.0.0.1:5432/ehs OHSMS_TEST_PG_ADMIN_URL=postgres://postgres@127.0.0.1:5432/ehs npx vitest run src/shared/data/adapters/postgres.rls.test.js
-```
-
-`src/shared/data/server.test.js` runs the whole deployed path — first start,
-password sign-in and lockout, the first-sign-in password change, adding
-people, resets, member reads — on an embedded database set up the way a
-hosted one is (an ordinary app role, the two roles made by an administrator,
-no bypass right), so CI catches what only appears without superuser.
+`src/shared/data/adapters/postgres.rls.test.js` drives every access rule in
+`stack/policy.mjs` through the real engine on an in-memory SQLite, with
+hostile writes. `src/shared/data/server.test.js` runs the whole deployed path
+— first start, password sign-in and lockout, the first-sign-in password
+change, adding people, resets, member reads — through HTTP.

@@ -48,7 +48,9 @@ export function nodeResponse() {
     },
     write(chunk) {
       if (chunk === undefined || chunk === null) return true
-      chunks.push(typeof chunk === 'string' ? new TextEncoder().encode(chunk) : new Uint8Array(chunk))
+      chunks.push(
+        typeof chunk === 'string' ? new TextEncoder().encode(chunk) : new Uint8Array(chunk)
+      )
       return true
     },
     end(chunk) {

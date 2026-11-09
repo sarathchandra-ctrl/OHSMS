@@ -36,7 +36,7 @@ export const auditCol = () => collection(db, 'auditLogs')
 /**
  * Collection factory — the way modules reach their data. One organization per
  * installation, so a collection is just its name; who may read or write it is
- * decided by the database's row level security (stack/schema.sql).
+ * decided on the server by stack/policy.mjs.
  */
 export const moduleCol = (name) => collection(db, name)
 export const moduleDoc = (name, id) => doc(db, name, id)

@@ -3,7 +3,7 @@
 // on one origin. docs/SELF-HOSTING.md.
 //
 // stack/main.mjs reads the environment and calls this. Everything here takes
-// its database and settings as arguments, so the tests run it on PGlite.
+// its database and settings as arguments, so the tests run it on an in-memory SQLite.
 //
 // On start it creates the organization and its first administrator if the
 // database has none (bootstrapOrganization). The built app is served here too, so the session redirect, the SAML
@@ -88,7 +88,7 @@ function serveFile(res, file, method) {
 
 /**
  * @param {object} o
- * @param {object} o.db              PGlite or stack/pg.mjs
+ * @param {object} o.db              stack/sqlite.mjs (or Cloudflare D1)
  * @param {string} o.origin          the public https origin of this server
  * @param {string} o.sessionSecret
  * @param {string} o.dataKeyMaster

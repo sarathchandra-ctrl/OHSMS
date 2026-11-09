@@ -1,25 +1,15 @@
-import { PGlite } from '@electric-sql/pglite'
-import { describe, expect, it, beforeAll, afterAll } from 'vitest'
+import { describe, expect, it, beforeAll } from 'vitest'
+import { openSqlite } from '../../../../stack/sqlite.mjs'
 import { applySchema, createEngine } from '../../../../stack/engine.mjs'
 import { createPostgresAdapter } from './postgres'
 
-// Embedded by default. With OHSMS_TEST_PG_URL (an ordinary login role, the
-// shape a managed Postgres gives you) and OHSMS_TEST_PG_ADMIN_URL (a role
-// that bypasses RLS, for seeding and for reading back what really happened),
-// the same assertions run on a real Postgres. Embedded runs as superuser, and
-// that hid a bug: the SECURITY DEFINER helpers recursed on every member read
-// once their owner was an ordinary role (stack/schema.sql). docs/SELF-HOSTING.md.
-const PG_URL = process.env.OHSMS_TEST_PG_URL
-const PG_ADMIN_URL = process.env.OHSMS_TEST_PG_ADMIN_URL
-const onPg = Boolean(PG_URL && PG_ADMIN_URL)
-const { createPgDatabase } = onPg ? await import('../../../../stack/pg.mjs') : {}
-
-/** The app's own connection: what the gateway uses. */
-const db = onPg ? createPgDatabase(PG_URL) : new PGlite()
+// The access rules, through the real engine and the app's own data client.
+// SQLite has no row-level security: every rule here is stack/policy.mjs,
+// asked by stack/engine.mjs before any SQL runs. Each case tries the hostile
+// version of the write, not the well-behaved one.
+const db = openSqlite()
 const engine = createEngine(db)
-/** Seeding and read-back, past RLS. On embedded, the same superuser handle. */
-const admin = onPg ? createPgDatabase(PG_ADMIN_URL) : db
-const adminEngine = onPg ? createEngine(admin) : engine
+const adminEngine = engine
 
 const browser = (uid) => ({ role: 'ohsms_browser', uid })
 const as = (uid) => createPostgresAdapter(engine, browser(uid))
@@ -28,13 +18,8 @@ async function seed(path, id, data) {
   await adminEngine.commit(null, [{ type: 'set', path, id, data, merge: false }])
 }
 
-afterAll(async () => {
-  if (onPg) await Promise.all([db.end(), admin.end()])
-})
-
 beforeAll(async () => {
   await applySchema(db)
-  if (onPg) await admin.exec('TRUNCATE documents, files, policy_union, auth_secrets, invites')
   await seed('users', 'adminA', { role: 'admin', status: 'approved', name: 'Ada' })
   await seed('users', 'memberA', { role: 'member', status: 'approved', name: 'Mo' })
   await seed('users', 'auditorA', {
@@ -56,8 +41,9 @@ beforeAll(async () => {
   await seed('injuries', 'inj1', { status: 'open', name: 'Mo' })
   await seed('qr', 'tok1', { extId: 'ext1', token: 'tok1' })
   await seed('permitQr', 'ptok', { permitId: 'p1', token: 'ptok' })
-  await admin.query(`INSERT INTO files (path) VALUES ('files/photos/a.jpg')`)
-  await admin.query(`INSERT INTO policy_union (id) VALUES ('row1')`)
+  await seed('auditLogs', 'log1', { action: 'create', actorUid: 'adminA' })
+  await seed('meta', 'docSeq', { n: 5 })
+  await seed('meta', 'cryptoKeys', { general: { wrappedKey: 'secret' } })
 })
 
 describe('who belongs', () => {
@@ -132,40 +118,55 @@ describe('roles', () => {
     )
   })
 
-  it('does not let an auditor delete a document or a file', async () => {
+  it('does not let an auditor delete or change a record, and lets them log', async () => {
     const auditor = as('auditorA')
-    await expect(auditor.remove('incidents', 'i1')).rejects.toMatchObject({
+    await expect(auditor.remove('incidents', 'i1')).rejects.toMatchObject({ code: 'permission-denied' })
+    await expect(auditor.update('incidents', 'i1', { title: 'x' })).rejects.toMatchObject({
       code: 'permission-denied',
     })
-    expect(await adminEngine.get(null, 'incidents', 'i1')).toMatchObject({
-      title: 'Cut',
+    await expect(auditor.set('incidents', 'new', { title: 'x' })).rejects.toMatchObject({
+      code: 'permission-denied',
     })
-
-    const fileDelete = await db.transaction(async (tx) => {
-      await tx.exec('SET LOCAL ROLE ohsms_browser')
-      await tx.query(`SELECT set_config('app.uid', 'auditorA', true)`)
-      return tx.query(`DELETE FROM files WHERE path = 'files/photos/a.jpg'`)
-    })
-    expect(fileDelete.affectedRows).toBe(0)
-    const still = await admin.query(`SELECT path FROM files WHERE path = 'files/photos/a.jpg'`)
-    expect(still.rows).toHaveLength(1)
+    expect(await adminEngine.get(null, 'incidents', 'i1')).toMatchObject({ title: 'Cut' })
+    // The one thing an auditor writes: the trail, in their own name only.
+    await auditor.set('auditLogs', 'mine', { action: 'export', actorUid: 'auditorA' })
+    await expect(
+      auditor.set('auditLogs', 'forged', { action: 'export', actorUid: 'adminA' })
+    ).rejects.toMatchObject({ code: 'permission-denied' })
   })
 
-  it('lets a manager delete a stored file, and not a member or a path outside files/', async () => {
-    await admin.query(
-      `INSERT INTO files (path) VALUES ('files/photos/b.jpg'), ('files/photos/c.jpg'), ('other/d.jpg') ON CONFLICT DO NOTHING`
-    )
-    const del = (uid, path) =>
-      db.transaction(async (tx) => {
-        await tx.exec('SET LOCAL ROLE ohsms_browser')
-        await tx.query(`SELECT set_config('app.uid', '${uid}', true)`)
-        return (await tx.query(`DELETE FROM files WHERE path = '${path}'`)).affectedRows
-      })
-    expect(await del('memberA', 'files/photos/c.jpg')).toBe(0)
-    expect(await del('adminA', 'files/photos/b.jpg')).toBe(1)
-    expect(await del('adminA', 'other/d.jpg')).toBe(0)
-    const left = await admin.query(`SELECT path FROM files WHERE path IN ('files/photos/c.jpg', 'other/d.jpg')`)
-    expect(left.rows).toHaveLength(2)
+  it('keeps the audit log append-only, admin included', async () => {
+    const admin = as('adminA')
+    await expect(admin.update('auditLogs', 'log1', { action: 'nothing' })).rejects.toMatchObject({
+      code: 'permission-denied',
+    })
+    await expect(admin.remove('auditLogs', 'log1')).rejects.toMatchObject({ code: 'permission-denied' })
+    expect(await adminEngine.get(null, 'auditLogs', 'log1')).toMatchObject({ action: 'create' })
+  })
+
+  it('never lets reference numbers run backwards', async () => {
+    const member = as('memberA')
+    await expect(member.set('meta', 'docSeq', { n: 0 }, { merge: true })).rejects.toMatchObject({
+      code: 'permission-denied',
+    })
+    await member.update('meta', 'docSeq', { n: 6 })
+    expect((await adminEngine.get(null, 'meta', 'docSeq')).n).toBe(6)
+  })
+
+  it('keeps the encryption keys out of reach of every browser session', async () => {
+    const admin = as('adminA')
+    expect(await admin.get('meta', 'cryptoKeys')).toBeNull()
+    expect((await admin.list('meta')).map((d) => d.id)).not.toContain('cryptoKeys')
+    await expect(admin.set('meta', 'cryptoKeys', { general: {} })).rejects.toThrow()
+    expect((await adminEngine.get(null, 'meta', 'cryptoKeys')).general.wrappedKey).toBe('secret')
+  })
+
+  it('refuses to overwrite a record the caller cannot see', async () => {
+    const member = as('memberA')
+    await expect(member.set('injuries', 'inj1', { status: 'open', name: 'x' })).rejects.toMatchObject({
+      code: 'permission-denied',
+    })
+    expect((await adminEngine.get(null, 'injuries', 'inj1')).name).toBe('Mo')
   })
 })
 
@@ -245,29 +246,14 @@ describe('post-state check', () => {
   })
 })
 
-describe('permissive union', () => {
-  it('lets the narrow policy win when the broad one also matches', async () => {
-    async function deleted() {
-      return db.transaction(async (tx) => {
-        await tx.exec('SET LOCAL ROLE ohsms_browser')
-        await tx.query(`SELECT set_config('app.uid', 'auditorA', true)`)
-        const res = await tx.query(`DELETE FROM policy_union WHERE id = 'row1'`)
-        return res.affectedRows
-      })
-    }
-    // Both policies match an approved auditor. The restrictive one wins, so
-    // the broad grant removes nothing.
-    expect(await deleted()).toBe(0)
-    expect(await admin.query(`SELECT id FROM policy_union WHERE id = 'row1'`)).toMatchObject({
-      rows: [{ id: 'row1' }],
-    })
-
-    await db.exec('DROP POLICY union_auditor_cannot_delete ON policy_union')
-    expect(await deleted()).toBe(1)
-
-    await db.exec(`CREATE POLICY union_auditor_cannot_delete ON policy_union AS RESTRICTIVE FOR DELETE TO ohsms_browser
-      USING (COALESCE(app_profile()->>'role', '') <> 'auditor')`)
-    await admin.query(`INSERT INTO policy_union (id) VALUES ('row1')`)
-    expect(await deleted()).toBe(0)
+describe('restrictions are added to every allow, not offered as one more', () => {
+  it('an auditor is approved, and still cannot delete', async () => {
+    // Approved members may delete records; the auditor restriction must win
+    // over that broad allow. Reversing the order of those two checks is the
+    // permissive-union bug.
+    await adminEngine.commit(null, [{ type: 'set', path: 'incidents', id: 'i9', data: { title: 'x' }, merge: false }])
+    await expect(as('auditorA').remove('incidents', 'i9')).rejects.toMatchObject({ code: 'permission-denied' })
+    await as('memberA').remove('incidents', 'i9')
+    expect(await adminEngine.get(null, 'incidents', 'i9')).toBeNull()
   })
 })

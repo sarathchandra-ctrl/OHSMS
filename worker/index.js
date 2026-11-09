@@ -1,9 +1,9 @@
 // The Cloudflare front door for one organization's OHSMS.
 //
 // Two ways to run the server, chosen by the Worker's settings:
-//   1. On Cloudflare (HYPERDRIVE binding present, ORIGIN_URL empty): the server
-//      runs inside this Worker (worker/server.js), with Postgres through
-//      Hyperdrive and files in R2. No machine to manage.
+//   1. On Cloudflare (DB binding present, ORIGIN_URL empty): the server
+//      runs inside this Worker (worker/server.js), with the database in
+//      Cloudflare D1 and files in R2. No machine to manage.
 //   2. On the organization's own server (ORIGIN_URL set): this Worker forwards
 //      the server paths to it through a Cloudflare Tunnel, as described below.
 //
@@ -101,7 +101,7 @@ export default {
   async fetch(request, env, ctx) {
     const { pathname } = new URL(request.url)
     if (isServerPath(pathname)) {
-      if (!env.ORIGIN_URL && env.HYPERDRIVE) {
+      if (!env.ORIGIN_URL && env.DB) {
         const { serveOnCloudflare } = await import('./server.js')
         return serveOnCloudflare(request, env, ctx)
       }

@@ -1,8 +1,8 @@
 // Cloudflare Workers deploy of one organization's OHSMS. docs/CLOUDFLARE.md.
 //
 // The Worker (worker/index.js) serves the built app from Cloudflare's edge and
-// runs the organization's server itself (worker/server.js): Postgres through
-// Hyperdrive, uploaded files in R2. Set ORIGIN_URL instead to forward the
+// runs the organization's server itself (worker/server.js): the database in
+// Cloudflare D1, uploaded files in R2. Set ORIGIN_URL instead to forward the
 // server paths to a server of your own through a Cloudflare Tunnel.
 //
 // This file exists so `wrangler deploy` does not run its framework
@@ -15,7 +15,7 @@
   // build from GitHub (Workers Builds), which otherwise deploys without it.
   "build": { "command": "npm run build" },
   "compatibility_date": "2026-06-01",
-  // node:crypto, Buffer and the pg driver.
+  // node:crypto and Buffer.
   "compatibility_flags": ["nodejs_compat"],
   "assets": {
     "directory": "./dist",
@@ -35,20 +35,24 @@
   },
   // The schema is bundled as text; there is no file system on Workers.
   "rules": [{ "type": "Text", "globs": ["**/*.sql"], "fallthrough": true }],
-  "hyperdrive": [
+  // The database: Cloudflare D1 (SQLite), Asia-Pacific. Access rules are
+  // enforced by stack/policy.mjs; the tables are created on first request.
+  "d1_databases": [
     {
-      // planetscale-ohsms-main-d1uz
-      "binding": "HYPERDRIVE",
-      "id": "ab824a7427d24e388d3178a10aa1f90a"
+      "binding": "DB",
+      "database_name": "ohsms",
+      "database_id": "3aff9e27-04ec-4d51-b4d6-7c8bbf46830a"
     }
-  ],
-  // Uploaded photos and documents. Add once R2 is enabled on the account:
+  ],  // Uploaded photos and documents. Add once R2 is enabled on the account:
   //   "r2_buckets": [{ "binding": "FILES", "bucket_name": "ohsms-files" }],
   "vars": {
     // The address people type. Every sign-in redirect and file link is built on it.
     "PUBLIC_ORIGIN": "https://ohsms.sarath-chandra.workers.dev",
     // The organization created on first start.
     "ORG_NAME": "Cult Fit",
+    // The first administrator's ADMIN_PASSWORD was chosen by the operator, so
+    // it is not forced to change at first sign-in. "true" for a generated one.
+    "ADMIN_MUST_CHANGE": "false",
     // Sender of password-reset emails, on a domain verified in Resend, e.g.
     // "Cult Fit SMS <noreply@curefit.com>". With RESEND_API_KEY (secret) set,
     // the sign-in page offers "Forgot password?"; empty keeps resets with admins.

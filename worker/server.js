@@ -1,75 +1,33 @@
 // The organization's server, running inside the Cloudflare Worker.
 //
 // Same handler as the Docker server (stack/handler.mjs). What differs:
-//   - Postgres is reached through the HYPERDRIVE binding, one pool per request.
+//   - The database is Cloudflare D1 (the DB binding): SQLite, with every
+//     access rule enforced in stack/policy.mjs before any SQL runs.
 //   - Uploaded files live in the FILES R2 bucket (worker/files.js).
 //   - The organization and its first administrator are created on the
 //     first request (bootstrapOrganization), from ORG_NAME, ADMIN_EMAIL and
 //     ADMIN_PASSWORD. Nothing is created once an admin exists.
-//   - The schema is applied once per database version, under an advisory
-//     lock, by whichever request gets there first.
+//   - The tables are created on the first request if missing (CREATE …
+//     IF NOT EXISTS, safe to run from several isolates at once).
 //   - Mail (password-reset links) goes through Resend (worker/mail.js) when
 //     MAIL_FROM and RESEND_API_KEY are set; without them there is no reset
 //     by email and an administrator resets passwords instead.
 //
-// Settings: PUBLIC_ORIGIN, ORG_NAME, MAIL_FROM (vars). Secrets:
+// Settings: PUBLIC_ORIGIN, ORG_NAME, MAIL_FROM, ADMIN_MUST_CHANGE (vars). Secrets:
 // SESSION_SECRET, DATA_KEY_MASTER, ADMIN_EMAIL, ADMIN_PASSWORD,
 // RESEND_API_KEY. docs/CLOUDFLARE.md.
 
-import SCHEMA from '../stack/schema.sql'
-import { createPgDatabase } from '../stack/pg.mjs'
-import { applySchema, createEngine } from '../stack/engine.mjs'
+import { createEngine } from '../stack/engine.mjs'
+import { ensureSchema } from '../stack/schema.mjs'
 import { createOwnStackHandler } from '../stack/handler.mjs'
-import { bootstrapOrganization } from '../stack/passwords.mjs'
 import { runtimeConfigScript } from '../stack/runtimeConfig.mjs'
 import { blobKeyFrom } from '../stack/blobSign.mjs'
+import { bootstrapOrganization } from '../stack/passwords.mjs'
 import { createR2FileStore } from './files.js'
 import { nodeRequest, nodeResponse } from './bridge.js'
 import { resendMailer } from './mail.js'
 
-// Bumps whenever schema.sql changes, so a new deploy applies it once.
-function fingerprint(text) {
-  let h = 0x811c9dc5
-  for (let i = 0; i < text.length; i++) {
-    h ^= text.charCodeAt(i)
-    h = Math.imul(h, 0x01000193) >>> 0
-  }
-  return h.toString(16)
-}
-export const SCHEMA_VERSION = `schema:${fingerprint(SCHEMA)}`
-
-let schemaReady = false
 let bootstrapped = null
-
-export async function ensureSchema(db) {
-  if (schemaReady) return
-  const applied = await db
-    .query('SELECT 1 FROM schema_migrations WHERE id = $1', [SCHEMA_VERSION])
-    .then((r) => r.rows.length > 0)
-    .catch(() => false)
-  if (!applied) {
-    await db.transaction(async (tx) => {
-      // One applier at a time across every isolate; the others wait, then
-      // find the version recorded and skip.
-      await tx.query('SELECT pg_advisory_xact_lock(7243100)')
-      const again = await tx
-        .query(
-          "SELECT to_regclass('public.schema_migrations') IS NOT NULL AS t"
-        )
-        .then((r) => r.rows[0]?.t)
-      const done =
-        again &&
-        (await tx.query('SELECT 1 FROM schema_migrations WHERE id = $1', [SCHEMA_VERSION])).rows
-          .length > 0
-      if (done) return
-      await applySchema(tx, SCHEMA)
-      await tx.query('INSERT INTO schema_migrations (id) VALUES ($1) ON CONFLICT DO NOTHING', [
-        SCHEMA_VERSION,
-      ])
-    })
-  }
-  schemaReady = true
-}
 
 export function settingsProblems(env) {
   const problems = []
@@ -79,7 +37,7 @@ export function settingsProblems(env) {
   if (Buffer.from(String(env.DATA_KEY_MASTER || ''), 'base64').length !== 32) {
     problems.push('DATA_KEY_MASTER')
   }
-  if (!env.HYPERDRIVE?.connectionString) problems.push('HYPERDRIVE binding')
+  if (!env.DB?.prepare) problems.push('DB (D1) binding')
   return problems
 }
 
@@ -106,12 +64,14 @@ export async function serveOnCloudflare(request, env, ctx) {
     ? createR2FileStore({ bucket: env.FILES, key: blobKeyFrom(env.SESSION_SECRET), origin })
     : null
   const url = new URL(request.url)
-  // File bytes never touch Postgres.
+  // File bytes never touch the database.
   if (url.pathname === '/blob') {
-    return files ? files.handle(request) : json(404, { code: 'not-found', message: 'file storage is not configured' })
+    return files
+      ? files.handle(request)
+      : json(404, { code: 'not-found', message: 'file storage is not configured' })
   }
 
-  const db = createPgDatabase(env.HYPERDRIVE.connectionString, { max: 3 })
+  const db = env.DB
   try {
     await ensureSchema(db)
     // Once per isolate: the organization and its first admin, if missing.
@@ -119,15 +79,15 @@ export async function serveOnCloudflare(request, env, ctx) {
       orgName: env.ORG_NAME || 'Cult Fit',
       adminEmail: env.ADMIN_EMAIL || '',
       adminPassword: env.ADMIN_PASSWORD || '',
+      mustChange: env.ADMIN_MUST_CHANGE !== 'false',
     })
     if (url.pathname === '/health') {
-      await db.query('SELECT 1')
+      await db.prepare('SELECT 1').first()
       return json(200, {
         ok: true,
         database: 'ok',
         files: Boolean(files),
         mail: Boolean(env.RESEND_API_KEY && env.MAIL_FROM),
-        schema: SCHEMA_VERSION,
       })
     }
     const mail = resendMailer({ apiKey: env.RESEND_API_KEY, from: env.MAIL_FROM })
@@ -157,30 +117,6 @@ export async function serveOnCloudflare(request, env, ctx) {
     return toResponse()
   } catch (err) {
     console.error('server request failed', url.pathname, err?.code || '', err?.message || err)
-    // The one failure an installer can fix without reading logs: the app's
-    // database user was not given the two roles (stack/planetscale-setup.sql).
-    if (!schemaReady && err?.code === '42501') {
-      // What the app actually sees, so a setup run against another database,
-      // branch or user is obvious. No secrets: names only.
-      const seen = await db
-        .query(
-          `SELECT current_user AS "user", current_database() AS database,
-                  ARRAY(SELECT rolname FROM pg_roles WHERE rolname LIKE 'ohsms%' ORDER BY 1) AS roles,
-                  ARRAY(SELECT b.rolname FROM pg_auth_members m
-                          JOIN pg_roles b ON b.oid = m.roleid
-                          JOIN pg_roles u ON u.oid = m.member
-                         WHERE u.rolname = current_user AND b.rolname LIKE 'ohsms%' ORDER BY 1) AS granted`
-        )
-        .then((r) => r.rows[0])
-        .catch(() => null)
-      return json(503, {
-        code: 'database-setup-needed',
-        message: `${err.message}. Run stack/planetscale-setup.sql once as the database administrator.`,
-        seen,
-      })
-    }
     return json(500, { code: 'internal', message: 'request failed' })
-  } finally {
-    ctx?.waitUntil?.(db.end().catch(() => {}))
   }
 }

@@ -1,9 +1,7 @@
-// The organization's server as deployed (stack/app.mjs), on PGlite set up the
-// way a hosted Postgres is: the app an ordinary role, the two app roles made
-// by an administrator, the worker role WITHOUT the bypass right. These sign
-// in with email and password through HTTP and try the doors that must stay
-// shut.
-import { PGlite } from '@electric-sql/pglite'
+// The organization's server as deployed (stack/app.mjs), on an in-memory
+// SQLite — the same engine as Cloudflare D1. These sign in with email and
+// password through HTTP and try the doors that must stay shut.
+import { openSqlite } from '../../../stack/sqlite.mjs'
 import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -16,16 +14,7 @@ const ADMIN = { email: 'ana@cult.test', password: 'first-admin-pass-1' }
 const SECRET = 's'.repeat(40)
 
 async function hostedLikeDb() {
-  const db = new PGlite()
-  await db.exec(`
-    CREATE ROLE ohsms_browser NOLOGIN;
-    CREATE ROLE ohsms_worker NOLOGIN;
-    CREATE ROLE app NOLOGIN;
-    GRANT ohsms_browser, ohsms_worker TO app;
-    ALTER SCHEMA public OWNER TO app;
-    SET ROLE app;
-  `)
-  return db
+  return openSqlite()
 }
 
 function staticDir() {
@@ -230,5 +219,21 @@ describe('serving the built app', () => {
     runInNewContext(runtimeConfigScript({ origin: 'https://ehs.test/</script><b>' }), { window })
     expect(window.__OHSMS_CONFIG__.AUTH_METHOD).toBe('password')
     expect(runtimeConfigScript({ origin: 'https://ehs.test/</script>' })).not.toMatch(/</)
+  })
+})
+
+describe('an administrator password chosen by the operator', () => {
+  it('signs straight in without a forced change when ADMIN_MUST_CHANGE is false', async () => {
+    const s = await start({
+      bootstrap: {
+        orgName: 'Cult Fit',
+        adminEmail: ADMIN.email,
+        adminPassword: 'Chosen*Pass*123',
+        mustChange: false,
+      },
+    })
+    const token = await s.signIn(ADMIN.email, 'Chosen*Pass*123')
+    expect(await s.read(token, 'organization', 'profile')).toMatchObject({ name: 'Cult Fit' })
+    await s.stop()
   })
 })

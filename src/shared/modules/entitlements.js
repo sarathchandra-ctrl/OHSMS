@@ -3,7 +3,7 @@
 //
 // The registry says which modules the product HAS. This says which of them
 // this organization uses. One document, /moduleEntitlements/organization,
-// written by an administrator (Settings → Modules; stack/schema.sql allows
+// written by an administrator (Settings → Modules; stack/policy.mjs allows
 // admins only) and read by every approved member so the shell knows which
 // tiles to draw and which routes to refuse.
 //

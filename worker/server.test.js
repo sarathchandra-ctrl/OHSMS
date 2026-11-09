@@ -1,4 +1,4 @@
-import { PGlite } from '@electric-sql/pglite'
+import { openSqlite } from '../stack/sqlite.mjs'
 import { describe, expect, it } from 'vitest'
 import { applySchema, createEngine } from '../stack/engine.mjs'
 import { createOwnStackHandler } from '../stack/handler.mjs'
@@ -8,7 +8,7 @@ import { createR2FileStore } from './files.js'
 import { nodeRequest, nodeResponse } from './bridge.js'
 
 async function database() {
-  const db = new PGlite()
+  const db = openSqlite()
   await applySchema(db)
   return db
 }
@@ -53,13 +53,19 @@ describe('files in R2', () => {
     const forged = files.downloadUrl('files/photos/a.txt').replace(/sig=[^&]+/, 'sig=nope')
     expect((await files.handle(new Request(forged))).status).toBe(403)
     const outside = await files.handle(
-      new Request(files.uploadUrl('secrets/x'), { method: 'PUT', body: 'x', headers: { 'Content-Length': '1' } })
+      new Request(files.uploadUrl('secrets/x'), {
+        method: 'PUT',
+        body: 'x',
+        headers: { 'Content-Length': '1' },
+      })
     )
     expect(outside.status).toBe(403)
     expect(bucket.objects.has('secrets/x')).toBe(false)
 
     await files.remove('files/photos/a.txt')
-    expect((await files.handle(new Request(files.downloadUrl('files/photos/a.txt')))).status).toBe(404)
+    expect((await files.handle(new Request(files.downloadUrl('files/photos/a.txt')))).status).toBe(
+      404
+    )
   })
 
   it('refuses an upload link after it expires', async () => {
@@ -116,36 +122,5 @@ describe('the server handler behind a Fetch request', () => {
       })
     )
     expect(await read.json()).toEqual({ doc: null })
-  })
-})
-
-describe('a hosted Postgres that refuses BYPASSRLS', () => {
-  it('still lets the server role reach every row and keeps the browser role confined', async () => {
-    const db = new PGlite()
-    // The shape a hosted database gives: the app is an ordinary role that may
-    // create roles, and the worker role exists without the bypass right.
-    await db.exec(`
-      CREATE ROLE ohsms_browser NOLOGIN;
-      CREATE ROLE ohsms_worker NOLOGIN;
-      CREATE ROLE app NOLOGIN CREATEROLE;
-      GRANT ohsms_browser, ohsms_worker TO app;
-      ALTER SCHEMA public OWNER TO app;
-      SET ROLE app;
-    `)
-    const who = await db.query('SELECT rolsuper, rolbypassrls FROM pg_roles WHERE rolname = current_user')
-    expect(who.rows[0]).toEqual({ rolsuper: false, rolbypassrls: false })
-    await applySchema(db)
-    const engine = createEngine(db)
-    const W = { role: 'ohsms_worker', uid: '' }
-    await engine.commit(W, [
-      { type: 'set', path: 'users', id: 'u1', merge: false, data: { role: 'member', status: 'approved' } },
-      { type: 'set', path: 'incidents', id: 'i1', merge: false, data: { title: 'Cut' } },
-      { type: 'set', path: 'scimTokens', id: 'current', merge: false, data: { hash: 'h' } },
-    ])
-    expect(await engine.get(W, 'scimTokens', 'current')).toMatchObject({ hash: 'h' })
-    const member = { role: 'ohsms_browser', uid: 'u1' }
-    expect(await engine.get(member, 'incidents', 'i1')).toMatchObject({ title: 'Cut' })
-    expect(await engine.get(member, 'scimTokens', 'current')).toBeNull()
-    expect(await engine.get({ role: 'ohsms_browser', uid: 'stranger' }, 'incidents', 'i1')).toBeNull()
   })
 })

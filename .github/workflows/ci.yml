@@ -1,5 +1,5 @@
-# Lint, unit tests (app + server, including the Postgres row-level-security
-# suite on embedded PGlite), dependency advisories, and a production build.
+# Lint, unit tests (app + server, including the access-rule suite on SQLite),
+# dependency advisories, and a production build.
 name: CI
 
 on:
@@ -54,8 +54,7 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      # The root suite drives the server (stack/) on PGlite, which needs the
-      # server's own dependencies.
+      # The root suite drives the server (stack/), which has its own packages.
       - run: npm ci --prefix stack
 
       # macOS checks out a case-insensitive tree; Linux is the only image that

@@ -1,7 +1,7 @@
 # Deployment
 
 OHSMS runs for **one organization** on **that organization's own server and
-Postgres database**. There is no shared or multi-tenant service.
+database** (Cloudflare D1). There is no shared or multi-tenant service.
 
 | Front door                                                                | Guide                                          |
 | ------------------------------------------------------------------------- | ---------------------------------------------- |
@@ -17,10 +17,10 @@ door.
 - **`src/`** — the web app (React + Vite). Built to `dist/`.
 - **`stack/`** — the organization's server: email-and-password sign-in
   (`/auth/password`, stack/passwords.mjs), the data gateway (`/data`,
-  enforced by Postgres row-level security in `stack/schema.sql`), server jobs
+  enforced by `stack/policy.mjs` on every read and write), server jobs
   (`/rpc/*`), and file storage (`/presign`, `/blob`).
 - **`worker/`** — the Cloudflare Worker: serves `dist/` and either runs the
-  server itself (Hyperdrive + R2) or forwards its paths through a Tunnel.
+  server itself (D1 + R2) or forwards its paths through a Tunnel.
 - **`selfhost/`** — compose file, `.env.example`, install script.
 
 ## First organization
@@ -37,7 +37,7 @@ ones.
 - Sign in; open a few modules (Incidents, Inspections, Permits, LOTO,
   Training). Upload a photo and open it again.
 - In DevTools, watch for `permission-denied` on `/data` — that is the
-  database's row-level security refusing a read the screen expected.
+  server's access rules (`stack/policy.mjs`) refusing a read the screen expected.
 
 ## Rollback
 

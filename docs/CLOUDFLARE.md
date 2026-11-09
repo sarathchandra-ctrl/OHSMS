@@ -3,9 +3,9 @@
 Two ways, chosen by the Worker's settings in `wrangler.jsonc`:
 
 - **A. Everything on Cloudflare** (no server to manage). The Worker serves the
-  app *and* runs the server (`worker/server.js`). Postgres is reached through
-  a **Hyperdrive** config; uploaded files go to an **R2** bucket. `ORIGIN_URL`
-  is empty and the `HYPERDRIVE` binding is set. This is how the current
+  app *and* runs the server (`worker/server.js`). The database is
+  **Cloudflare D1** (SQLite); uploaded files go to an **R2** bucket.
+  `ORIGIN_URL` is empty and the `DB` binding is set. This is how the current
   deployment runs.
 - **B. Cloudflare in front of your own server** (below, from "What you need").
   The Worker serves the app and forwards server requests through a Cloudflare
@@ -13,15 +13,17 @@ Two ways, chosen by the Worker's settings in `wrangler.jsonc`:
 
 ## A. Everything on Cloudflare
 
-1. **Postgres.** Create the database (PlanetScale, Neon, Supabase, RDS…) and a
-   Hyperdrive config for it (Cloudflare → Storage & Databases → Hyperdrive).
-   Put its id in `wrangler.jsonc` under `hyperdrive`.
-2. **One-time database roles.** Most hosted databases do not let the app's
-   user create roles. Run [`stack/planetscale-setup.sql`](../stack/planetscale-setup.sql)
-   once in the database's console as its administrator, with `APP_USER` set to
-   the user the Hyperdrive config connects as. The Worker creates every table,
-   policy and function itself on its first request after that, and again
-   after any deploy that changes `stack/schema.sql`.
+1. **Database.** Create a D1 database near your users:
+   ```bash
+   npx wrangler d1 create ohsms --location apac
+   ```
+   and put its `database_id` in `wrangler.jsonc` under `d1_databases`. The
+   Worker creates its tables on the first request; there is nothing to run by
+   hand. Access rules are enforced by `stack/policy.mjs` before any SQL runs
+   (D1 has no row-level security of its own).
+2. **First administrator.** `ADMIN_EMAIL` and `ADMIN_PASSWORD` (secrets,
+   below). `ADMIN_MUST_CHANGE` in `wrangler.jsonc` is `"false"` when you chose
+   the password yourself, `"true"` to force a change at first sign-in.
 3. **Files.** Enable R2 on the account (Cloudflare → R2, accept the terms),
    then:
    ```bash
@@ -56,9 +58,13 @@ Two ways, chosen by the Worker's settings in `wrangler.jsonc`:
    A forgotten password is reset by an administrator (Employees → Reset
    password).
 
-Limits of A: the only mail sent is password-reset links, and every
-request opens its database connection through Hyperdrive, so pick a database
-region close to Cloudflare's users.
+Limits of A: the only mail sent is password-reset links; D1 holds up to
+10 GB per database and runs one write at a time, which is ample for one
+organization.
+
+**Backups (A).** D1 keeps 30 days of point-in-time history (Time Travel):
+`npx wrangler d1 time-travel restore ohsms --timestamp <time>`. For a copy
+you hold yourself: `npx wrangler d1 export ohsms --remote --output ohsms.sql`.
 
 ## B. Cloudflare in front of your own server
 
@@ -74,7 +80,7 @@ Postgres database**. Cloudflare sits in front of it:
                      Cloudflare Tunnel  (ehs-origin.example.com, Access-protected)
                       │  outbound-only connection, no open ports on the server
                       ▼
-           organization's server:  cloudflared ─▶ app (stack/, :8080) ─▶ Postgres
+           organization's server:  cloudflared ─▶ app (stack/, :8080) ─▶ SQLite file
                                                    └─ uploaded files on disk
 ```
 
@@ -146,15 +152,13 @@ Fill in `.env`:
 - `DOMAIN=ehs.example.com` — the **Worker's** hostname, the one people type.
   The server builds every file link on it.
 - `TUNNEL_TOKEN` — from step 2.
-- `DB_ADMIN_PASSWORD`, `APP_DB_PASSWORD` — `openssl rand -hex 24` each.
 - `DATA_KEY_MASTER` — `openssl rand -base64 32`.
 - `SESSION_SECRET` — `openssl rand -hex 32`.
 - `ADMIN_EMAIL`, `ADMIN_PASSWORD` — the first administrator (first start only).
 - Optionally the `SMTP_` settings and `MAIL_FROM`, for invitation mail.
 
 **Back up `.env` somewhere off the server.** Without `DATA_KEY_MASTER`
-encrypted fields cannot be opened; without the passwords the data cannot be
-reached.
+encrypted fields cannot be opened.
 
 Start it:
 
@@ -166,7 +170,7 @@ docker compose up -d
 docker compose ps
 ```
 
-Postgres, the app and `cloudflared` should be running, and the tunnel should
+The app and `cloudflared` should be running, and the tunnel should
 show **Healthy** in the dashboard. Caddy does not start with the `cloudflare`
 profile, and nothing listens on a public port.
 
@@ -242,26 +246,15 @@ route the server does not have yet.
 
 ## Backups
 
-Back up three things, together:
+Back up two things, together:
 
-1. The database — for example nightly
-   `docker compose exec -T db pg_dump -U postgres ehs > ehs-$(date +%F).sql`.
-2. The `files` volume — uploaded photos and documents.
-3. `.env` — the keys.
+1. The `data` volume — the database file (`ohsms.sqlite`) and uploaded files.
+   For a consistent copy while running:
+   `docker compose exec app node -e "new (require('node:sqlite').DatabaseSync)('/srv/stack/data/ohsms.sqlite').exec(\"VACUUM INTO '/srv/stack/data/backup.sqlite'\")"`
+   then copy `backup.sqlite` and the `files/` folder off the server.
+2. `.env` — the keys.
 
 A backup is only real once it has been restored somewhere else and signed in to.
-
-## Moving from the earlier multi-organization build
-
-A database created by the earlier build (paths `organizations/<id>/…`) is
-converted automatically the first time the new server starts against it:
-records move to top-level collections, the organization becomes
-`organization/profile`, and the tenant columns are dropped. It refuses to
-start if the database holds more than one organization — move one per server.
-Take a backup first.
-
-Files that build stored outside this server (a separate bucket) are not moved;
-records keep their old links.
 
 ## Troubleshooting
 

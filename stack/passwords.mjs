@@ -1,7 +1,7 @@
 // Email-and-password sign-in, kept by this server.
 //
 // Passwords are stored only as PBKDF2-SHA256 hashes in auth_secrets, a table
-// the data API cannot reach (no grant to the browser role, RLS forced). The
+// the data API never reads (stack/engine.mjs only touches `documents`). The
 // hash runs through the platform's own WebCrypto so it costs the same on Node
 // and on Cloudflare Workers, where a pure-JS hash would run out of CPU time.
 // Hashes written by the earlier scrypt code are still accepted.
@@ -10,7 +10,6 @@
 // not that they are still an approved admin.
 
 import { createHash, randomBytes, randomUUID, scryptSync, timingSafeEqual } from 'node:crypto'
-import { asWorker } from './engine.mjs'
 
 const WORKER = { role: 'ohsms_worker', uid: '' }
 
@@ -86,22 +85,32 @@ export async function verifyPassword(stored, password) {
 const DUMMY_HASH = `pbkdf2-sha256$${ITERATIONS}$${'0'.repeat(32)}$${'0'.repeat(64)}`
 
 async function storePassword(db, { uid, email, password }) {
-  await asWorker(
-    db,
-    `INSERT INTO auth_secrets (uid, email, password_hash) VALUES ($1, $2, $3)
-     ON CONFLICT (uid) DO UPDATE SET email = EXCLUDED.email,
-       password_hash = EXCLUDED.password_hash, updated_at = now()`,
-    [uid, email, await hashPassword(password)]
-  )
+  await db
+    .prepare(
+      `INSERT INTO auth_secrets (uid, email, password_hash, updated_at) VALUES (?, ?, ?, ?)
+       ON CONFLICT (uid) DO UPDATE SET email = excluded.email,
+         password_hash = excluded.password_hash, updated_at = excluded.updated_at`
+    )
+    .bind(uid, email, await hashPassword(password), Date.now())
+    .run()
+}
+
+async function storedHash(db, uid) {
+  const row = await db
+    .prepare('SELECT password_hash FROM auth_secrets WHERE uid = ?')
+    .bind(uid)
+    .first()
+  return row?.password_hash || null
 }
 
 async function userByEmail(db, email) {
-  const res = await asWorker(
-    db,
-    `SELECT id FROM documents WHERE path = 'users' AND lower(data->>'email') = $1 LIMIT 1`,
-    [email]
-  )
-  return res.rows[0]?.id || null
+  const row = await db
+    .prepare(
+      "SELECT id FROM documents WHERE path = 'users' AND lower(json_extract(data, '$.email')) = ? LIMIT 1"
+    )
+    .bind(email)
+    .first()
+  return row?.id || null
 }
 
 async function liveProfile(engine, uid) {
@@ -119,34 +128,38 @@ export async function liveAdmin(engine, uid) {
 }
 
 // ── Lockout ─────────────────────────────────────────────────────────────────
-// Kept in auth_pending (stack/schema.sql), which the login role reads and the
-// data API cannot.
+// Kept in auth_pending, which the data API never reads.
+
+/** Adds one to a counter that resets after `ttlSeconds`; returns the new count. */
+async function bump(db, key, ttlSeconds) {
+  const now = Date.now()
+  const row = await db
+    .prepare(
+      `INSERT INTO auth_pending (key, value, expires_at) VALUES (?, '1', ?)
+       ON CONFLICT (key) DO UPDATE SET
+         value = CASE WHEN auth_pending.expires_at > ? THEN CAST(auth_pending.value AS INTEGER) + 1 ELSE 1 END,
+         expires_at = CASE WHEN auth_pending.expires_at > ? THEN auth_pending.expires_at ELSE excluded.expires_at END
+       RETURNING value`
+    )
+    .bind(key, now + ttlSeconds * 1000, now, now)
+    .first()
+  return Number(row?.value || 0)
+}
 
 async function failures(db, email) {
-  const res = await db.query(
-    'SELECT value FROM auth_pending WHERE key = $1 AND expires_at > now()',
-    [`pwfail:${email}`]
-  )
-  const v = res.rows[0]?.value
-  return (typeof v === 'string' ? JSON.parse(v) : v)?.n || 0
+  const row = await db
+    .prepare('SELECT value FROM auth_pending WHERE key = ? AND expires_at > ?')
+    .bind(`pwfail:${email}`, Date.now())
+    .first()
+  return Number(row?.value || 0)
 }
 
 async function recordFailure(db, email) {
-  await db.query(
-    `INSERT INTO auth_pending (key, value, expires_at)
-     VALUES ($1, '{"n":1}'::jsonb, now() + make_interval(secs => $2))
-     ON CONFLICT (key) DO UPDATE SET
-       value = CASE WHEN auth_pending.expires_at > now()
-                    THEN jsonb_build_object('n', (auth_pending.value->>'n')::int + 1)
-                    ELSE '{"n":1}'::jsonb END,
-       expires_at = CASE WHEN auth_pending.expires_at > now()
-                    THEN auth_pending.expires_at ELSE EXCLUDED.expires_at END`,
-    [`pwfail:${email}`, LOCK_SECONDS]
-  )
+  await bump(db, `pwfail:${email}`, LOCK_SECONDS)
 }
 
 async function clearFailures(db, email) {
-  await db.query('DELETE FROM auth_pending WHERE key = $1', [`pwfail:${email}`])
+  await db.prepare('DELETE FROM auth_pending WHERE key = ?').bind(`pwfail:${email}`).run()
 }
 
 /**
@@ -159,11 +172,9 @@ export async function signInWithPassword(engine, db, { email, password }) {
   }
   if ((await failures(db, address)) >= MAX_FAILURES) return { ok: false, reason: 'locked' }
   const uid = await userByEmail(db, address)
-  const row = uid
-    ? (await asWorker(db, 'SELECT password_hash FROM auth_secrets WHERE uid = $1', [uid])).rows[0]
-    : null
-  const matches = await verifyPassword(row?.password_hash || DUMMY_HASH, password)
-  if (!uid || !row || !matches) {
+  const hash = uid ? await storedHash(db, uid) : null
+  const matches = await verifyPassword(hash || DUMMY_HASH, password)
+  if (!uid || !hash || !matches) {
     await recordFailure(db, address)
     return { ok: false, reason: 'credentials' }
   }
@@ -226,7 +237,11 @@ export async function resetMemberPassword(engine, db, { uid, targetUid, password
 }
 
 /** The signed-in person replaces their own password. */
-export async function changeOwnPassword(engine, db, { uid, authTime, current, password, now = Date.now() }) {
+export async function changeOwnPassword(
+  engine,
+  db,
+  { uid, authTime, current, password, now = Date.now() }
+) {
   if (!uid) return { ok: false, reason: 'unauthenticated' }
   // Within ten minutes of signing in, so a session left open on a shared
   // machine cannot be used to take the account over.
@@ -235,9 +250,8 @@ export async function changeOwnPassword(engine, db, { uid, authTime, current, pa
   }
   const profile = await liveProfile(engine, uid)
   if (!profile?.email) return { ok: false, reason: 'no-profile' }
-  const row = (await asWorker(db, 'SELECT password_hash FROM auth_secrets WHERE uid = $1', [uid]))
-    .rows[0]
-  if (!row || !(await verifyPassword(row.password_hash, String(current || '')))) {
+  const hash = await storedHash(db, uid)
+  if (!hash || !(await verifyPassword(hash, String(current || '')))) {
     return { ok: false, reason: 'current-rejected' }
   }
   if (passwordProblem(password) || password === current) return { ok: false, reason: 'policy' }
@@ -255,7 +269,13 @@ export async function changeOwnPassword(engine, db, { uid, authTime, current, pa
  * it creates nothing once an organization and an admin exist, so changing
  * the settings later never overwrites anyone's password.
  */
-export async function bootstrapOrganization(engine, db, { orgName, adminEmail, adminPassword, adminName = '' }) {
+export async function bootstrapOrganization(
+  engine,
+  db,
+  // mustChange: false when the operator chose ADMIN_PASSWORD themselves
+  // (ADMIN_MUST_CHANGE=false); a generated one must be replaced at first sign-in.
+  { orgName, adminEmail, adminPassword, adminName = '', mustChange = true }
+) {
   const org = await engine.get(WORKER, 'organization', 'profile')
   if (!org) {
     await engine.commit(WORKER, [
@@ -268,11 +288,12 @@ export async function bootstrapOrganization(engine, db, { orgName, adminEmail, a
       },
     ])
   }
-  const admins = await asWorker(
-    db,
-    `SELECT 1 FROM documents WHERE path = 'users' AND data->>'role' = 'admin' LIMIT 1`
-  )
-  if (admins.rows.length) return { created: false }
+  const admins = await db
+    .prepare(
+      "SELECT 1 AS one FROM documents WHERE path = 'users' AND json_extract(data, '$.role') = 'admin' LIMIT 1"
+    )
+    .first()
+  if (admins) return { created: false }
   const address = normalizeEmail(adminEmail)
   if (!address || passwordProblem(adminPassword)) return { created: false, reason: 'settings' }
   const id = randomUUID()
@@ -287,7 +308,7 @@ export async function bootstrapOrganization(engine, db, { orgName, adminEmail, a
         email: address,
         role: 'admin',
         status: 'approved',
-        mustChangePassword: true,
+        mustChangePassword: mustChange !== false,
         dept: '',
         department: '',
         access: { sites: [], regions: [], entities: [] },
@@ -318,35 +339,28 @@ function sha256(text) {
  * has an account, so the answer tells nobody who works here. `send` is
  * `({ to, subject, text }) => { sent }`; the link is built on `origin`.
  */
-export async function requestPasswordReset(engine, db, { email, origin, send, appName = 'Cult Fit SMS' }) {
+export async function requestPasswordReset(
+  engine,
+  db,
+  { email, origin, send, appName = 'Cult Fit SMS' }
+) {
   const address = normalizeEmail(email)
   if (!address || typeof send !== 'function') return { ok: true }
-  const countKey = `pwresetcount:${address}`
-  const counted = await db.query(
-    `INSERT INTO auth_pending (key, value, expires_at)
-     VALUES ($1, '{"n":1}'::jsonb, now() + interval '1 hour')
-     ON CONFLICT (key) DO UPDATE SET
-       value = CASE WHEN auth_pending.expires_at > now()
-                    THEN jsonb_build_object('n', (auth_pending.value->>'n')::int + 1)
-                    ELSE '{"n":1}'::jsonb END,
-       expires_at = CASE WHEN auth_pending.expires_at > now()
-                    THEN auth_pending.expires_at ELSE EXCLUDED.expires_at END
-     RETURNING value`,
-    [countKey]
-  )
-  const v = counted.rows[0]?.value
-  if ((typeof v === 'string' ? JSON.parse(v) : v)?.n > RESET_PER_HOUR) return { ok: true }
+  if ((await bump(db, `pwresetcount:${address}`, 60 * 60)) > RESET_PER_HOUR) return { ok: true }
 
   const uid = await userByEmail(db, address)
   const profile = uid ? await liveProfile(engine, uid) : null
   if (!profile || !['approved', 'pending'].includes(profile.status)) return { ok: true }
 
   const token = randomBytes(32).toString('base64url')
-  await db.query(
-    `INSERT INTO auth_pending (key, value, expires_at)
-     VALUES ($1, $2::jsonb, now() + make_interval(secs => $3))`,
-    [`pwreset:${sha256(token)}`, JSON.stringify({ uid, email: address }), RESET_TTL_SECONDS]
-  )
+  await db
+    .prepare('INSERT INTO auth_pending (key, value, expires_at) VALUES (?, ?, ?)')
+    .bind(
+      `pwreset:${sha256(token)}`,
+      JSON.stringify({ uid, email: address }),
+      Date.now() + RESET_TTL_SECONDS * 1000
+    )
+    .run()
   // In the fragment, not the query: a fragment is never sent to a server, so
   // the token stays out of access logs and Referer headers.
   const link = `${String(origin).replace(/\/$/, '')}/reset-password#token=${token}`
@@ -367,12 +381,11 @@ export async function completePasswordReset(engine, db, { token, password }) {
   if (passwordProblem(password)) return { ok: false, reason: 'policy' }
   // Delete-and-return in one statement: the same link cannot be used twice,
   // even by two requests at once.
-  const res = await db.query(
-    `DELETE FROM auth_pending WHERE key = $1 AND expires_at > now() RETURNING value`,
-    [`pwreset:${sha256(token)}`]
-  )
-  const raw = res.rows[0]?.value
-  const claim = typeof raw === 'string' ? JSON.parse(raw) : raw
+  const row = await db
+    .prepare('DELETE FROM auth_pending WHERE key = ? AND expires_at > ? RETURNING value')
+    .bind(`pwreset:${sha256(token)}`, Date.now())
+    .first()
+  const claim = row?.value ? JSON.parse(row.value) : null
   if (!claim?.uid) return { ok: false, reason: 'link' }
   const profile = await liveProfile(engine, claim.uid)
   if (!profile || !['approved', 'pending'].includes(profile.status)) {

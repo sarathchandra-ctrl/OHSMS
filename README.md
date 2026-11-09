@@ -2,10 +2,12 @@
 
 One organization's OHS platform: seventeen health-&-safety domains in one app
 with a single sign-on, one dashboard and one audit trail — installed on **the
-organization's own server and Postgres database**, with Cloudflare in front.
+organization's own Cloudflare account** — the app, its server and its
+Cloudflare D1 (SQLite) database.
 
 Built with **Vite + React + Tailwind CSS**, and a Node 22 server (`stack/`)
-over **Postgres** with row-level security. Deploying: [`DEPLOYMENT.md`](DEPLOYMENT.md). UI is an **amber+white glass** ops dashboard (amber canvas,
+over **SQLite** (Cloudflare D1), with every access rule enforced in
+`stack/policy.mjs`. Deploying: [`DEPLOYMENT.md`](DEPLOYMENT.md). UI is an **amber+white glass** ops dashboard (amber canvas,
 frosted white panels, logo teal / amber / siren) with **Emil Kowalski**-style
 motion and **skeleton loaders** throughout.
 
@@ -72,15 +74,15 @@ One installation serves one organization. Three deployable pieces:
   (`/rpc/*`) and file storage. It creates the organization and its first
   administrator on first start.
 - **Cloudflare Worker** (`worker/`) — serves the built app from the edge and
-  runs the server on Cloudflare (Postgres through Hyperdrive, files in R2), or
+  runs the server on Cloudflare (database in D1, files in R2), or
   forwards to a self-hosted server through a Cloudflare Tunnel.
 
 Cross-cutting:
 
-- **Data** — Postgres, one `documents` table addressed by collection path
-  (`incidents`, `permits/<id>/events`, …). Access is enforced by row-level
-  security in `stack/schema.sql`: the browser's requests run as a role with no
-  bypass, and only the server's own jobs may assume the bypass role.
+- **Data** — SQLite (Cloudflare D1, or a file in Docker), one `documents`
+  table addressed by collection path (`incidents`, `permits/<id>/events`, …).
+  Access is enforced in `stack/policy.mjs`, checked by `stack/engine.mjs`
+  before every read and write. Only the server's own jobs skip the rules.
 - **Roles** — `admin`, `manager`, `member`, `auditor`
   (`src/shared/auth/permissions.js`) plus site scoping. An administrator adds
   people with a temporary password and can reset passwords.
@@ -117,8 +119,7 @@ npm ci
 npm ci --prefix stack
 ```
 
-Run the server against a local Postgres (the bundled compose `db` service, or
-your own), with the variables listed in `selfhost/.env.example` exported and
+Run the server (it keeps its SQLite file under `stack/data/`), with the variables listed in `selfhost/.env.example` exported and
 `PUBLIC_ORIGIN=https://localhost`, then the app with `VITE_DATA_GATEWAY`
 pointing at it (see `.env.example`):
 
@@ -148,8 +149,8 @@ npm run dev
   export, scheduling, energy sources. They run in parallel and are stable there;
   DOM tests carry a `// @vitest-environment jsdom` docblock and the default is
   `node`.
-- **Row-level security** — `src/shared/data/adapters/postgres.rls.test.js`
-  runs `stack/schema.sql` on an embedded Postgres and asserts that signed-out,
+- **Access rules** — `src/shared/data/adapters/postgres.rls.test.js`
+  runs `stack/policy.mjs` through the engine on SQLite and asserts that signed-out,
   pending and disabled accounts see nothing, role-gated writes, medical-record
   confinement, the server-only directory paths and the limits of the anonymous
   QR write surfaces. These send hostile payloads, not well-behaved ones.

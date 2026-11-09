@@ -1,9 +1,9 @@
-import { PGlite } from '@electric-sql/pglite'
+import { openSqlite } from '../../../../stack/sqlite.mjs'
 import { applySchema, createEngine } from '../../../../stack/engine.mjs'
 import { createPostgresAdapter } from './postgres'
 import { defineDataContract } from './contractSuite'
 
-const db = new PGlite()
+const db = openSqlite()
 await applySchema(db)
 const engine = createEngine(db)
 

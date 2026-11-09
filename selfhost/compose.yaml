@@ -1,5 +1,5 @@
 # OHSMS for one organization on its own server with Docker: the app server,
-# its Postgres, and a front door — either Caddy (HTTPS on this server, ports
+# its SQLite database file, and a front door — either Caddy (HTTPS on this server, ports
 # 80/443 open) or a Cloudflare Tunnel (no inbound ports; Cloudflare in front).
 # COMPOSE_PROFILES in .env picks which: `caddy` or `cloudflare`.
 # docs/SELF-HOSTING.md and docs/CLOUDFLARE.md are the procedures;
@@ -12,40 +12,17 @@
 #   cp .env.example .env    # then fill it in
 #   docker compose up -d
 #
-# Only Caddy publishes ports (and only with the caddy profile). The database
-# and the app are reachable from inside this network and nowhere else.
+# Only Caddy publishes ports (and only with the caddy profile). The app is
+# reachable from inside this network and nowhere else.
 name: weehs
 
 services:
-  db:
-    image: postgres:16
-    restart: unless-stopped
-    environment:
-      POSTGRES_DB: ehs
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: ${DB_ADMIN_PASSWORD:?set DB_ADMIN_PASSWORD in .env}
-      # Read by init-db.sh, once, when the data volume is first created.
-      APP_DB_PASSWORD: ${APP_DB_PASSWORD:?set APP_DB_PASSWORD in .env}
-    volumes:
-      - db-data:/var/lib/postgresql/data
-      - ./init-db.sh:/docker-entrypoint-initdb.d/10-weehs-roles.sh:ro
-    healthcheck:
-      # Over TCP, not the socket: during first start the image runs a
-      # temporary server on the socket only, while init-db.sh creates the
-      # roles, and the app must not connect to that one.
-      test: ['CMD-SHELL', 'pg_isready -h 127.0.0.1 -U postgres -d ehs']
-      interval: 5s
-      timeout: 5s
-      retries: 20
-
   app:
     image: ${WEEHS_IMAGE:?set WEEHS_IMAGE in .env}
     restart: unless-stopped
-    depends_on:
-      db:
-        condition: service_healthy
     environment:
-      DATABASE_URL: postgres://ehs_app:${APP_DB_PASSWORD}@db:5432/ehs
+      # One SQLite file, on the data volume below.
+      DATABASE_FILE: /srv/stack/data/ohsms.sqlite
       PUBLIC_ORIGIN: https://${DOMAIN:?set DOMAIN in .env}
       SESSION_SECRET: ${SESSION_SECRET:?set SESSION_SECRET in .env}
       DATA_KEY_MASTER: ${DATA_KEY_MASTER:?set DATA_KEY_MASTER in .env}
@@ -59,9 +36,10 @@ services:
       ADMIN_EMAIL: ${ADMIN_EMAIL:-}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
       BLOB_DIR: /srv/stack/data/files
+      ADMIN_MUST_CHANGE: ${ADMIN_MUST_CHANGE:-true}
     volumes:
-      # Uploaded photos and documents. Back this up with the database.
-      - files:/srv/stack/data/files
+      # The database file and uploaded photos and documents. Back this up.
+      - data:/srv/stack/data
     expose:
       - '8080'
 
@@ -97,7 +75,6 @@ services:
       TUNNEL_TOKEN: ${TUNNEL_TOKEN:?set TUNNEL_TOKEN in .env for the cloudflare profile}
 
 volumes:
-  files:
-  db-data:
+  data:
   caddy-data:
   caddy-config:

@@ -4,7 +4,7 @@
 
 import nodemailer from 'nodemailer'
 import { createDedicatedApp } from './app.mjs'
-import { createPgDatabase } from './pg.mjs'
+import { openSqlite } from './sqlite.mjs'
 
 const env = process.env
 const problems = []
@@ -17,7 +17,6 @@ function required(name, { min = 1 } = {}) {
   return value
 }
 
-const databaseUrl = required('DATABASE_URL')
 const origin = required('PUBLIC_ORIGIN').replace(/\/$/, '')
 const sessionSecret = required('SESSION_SECRET', { min: 32 })
 const dataKeyMaster = required('DATA_KEY_MASTER')
@@ -86,7 +85,8 @@ if (env.SMTP_HOST && env.SMTP_USER && env.SMTP_PASS && env.MAIL_FROM) {
   }
 }
 
-const db = createPgDatabase(databaseUrl, { max: Number(env.DB_POOL_MAX || 5) })
+// One SQLite file. Keep it on a volume and back it up with the files.
+const db = openSqlite(env.DATABASE_FILE || new URL('./data/ohsms.sqlite', import.meta.url).pathname)
 const { server } = await createDedicatedApp({
   db,
   origin,
@@ -101,6 +101,7 @@ const { server } = await createDedicatedApp({
     orgName: env.ORG_NAME || 'Cult Fit',
     adminEmail: env.ADMIN_EMAIL || '',
     adminPassword: env.ADMIN_PASSWORD || '',
+    mustChange: env.ADMIN_MUST_CHANGE !== 'false',
   },
 })
 
@@ -113,6 +114,9 @@ server.listen(port, '0.0.0.0', () => {
 
 // Docker sends SIGTERM before it stops the container.
 process.on('SIGTERM', () => {
-  server.close(() => db.end().finally(() => process.exit(0)))
+  server.close(() => {
+    db.close()
+    process.exit(0)
+  })
   setTimeout(() => process.exit(0), 8000).unref()
 })

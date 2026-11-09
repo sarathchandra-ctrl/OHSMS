@@ -8,9 +8,8 @@
 # (an upgrade, a reboot, a changed image) keep .env as it is and only start.
 #
 # It never generates a second set of secrets over an existing .env. A new
-# DATA_KEY_MASTER cannot open what the old one sealed; new database passwords
-# do not match the database that already exists. Both are data loss in the
-# shape of a configuration change.
+# DATA_KEY_MASTER cannot open what the old one sealed, and a new
+# SESSION_SECRET signs everyone out.
 set -euo pipefail
 
 cd "$(dirname "$0")"
@@ -93,8 +92,6 @@ else
   }
   set_env WEEHS_IMAGE "$IMAGE"
   set_env DOMAIN "$DOMAIN"
-  set_env DB_ADMIN_PASSWORD "$(openssl rand -hex 24)"
-  set_env APP_DB_PASSWORD "$(openssl rand -hex 24)"
   set_env ADMIN_EMAIL "$ADMIN_EMAIL"
   set_env ADMIN_PASSWORD "$(openssl rand -hex 10)"
   set_env SESSION_SECRET "$(openssl rand -hex 32)"
@@ -103,8 +100,7 @@ else
   mv .env.tmp .env
   echo '    .env written (readable by this user only).'
   echo '    Back it up somewhere off this server now: without DATA_KEY_MASTER'
-  echo '    encrypted fields cannot be opened, and without the passwords the data'
-  echo '    cannot be reached.'
+  echo '    encrypted fields cannot be opened.'
 fi
 
 DOMAIN="$(grep -E '^DOMAIN=' .env | cut -d= -f2-)"

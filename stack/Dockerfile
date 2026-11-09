@@ -29,10 +29,11 @@ COPY stack/ stack/
 COPY src/shared/data/adapters/postgresWire.js src/shared/data/adapters/postgresWire.js
 COPY --from=app /src/dist stack/public
 
-# Uploaded files live here; mount a volume on it (selfhost/compose.yaml does).
+# The SQLite database and uploaded files live here; mount a volume on it
+# (selfhost/compose.yaml does).
 RUN mkdir -p /srv/stack/data/files && chown -R node:node /srv/stack/data
-ENV BLOB_DIR=/srv/stack/data/files
-VOLUME ["/srv/stack/data/files"]
+ENV BLOB_DIR=/srv/stack/data/files DATABASE_FILE=/srv/stack/data/ohsms.sqlite
+VOLUME ["/srv/stack/data"]
 
 USER node
 WORKDIR /srv/stack

@@ -1,6 +1,6 @@
-// Password reset by email, through the real server (stack/app.mjs) on PGlite.
+// Password reset by email, through the real server (stack/app.mjs) on an in-memory SQLite.
 // The mail sender is a stub that records what would have been sent.
-import { PGlite } from '@electric-sql/pglite'
+import { openSqlite } from '../../../stack/sqlite.mjs'
 import { describe, expect, it } from 'vitest'
 import { createDedicatedApp } from '../../../stack/app.mjs'
 import { resendMailer } from '../../../worker/mail.js'
@@ -10,7 +10,7 @@ const ADMIN = { email: 'ana@cult.test', password: 'first-admin-pass-1' }
 async function start({ mail = true } = {}) {
   const sent = []
   const app = await createDedicatedApp({
-    db: new PGlite(),
+    db: openSqlite(),
     origin: 'https://ehs.example.com',
     sessionSecret: 's'.repeat(40),
     dataKeyMaster: Buffer.alloc(32, 7).toString('base64'),
