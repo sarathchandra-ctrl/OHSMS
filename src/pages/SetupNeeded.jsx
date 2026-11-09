@@ -1,9 +1,10 @@
 import { PlugZap } from 'lucide-react'
 import BrandMark from '../shared/branding/BrandMark'
 
-// Shown when the app cannot find its organization's server: the Cloudflare
-// Worker has no ORIGIN_URL yet, the Tunnel is down, or a local build has no
-// VITE_DATA_GATEWAY. docs/CLOUDFLARE.md is the procedure.
+// Shown when the app cannot find its organization's server: the database is
+// not set up yet, the Worker has neither a database nor an ORIGIN_URL, the
+// Tunnel is down, or a local build has no VITE_DATA_GATEWAY.
+// docs/CLOUDFLARE.md is the procedure.
 export default function SetupNeeded() {
   return (
     <div className="aurora grid min-h-screen place-items-center p-4">
@@ -27,8 +28,9 @@ export default function SetupNeeded() {
             </div>
           </div>
           <p className="text-xs text-ink-400">
-            For whoever installs it: start the server and its Cloudflare Tunnel, then set{' '}
-            <span className="font-mono">ORIGIN_URL</span> on the Worker (docs/CLOUDFLARE.md).
+            For whoever installs it: <span className="font-mono">/health</span> says what is
+            missing — usually the database&apos;s one-time setup, or the server&apos;s address on the
+            Worker (docs/CLOUDFLARE.md).
           </p>
         </div>
       </div>
