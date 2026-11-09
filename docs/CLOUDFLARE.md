@@ -35,13 +35,20 @@ Two ways, chosen by the Worker's settings in `wrangler.jsonc`:
    (`openssl rand -base64 32`), and for the first start `ADMIN_EMAIL` and
    `ADMIN_PASSWORD` (at least 10 characters). Keep a copy somewhere safe:
    losing `DATA_KEY_MASTER` loses encrypted fields.
-5. **Address.** `PUBLIC_ORIGIN` in `wrangler.jsonc` is the address people
+5. **Password-reset email (optional).** Create a Resend account
+   (resend.com), verify the sending domain there (it gives DNS records to
+   add), create an API key, then set `MAIL_FROM` in `wrangler.jsonc` (for
+   example `Cult Fit SMS <noreply@curefit.com>`) and
+   `npx wrangler secret put RESEND_API_KEY`. The sign-in page then offers
+   **Forgot password?**, which emails a one-time link valid for 30 minutes.
+   Without it, administrators reset passwords from Employees.
+6. **Address.** `PUBLIC_ORIGIN` in `wrangler.jsonc` is the address people
    type (the `workers.dev` URL, or a custom domain added under the Worker's
    Settings → Domains & Routes).
-6. **Deploy:** `npm run deploy:cloudflare`. Check
+7. **Deploy:** `npm run deploy:cloudflare`. Check
    `curl -s https://<address>/health` — it answers
    `{"ok":true,"database":"ok",…}`, or says what is missing.
-7. **Sign in** at `https://<address>` with `ADMIN_EMAIL` and `ADMIN_PASSWORD`.
+8. **Sign in** at `https://<address>` with `ADMIN_EMAIL` and `ADMIN_PASSWORD`.
    The organization (`ORG_NAME` in `wrangler.jsonc`) and this first
    administrator are created on the first request; you are asked to choose
    your own password straight away. Then add people under **Employees → Add
@@ -49,8 +56,7 @@ Two ways, chosen by the Worker's settings in `wrangler.jsonc`:
    A forgotten password is reset by an administrator (Employees → Reset
    password).
 
-Limits of A: no mail is sent (password resets go through an administrator),
-and every
+Limits of A: the only mail sent is password-reset links, and every
 request opens its database connection through Hyperdrive, so pick a database
 region close to Cloudflare's users.
 

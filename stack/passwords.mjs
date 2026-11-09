@@ -9,7 +9,7 @@
 // Every decision re-reads the live profile: a session proves who signed in,
 // not that they are still an approved admin.
 
-import { randomBytes, randomUUID, scryptSync, timingSafeEqual } from 'node:crypto'
+import { createHash, randomBytes, randomUUID, scryptSync, timingSafeEqual } from 'node:crypto'
 import { asWorker } from './engine.mjs'
 
 const WORKER = { role: 'ohsms_worker', uid: '' }
@@ -297,4 +297,93 @@ export async function bootstrapOrganization(engine, db, { orgName, adminEmail, a
   ])
   await storePassword(db, { uid: id, email: address, password: adminPassword })
   return { created: true, uid: id }
+}
+
+// ── Reset by email ──────────────────────────────────────────────────────────
+// A one-time link, valid for 30 minutes. Only the SHA-256 of the token is
+// stored (auth_pending, which the data API cannot read), so a database dump
+// cannot be turned into working links. Using a link consumes it.
+
+const RESET_TTL_SECONDS = 30 * 60
+// At most three links per address per hour: the request is unauthenticated,
+// and each one sends a mail.
+const RESET_PER_HOUR = 3
+
+function sha256(text) {
+  return createHash('sha256').update(String(text)).digest('hex')
+}
+
+/**
+ * Starts a reset. Always resolves `{ ok: true }`, whether or not the address
+ * has an account, so the answer tells nobody who works here. `send` is
+ * `({ to, subject, text }) => { sent }`; the link is built on `origin`.
+ */
+export async function requestPasswordReset(engine, db, { email, origin, send, appName = 'Cult Fit SMS' }) {
+  const address = normalizeEmail(email)
+  if (!address || typeof send !== 'function') return { ok: true }
+  const countKey = `pwresetcount:${address}`
+  const counted = await db.query(
+    `INSERT INTO auth_pending (key, value, expires_at)
+     VALUES ($1, '{"n":1}'::jsonb, now() + interval '1 hour')
+     ON CONFLICT (key) DO UPDATE SET
+       value = CASE WHEN auth_pending.expires_at > now()
+                    THEN jsonb_build_object('n', (auth_pending.value->>'n')::int + 1)
+                    ELSE '{"n":1}'::jsonb END,
+       expires_at = CASE WHEN auth_pending.expires_at > now()
+                    THEN auth_pending.expires_at ELSE EXCLUDED.expires_at END
+     RETURNING value`,
+    [countKey]
+  )
+  const v = counted.rows[0]?.value
+  if ((typeof v === 'string' ? JSON.parse(v) : v)?.n > RESET_PER_HOUR) return { ok: true }
+
+  const uid = await userByEmail(db, address)
+  const profile = uid ? await liveProfile(engine, uid) : null
+  if (!profile || !['approved', 'pending'].includes(profile.status)) return { ok: true }
+
+  const token = randomBytes(32).toString('base64url')
+  await db.query(
+    `INSERT INTO auth_pending (key, value, expires_at)
+     VALUES ($1, $2::jsonb, now() + make_interval(secs => $3))`,
+    [`pwreset:${sha256(token)}`, JSON.stringify({ uid, email: address }), RESET_TTL_SECONDS]
+  )
+  // In the fragment, not the query: a fragment is never sent to a server, so
+  // the token stays out of access logs and Referer headers.
+  const link = `${String(origin).replace(/\/$/, '')}/reset-password#token=${token}`
+  await send({
+    to: address,
+    subject: `Reset your ${appName} password`,
+    text:
+      `Someone asked to reset the password for ${address} on ${appName}.\n\n` +
+      `Choose a new password here (the link works once, for 30 minutes):\n${link}\n\n` +
+      `If this was not you, ignore this email: your password has not changed.`,
+  })
+  return { ok: true }
+}
+
+/** Completes a reset with the token from the emailed link. */
+export async function completePasswordReset(engine, db, { token, password }) {
+  if (typeof token !== 'string' || token.length < 20) return { ok: false, reason: 'link' }
+  if (passwordProblem(password)) return { ok: false, reason: 'policy' }
+  // Delete-and-return in one statement: the same link cannot be used twice,
+  // even by two requests at once.
+  const res = await db.query(
+    `DELETE FROM auth_pending WHERE key = $1 AND expires_at > now() RETURNING value`,
+    [`pwreset:${sha256(token)}`]
+  )
+  const raw = res.rows[0]?.value
+  const claim = typeof raw === 'string' ? JSON.parse(raw) : raw
+  if (!claim?.uid) return { ok: false, reason: 'link' }
+  const profile = await liveProfile(engine, claim.uid)
+  if (!profile || !['approved', 'pending'].includes(profile.status)) {
+    return { ok: false, reason: 'link' }
+  }
+  await storePassword(db, { uid: claim.uid, email: profile.email || claim.email, password })
+  if (profile.mustChangePassword === true) {
+    await engine.commit(WORKER, [
+      { type: 'update', path: 'users', id: claim.uid, data: { mustChangePassword: false } },
+    ])
+  }
+  await clearFailures(db, normalizeEmail(profile.email || claim.email))
+  return { ok: true }
 }

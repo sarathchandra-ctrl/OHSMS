@@ -49,12 +49,17 @@
     "PUBLIC_ORIGIN": "https://ohsms.sarath-chandra.workers.dev",
     // The organization created on first start.
     "ORG_NAME": "Cult Fit",
+    // Sender of password-reset emails, on a domain verified in Resend, e.g.
+    // "Cult Fit SMS <noreply@curefit.com>". With RESEND_API_KEY (secret) set,
+    // the sign-in page offers "Forgot password?"; empty keeps resets with admins.
+    "MAIL_FROM": "",
     // Leave empty to run the server here. Set to a Tunnel hostname
     // (https://ehs-origin.example.com) to use a server of your own instead.
     "ORIGIN_URL": ""
   },
   // Secrets, set with `npx wrangler secret put NAME` (never in this file):
-  //   SESSION_SECRET, DATA_KEY_MASTER, and for the first start ADMIN_EMAIL and
-  //   ADMIN_PASSWORD (the first administrator, who must change it at sign-in)
+  //   SESSION_SECRET, DATA_KEY_MASTER, RESEND_API_KEY (password-reset mail),
+  //   and for the first start ADMIN_EMAIL and ADMIN_PASSWORD (the first
+  //   administrator, who must change it at sign-in)
   "observability": { "enabled": true }
 }

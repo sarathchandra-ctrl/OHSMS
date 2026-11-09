@@ -19,6 +19,7 @@ export const RUNTIME_KEYS = [
   'S3_PRESIGN_ENDPOINT',
   'AUTH_METHOD',
   'AUTH_TOTP',
+  'RESET_BY_EMAIL',
 ]
 
 function fromPage(name) {

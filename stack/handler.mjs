@@ -21,7 +21,9 @@ import {
 } from './workers.mjs'
 import {
   changeOwnPassword,
+  completePasswordReset,
   createMember,
+  requestPasswordReset,
   resetMemberPassword,
   signInWithPassword,
 } from './passwords.mjs'
@@ -77,10 +79,18 @@ export function createOwnStackHandler({
   engine,
   db,
   sessionSecret,
+  // The public address; password-reset links are built on it.
+  origin = '',
   dataKeyMaster = '',
+  // ({ to, subject, text }) => { sent }. null: no mail, so no reset by email.
   mail = null,
   // Stored files (stack/blobs.mjs, worker/files.js). null serves no uploads.
   blobStore = null,
+  // Runs work after the response has gone (ctx.waitUntil on Cloudflare), so
+  // a reset request answers in the same time whether or not a mail is sent.
+  background = (promise) => {
+    promise.catch(() => {})
+  },
 }) {
   async function handle(req, res) {
     try {
@@ -95,6 +105,14 @@ export function createOwnStackHandler({
       }
       if (req.method === 'POST' && url.pathname === '/auth/password') {
         await onPassword(req, res)
+        return
+      }
+      if (req.method === 'POST' && url.pathname === '/auth/forgot') {
+        await onForgot(req, res)
+        return
+      }
+      if (req.method === 'POST' && url.pathname === '/auth/reset') {
+        await onReset(req, res)
         return
       }
       if (req.method === 'POST' && url.pathname === '/presign') {
@@ -178,6 +196,44 @@ export function createOwnStackHandler({
       return
     }
     send(res, 200, { token: signSession(sessionSecret, { sub: result.uid }) })
+  }
+
+  async function onForgot(req, res) {
+    const body = await readBody(req)
+    if (!mail || !origin) {
+      send(res, 503, { code: 'unavailable', message: 'Password reset by email is not set up. Ask an administrator.' })
+      return
+    }
+    background(
+      requestPasswordReset(engine, db, { email: body.email, origin, send: mail }).catch((err) =>
+        console.error('password reset mail failed', err?.message || err)
+      )
+    )
+    // The same answer whether or not the address has an account.
+    send(res, 200, {
+      ok: true,
+      message: 'If that address has an account, a reset link is on its way. It works for 30 minutes.',
+    })
+  }
+
+  async function onReset(req, res) {
+    const body = await readBody(req)
+    const result = await completePasswordReset(engine, db, {
+      token: body.token,
+      password: body.password,
+    })
+    if (!result.ok) {
+      send(res, 400, {
+        code: 'invalid-argument',
+        reason: result.reason,
+        message:
+          result.reason === 'policy'
+            ? 'Choose a password of at least 10 characters.'
+            : 'This reset link has expired or was already used. Ask for a new one.',
+      })
+      return
+    }
+    send(res, 200, { ok: true })
   }
 
   async function onPresign(req, res) {

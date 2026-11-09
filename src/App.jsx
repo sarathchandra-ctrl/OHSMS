@@ -15,6 +15,8 @@ const PublicPermit = lazy(() => import('./modules/ptw/pages/PublicPermit'))
 // Public / auth pages (eager — small, first paint).
 import SetupNeeded from './pages/SetupNeeded'
 import Login from './pages/auth/Login'
+import ForgotPassword from './pages/auth/ForgotPassword'
+import ResetPassword from './pages/auth/ResetPassword'
 import PendingApproval from './pages/auth/PendingApproval'
 import NotFound from './pages/NotFound'
 
@@ -119,6 +121,8 @@ export default function App() {
     <Routes>
       {/* Public */}
       <Route path="/login" element={<Login />} />
+      <Route path="/forgot-password" element={<ForgotPassword />} />
+      <Route path="/reset-password" element={<ResetPassword />} />
       {/* Scanned from a printed extinguisher label — deliberately public. */}
       <Route path="/qr/:token" element={<ErrorBoundary><Suspense fallback={<SamLoading />}><QrLanding /></Suspense></ErrorBoundary>} />
       {/* The QR printed on every work permit. Public: whoever scans a permit

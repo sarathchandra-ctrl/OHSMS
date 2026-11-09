@@ -115,6 +115,7 @@ export async function createDedicatedApp({
     engine,
     db,
     sessionSecret,
+    origin,
     blobStore: blobDir
       ? createBlobStore({ dir: blobDir, key: blobKeyFrom(sessionSecret), origin })
       : null,
@@ -138,7 +139,7 @@ export async function createDedicatedApp({
           'Cache-Control': 'no-store',
         })
         return res.end(
-          req.method === 'HEAD' ? undefined : runtimeConfigScript({ origin })
+          req.method === 'HEAD' ? undefined : runtimeConfigScript({ origin, resetByEmail: Boolean(mail) })
         )
       }
       if (root && (req.method === 'GET' || req.method === 'HEAD') && !isApi(url.pathname)) {

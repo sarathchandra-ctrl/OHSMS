@@ -20,13 +20,15 @@ export const API_PREFIXES = [
  * Every value is a JSON string, and `<` is escaped, so nothing a request
  * carried can close the script or start another one.
  */
-export function runtimeConfigScript({ origin }) {
+export function runtimeConfigScript({ origin, resetByEmail = false }) {
   const config = {
     DATA_DRIVER: 'postgres',
     DATA_GATEWAY: origin,
     STORAGE_DRIVER: 's3',
     S3_PRESIGN_ENDPOINT: `${origin}/presign`,
     AUTH_METHOD: 'password',
+    // Whether the sign-in page offers "Forgot password?" (a mail sender is set).
+    RESET_BY_EMAIL: resetByEmail ? 'on' : 'off',
     AUTH_TOTP: 'off',
   }
   const json = JSON.stringify(config).replace(/</g, '\\u003c')

@@ -8,10 +8,13 @@
 //     ADMIN_PASSWORD. Nothing is created once an admin exists.
 //   - The schema is applied once per database version, under an advisory
 //     lock, by whichever request gets there first.
-//   - No mail.
+//   - Mail (password-reset links) goes through Resend (worker/mail.js) when
+//     MAIL_FROM and RESEND_API_KEY are set; without them there is no reset
+//     by email and an administrator resets passwords instead.
 //
-// Settings: PUBLIC_ORIGIN, ORG_NAME (vars). Secrets: SESSION_SECRET,
-// DATA_KEY_MASTER, ADMIN_EMAIL, ADMIN_PASSWORD. docs/CLOUDFLARE.md.
+// Settings: PUBLIC_ORIGIN, ORG_NAME, MAIL_FROM (vars). Secrets:
+// SESSION_SECRET, DATA_KEY_MASTER, ADMIN_EMAIL, ADMIN_PASSWORD,
+// RESEND_API_KEY. docs/CLOUDFLARE.md.
 
 import SCHEMA from '../stack/schema.sql'
 import { createPgDatabase } from '../stack/pg.mjs'
@@ -22,6 +25,7 @@ import { runtimeConfigScript } from '../stack/runtimeConfig.mjs'
 import { blobKeyFrom } from '../stack/blobSign.mjs'
 import { createR2FileStore } from './files.js'
 import { nodeRequest, nodeResponse } from './bridge.js'
+import { resendMailer } from './mail.js'
 
 // Bumps whenever schema.sql changes, so a new deploy applies it once.
 function fingerprint(text) {
@@ -118,10 +122,17 @@ export async function serveOnCloudflare(request, env, ctx) {
     })
     if (url.pathname === '/health') {
       await db.query('SELECT 1')
-      return json(200, { ok: true, database: 'ok', files: Boolean(files), schema: SCHEMA_VERSION })
+      return json(200, {
+        ok: true,
+        database: 'ok',
+        files: Boolean(files),
+        mail: Boolean(env.RESEND_API_KEY && env.MAIL_FROM),
+        schema: SCHEMA_VERSION,
+      })
     }
+    const mail = resendMailer({ apiKey: env.RESEND_API_KEY, from: env.MAIL_FROM })
     if (url.pathname === '/runtime-config.js') {
-      return new Response(runtimeConfigScript({ origin }), {
+      return new Response(runtimeConfigScript({ origin, resetByEmail: Boolean(mail) }), {
         headers: {
           'Content-Type': 'text/javascript; charset=utf-8',
           'Cache-Control': 'no-store',
@@ -132,9 +143,12 @@ export async function serveOnCloudflare(request, env, ctx) {
       engine: createEngine(db),
       db,
       sessionSecret: env.SESSION_SECRET,
+      origin,
       dataKeyMaster: env.DATA_KEY_MASTER,
-      mail: null,
+      mail,
       blobStore: files,
+      // The response goes first; the mail is sent after it.
+      background: (promise) => ctx?.waitUntil?.(promise),
     })
     const req = nodeRequest(request)
     const { res, done, toResponse } = nodeResponse()
