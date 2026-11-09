@@ -23,9 +23,7 @@ which:
    source as tagged (`weehs-2.1.0-source.tar.gz`), `release.json` (version,
    commit, image, digest), and `SHA256SUMS` for both files.
 
-The same tag also deploys the shared Firebase site (`deploy.yml`, after your
-approval) and attaches the Android APK (`android-apk.yml`). The three are
-independent: a failed APK build does not stop the image, and vice versa.
+Android packages are no longer built or attached to releases.
 
 ## Making a release
 

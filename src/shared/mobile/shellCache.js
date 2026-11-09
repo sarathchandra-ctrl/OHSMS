@@ -75,9 +75,7 @@ export function shellCacheDecision(rawUrl, { method = 'GET', origin = '' } = {})
   if (url.pathname === '/terms' || url.pathname === '/terms/' || url.pathname === '/terms.html') {
     return 'pass'
   }
-  // Store listings and the APK. The navigate branch serves index.html when
-  // the network fails. That HTML is not a config, and it is not an installable
-  // package: a phone that saved it would try to open a web page as an APK.
+  // Store settings and legacy downloads must never fall back to the app shell.
   if (url.pathname === '/store.json') return 'pass'
   if (url.pathname.startsWith('/downloads/')) return 'pass'
   if (/\.(?:js|css|woff2?|png|svg|webp|ico|webmanifest)$/i.test(url.pathname)) return 'asset'

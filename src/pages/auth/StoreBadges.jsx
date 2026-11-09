@@ -1,32 +1,15 @@
 import { useEffect, useId, useState } from 'react'
 import { isNativePlatform } from '../../shared/mobile/native'
-import {
-  DEFAULT_APK_URL,
-  DEFAULT_APK_VERSION,
-  loadApkRelease,
-  loadPublicStoreConfig,
-  resolveStoreLinks,
-} from '../../shared/mobile/storeLinks'
+import { loadPublicStoreConfig, resolveStoreLinks } from '../../shared/mobile/storeLinks'
 
 // Official artwork, unmodified, and only once that store has a listing.
-// Google's PNG already includes its clear space and is shown at 60px tall.
 // Apple's black "Download on the App Store" lockup is the 40px-tall US-UK
-// badge. The gap between them is at least a quarter of that 40px.
+// badge.
 //
 // Until those listings exist the marks are not drawn. A "Coming soon" badge
-// is a link that goes nowhere, which is what this row used to be. Android
-// downloads the APK this site hosts. An iPhone cannot install an app file
-// from the browser, so that button opens the Home Screen steps instead.
+// is a link that goes nowhere. The iPhone install button opens the Home Screen steps.
 
 const BADGES = [
-  {
-    key: 'play',
-    src: '/badges/google-play-badge.png',
-    alt: 'Get it on Google Play',
-    width: 155,
-    height: 60,
-    className: 'h-[60px] w-auto',
-  },
   {
     key: 'appStore',
     src: '/badges/app-store-badge.svg',
@@ -37,27 +20,18 @@ const BADGES = [
   },
 ]
 
-export default function StoreBadges({
-  native,
-  links,
-  release,
-  load = loadPublicStoreConfig,
-  loadRelease = loadApkRelease,
-}) {
+export default function StoreBadges({ native, links, load = loadPublicStoreConfig }) {
   const hidden = native ?? isNativePlatform()
   const titleId = useId()
   const [guide, setGuide] = useState(false)
   const [resolved, setResolved] = useState(() =>
     links ? resolveStoreLinks({ env: envFrom(links) }) : resolveStoreLinks({ env: import.meta.env })
   )
-  const [apk, setApk] = useState(
-    () => release || { version: DEFAULT_APK_VERSION, url: DEFAULT_APK_URL }
-  )
 
   useEffect(() => {
     if (hidden || links) return undefined
     const fromEnv = resolveStoreLinks({ env: import.meta.env })
-    if (fromEnv.play && fromEnv.appStore && fromEnv.testFlight) return undefined
+    if (fromEnv.appStore && fromEnv.testFlight) return undefined
     let cancel = false
     load().then((config) => {
       if (!cancel) setResolved(resolveStoreLinks({ env: import.meta.env, config }))
@@ -66,17 +40,6 @@ export default function StoreBadges({
       cancel = true
     }
   }, [hidden, links, load])
-
-  useEffect(() => {
-    if (hidden || release) return undefined
-    let cancel = false
-    loadRelease().then((next) => {
-      if (!cancel) setApk(next)
-    })
-    return () => {
-      cancel = true
-    }
-  }, [hidden, release, loadRelease])
 
   useEffect(() => {
     if (!guide) return undefined
@@ -94,13 +57,6 @@ export default function StoreBadges({
   return (
     <div className="mt-4">
       <div className="space-y-2">
-        <a href={apk.url} className="btn btn-primary w-full" aria-describedby="apk-install-note">
-          Download APK
-        </a>
-        <p id="apk-install-note" className="text-center text-[11px] leading-snug text-ink-600">
-          Version {apk.version}. After it downloads, open the file. Android asks you to allow this
-          browser to install unknown apps.
-        </p>
         <button
           type="button"
           className="btn btn-ghost w-full"
@@ -203,7 +159,6 @@ export default function StoreBadges({
 
 function envFrom(links) {
   return {
-    VITE_PLAY_STORE_URL: links.play || '',
     VITE_APP_STORE_URL: links.appStore || '',
     VITE_TESTFLIGHT_URL: links.testFlight || '',
   }

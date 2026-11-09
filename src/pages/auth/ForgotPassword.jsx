@@ -4,6 +4,7 @@ import { Mail } from 'lucide-react'
 import { Button, Field, Input } from '../../shared/ui'
 import { ownStackGateway } from '../../shared/auth/ownStackSession'
 import AuthLayout from './AuthLayout'
+import { runtimeEnv } from '../../shared/runtimeConfig'
 
 // Asks the server to email a one-time reset link. The answer is the same
 // whether or not the address has an account (stack/passwords.mjs).
@@ -11,6 +12,7 @@ export default function ForgotPassword() {
   const [email, setEmail] = useState('')
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState('')
+  const emailResetEnabled = runtimeEnv('RESET_BY_EMAIL') === 'on'
 
   const submit = async (e) => {
     e.preventDefault()
@@ -33,14 +35,27 @@ export default function ForgotPassword() {
   return (
     <AuthLayout
       title="Forgot password"
-      subtitle="We will email you a link to choose a new one"
+      subtitle={
+        emailResetEnabled
+          ? 'We will email you a link to choose a new one'
+          : 'Recover access to your account'
+      }
       footer={
-        <Link to="/login" className="font-semibold text-brand-700 underline-offset-2 hover:underline">
+        <Link
+          to="/login"
+          className="font-semibold text-brand-700 underline-offset-2 hover:underline"
+        >
           Back to sign in
         </Link>
       }
     >
-      {message ? (
+      {!emailResetEnabled ? (
+        <p role="status" className="text-sm text-ink-700">
+          Password reset emails are not enabled for this site. Ask an administrator to reset your
+          password from Employees. You can then sign in with the temporary password and choose a new
+          one.
+        </p>
+      ) : message ? (
         <p role="status" className="rounded-2xl bg-brand-50 px-4 py-3 text-sm text-brand-800">
           {message}
         </p>

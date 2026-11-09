@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import { KeyRound } from 'lucide-react'
@@ -7,20 +7,29 @@ import { ownStackGateway } from '../../shared/auth/ownStackSession'
 import { validatePassword, passwordLengthHint } from '../../shared/auth/passwordPolicy'
 import AuthLayout from './AuthLayout'
 
-/** The token from the emailed link's #fragment, taken once and cleared from the address bar. */
-function takeToken() {
+/** Reading during render must be pure: StrictMode may run the initializer twice. */
+function readToken() {
   const hash = typeof window !== 'undefined' ? window.location.hash : ''
   const token = new URLSearchParams(hash.replace(/^#/, '')).get('token') || ''
-  if (token) window.history.replaceState({}, '', window.location.pathname)
   return token
 }
 
 export default function ResetPassword() {
-  const [token] = useState(takeToken)
+  const [token] = useState(readToken)
   const [pw, setPw] = useState('')
   const [pw2, setPw2] = useState('')
   const [busy, setBusy] = useState(false)
   const [done, setDone] = useState(false)
+
+  useEffect(() => {
+    if (token && readToken() === token) {
+      window.history.replaceState(
+        window.history.state,
+        '',
+        window.location.pathname + window.location.search
+      )
+    }
+  }, [token])
 
   const submit = async (e) => {
     e.preventDefault()

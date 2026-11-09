@@ -68,27 +68,16 @@ tools/fls-dashboard/.mbkey
 tools/fls-dashboard/data.json
 tools/fls-dashboard/fls-dashboard.html
 
-# Native shells. `cap sync` copies the built web app into the projects; those
-# copies are not source. Release signing material is never committed — a
-# keystore in git is a key anyone can sign as us. The Android debug keystore
-# is the public debug key and may stay.
-android/.gradle/
-android/local.properties
-android/build/
-android/app/build/
-android/app/src/main/assets/public/
-android/capacitor-cordova-android-plugins/build/
+# Native iOS shell. `cap sync ios` copies the built web app into the project.
+# Generated files and release signing material must stay out of git.
 ios/App/Pods/
 ios/App/build/
 ios/App/App/public/
 ios/DerivedData/
 *.jks
-# The login page links here. The file is produced by the Android workflow and
-# copied in at hosting deploy. A binary APK does not belong in git.
+# Legacy Android binaries must not be added back to the repository.
 public/downloads/*.apk
 *.keystore
-!android/app/debug.keystore
-android/keystore.properties
 **/keystore.properties
 *.p12
 *.mobileprovision

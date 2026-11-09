@@ -3,7 +3,6 @@
   "appName": "WEEHS OHSMS",
   "webDir": "dist",
   "server": {
-    "androidScheme": "https",
     "hostname": "localhost"
   },
   "plugins": {
@@ -11,8 +10,6 @@
       "launchAutoHide": false,
       "launchFadeOutDuration": 200,
       "backgroundColor": "#f6e3bb",
-      "androidSplashResourceName": "splash",
-      "androidScaleType": "CENTER",
       "showSpinner": false,
       "splashFullScreen": true,
       "splashImmersive": false

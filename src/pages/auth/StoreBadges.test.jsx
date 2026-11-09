@@ -3,93 +3,68 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import StoreBadges from './StoreBadges'
 
-const PLAY = 'https://play.google.com/store/apps/details?id=org.weehs.ohsms'
 const APPLE = 'https://apps.apple.com/app/weehs-ohsms/id0000000000'
 const FLIGHT = 'https://testflight.apple.com/join/abc'
-const release = { version: '1.0', url: '/downloads/weehs-ohsms.apk' }
 
 afterEach(cleanup)
 
 describe('StoreBadges', () => {
-  it('offers the APK and the iPhone steps, and no store badge, when no listing is set', () => {
-    render(<StoreBadges links={{ play: null, appStore: null }} release={release} />)
-    expect(screen.queryByText('Coming soon')).toBeNull()
+  it('offers iPhone installation without an Android package or store listing', () => {
+    render(<StoreBadges links={{ appStore: null }} />)
+    expect(screen.queryByRole('link', { name: /APK|Google Play/i })).toBeNull()
+    expect(screen.queryByText(/install unknown apps/i)).toBeNull()
     expect(screen.queryByRole('img')).toBeNull()
-    const apk = screen.getByRole('link', { name: 'Download APK' })
-    expect(apk.getAttribute('href')).toBe('/downloads/weehs-ohsms.apk')
-    expect(screen.getByText(/Version 1\.0/)).toBeTruthy()
-    expect(screen.getByText(/install unknown apps/)).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Install on iPhone' })).toBeTruthy()
   })
 
-  it('explains Home Screen install and does not offer an app file for iPhone', () => {
-    render(<StoreBadges links={{ play: null, appStore: null }} release={release} />)
+  it('explains Home Screen install and closes the guide', () => {
+    render(<StoreBadges links={{ appStore: null }} />)
     fireEvent.click(screen.getByRole('button', { name: 'Install on iPhone' }))
-    const dialog = screen.getByRole('dialog', { name: 'Install on iPhone' })
-    expect(dialog).toBeTruthy()
+    expect(screen.getByRole('dialog', { name: 'Install on iPhone' })).toBeTruthy()
     expect(screen.getByText(/Add to Home Screen/)).toBeTruthy()
-    expect(screen.queryByText(/\.ipa/)).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'Close' }))
     expect(screen.queryByRole('dialog')).toBeNull()
   })
 
-  it('links a store badge only when that store has an https listing', () => {
-    render(<StoreBadges links={{ play: PLAY, appStore: APPLE }} release={release} />)
-    const play = screen.getByRole('link', { name: /Get it on Google Play/ })
+  it('links an App Store badge only to a valid listing', () => {
+    render(<StoreBadges links={{ appStore: APPLE }} />)
     const apple = screen.getByRole('link', { name: /Download on the App Store/ })
-    expect(play.getAttribute('href')).toBe(PLAY)
     expect(apple.getAttribute('href')).toBe(APPLE)
-    expect(play.getAttribute('rel')).toBe('noopener noreferrer')
-    expect(screen.getByRole('link', { name: 'Download APK' })).toBeTruthy()
+    expect(apple.getAttribute('rel')).toBe('noopener noreferrer')
+    cleanup()
+    render(<StoreBadges links={{ appStore: 'https://evil.example/app' }} />)
+    expect(screen.queryByRole('link', { name: /App Store/ })).toBeNull()
   })
 
-  it('drops a listing that is not the real store and keeps the download', () => {
-    render(
-      <StoreBadges
-        links={{ play: 'https://evil.example/app', appStore: APPLE }}
-        release={release}
-      />
-    )
-    expect(screen.queryByRole('link', { name: /Google Play/ })).toBeNull()
-    expect(screen.getByRole('link', { name: /App Store/ }).getAttribute('href')).toBe(APPLE)
-    expect(screen.getByRole('link', { name: 'Download APK' }).getAttribute('href')).toBe(
-      '/downloads/weehs-ohsms.apk'
-    )
-  })
-
-  it('shows a TestFlight link only for testflight.apple.com', () => {
-    render(
-      <StoreBadges links={{ play: null, appStore: null, testFlight: FLIGHT }} release={release} />
-    )
+  it('shows a TestFlight link only for the official host', () => {
+    render(<StoreBadges links={{ appStore: null, testFlight: FLIGHT }} />)
     expect(screen.getByRole('link', { name: /Join the TestFlight/ }).getAttribute('href')).toBe(
       FLIGHT
     )
     cleanup()
-    render(
-      <StoreBadges
-        links={{ play: null, appStore: null, testFlight: 'https://evil.example/join' }}
-        release={release}
-      />
-    )
+    render(<StoreBadges links={{ testFlight: 'https://evil.example/join' }} />)
     expect(screen.queryByRole('link', { name: /TestFlight/ })).toBeNull()
   })
 
-  it('is absent inside the native shell and does not read the public config', () => {
+  it('does not fetch installation settings inside the native shell', () => {
     const load = vi.fn()
-    const loadRelease = vi.fn()
-    const { container } = render(<StoreBadges native load={load} loadRelease={loadRelease} />)
+    const { container } = render(<StoreBadges native load={load} />)
     expect(container.firstChild).toBeNull()
     expect(load).not.toHaveBeenCalled()
-    expect(loadRelease).not.toHaveBeenCalled()
   })
 
-  it('fills a blank env from the public config', async () => {
-    const load = vi.fn(async () => ({ playStoreUrl: PLAY, appStoreUrl: '', testFlightUrl: '' }))
-    render(<StoreBadges load={load} release={release} />)
-    expect((await screen.findByRole('link', { name: /Google Play/ })).getAttribute('href')).toBe(
-      PLAY
-    )
-    expect(screen.queryByRole('link', { name: /App Store/ })).toBeNull()
-    expect(load).toHaveBeenCalled()
+  it('loads only public store settings, with no APK release request', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch')
+    const load = vi.fn(async () => ({ appStoreUrl: APPLE }))
+    try {
+      render(<StoreBadges load={load} />)
+      expect((await screen.findByRole('link', { name: /App Store/ })).getAttribute('href')).toBe(
+        APPLE
+      )
+      expect(load).toHaveBeenCalledOnce()
+      expect(fetchSpy).not.toHaveBeenCalled()
+    } finally {
+      fetchSpy.mockRestore()
+    }
   })
 })

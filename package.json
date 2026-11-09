@@ -14,15 +14,13 @@
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "mobile:sync": "npm run build && npx cap sync",
-    "mobile:android": "npx cap open android",
+    "mobile:sync": "npm run build && npx cap sync ios",
     "mobile:ios": "npx cap open ios",
     "server": "node stack/main.mjs",
     "deploy:cloudflare": "npm run build && wrangler deploy"
   },
   "dependencies": {
     "@capacitor-mlkit/barcode-scanning": "^8.2.1",
-    "@capacitor/android": "^8.5.3",
     "@capacitor/core": "^8.5.3",
     "@capacitor/ios": "^8.5.3",
     "@capacitor/splash-screen": "^8.0.2",

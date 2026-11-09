@@ -31,7 +31,3 @@
 
 /store.json
   Content-Type: application/json; charset=utf-8
-
-/downloads/*.apk
-  Content-Type: application/vnd.android.package-archive
-  Content-Disposition: attachment

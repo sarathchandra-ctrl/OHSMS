@@ -4,8 +4,7 @@
 # that what a company downloaded is what was published. docs/RELEASES.md.
 #
 # deploy.yml ships the shared Firebase site on the same tags and is
-# unaffected. android-apk.yml also writes to the release; whichever of the two
-# runs first creates it, and the other adds to it.
+# unaffected.
 name: Release
 
 on:
@@ -144,9 +143,6 @@ jobs:
             echo
             echo "Check a download: \`sha256sum -c SHA256SUMS\` next to the files below."
             echo
-            echo "The Android APK for the shared site's download page is attached when its"
-            echo "build finishes."
-            echo
           } > notes.md
 
       - name: Create or update the release
@@ -155,8 +151,7 @@ jobs:
           VERSION: ${{ steps.names.outputs.version }}
         run: |
           FILES=(out/weehs-$VERSION-source.tar.gz out/weehs-$VERSION-selfhost.tar.gz out/release.json out/SHA256SUMS)
-          # Create, or — when android-apk.yml created it first, even a moment
-          # ago — keep its file, replace its notes, and add ours.
+          # On a re-run, update the release artifacts while preserving operator notes.
           if ! gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" \
               --title "$GITHUB_REF_NAME" --notes-file notes.md --generate-notes "${FILES[@]}"; then
             # Replace the notes only if they are not already ours: on a re-run

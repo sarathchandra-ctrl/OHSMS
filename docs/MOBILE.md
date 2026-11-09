@@ -1,10 +1,10 @@
 # Mobile app
 
 The phone app is this repository. There is no second codebase. A browser can
-install the hosted site, and the Android and iOS projects wrap the same
+install the hosted site, and the iOS project wraps the same
 `npm run build` output.
 
-Nothing in the native projects is a secret. Release keystores, provisioning
+Nothing in the native project is a secret. Provisioning
 profiles and App Check debug tokens stay off git. `.gitignore` refuses the
 usual filenames; it cannot refuse one that was renamed.
 
@@ -35,8 +35,7 @@ sets `/sw.js` to `no-cache`, after that rule, so a deploy can replace the
 worker. The HTML that registers it is also `no-cache`.
 
 **Store apps.** `capacitor.config.json` sets `appId` to `org.weehs.ohsms`,
-`appName` to `WEEHS OHSMS`, and `webDir` to `dist`. Android's WebView origin
-is `https://localhost` (`androidScheme` + `hostname`). iOS stays on
+`appName` to `WEEHS OHSMS`, and `webDir` to `dist`. iOS stays on
 `capacitor://localhost`. Capacitor will not serve the iOS shell over `https`;
 setting `iosScheme` to `https` is rejected by the tool.
 
@@ -64,12 +63,8 @@ matter, beyond the usual `dist/`:
     the immutable `*.js` header would pin the worker for a year and a
     deploy would not replace the shell.
 - `public/badges/` and `public/store.json`. The login page shows the
-  official Play and App Store badges only when those URLs are set.
+  official App Store badge only when those URLs are set.
   `store.json` is `no-cache`, and the shell worker does not cache it.
-- `public/downloads/weehs-ohsms.apk` and `weehs-ohsms.json`. The APK is not
-  in git. Hosting serves it as `application/vnd.android.package-archive`
-  with `no-cache`, and the shell worker does not cache `/downloads/`. The
-  badges are hidden inside the Capacitor shell.
 
 Deploy hosting from a checkout of this commit after `npm run build`, and
 deploy the Firestore rules in the same release. The rules gained
@@ -140,7 +135,7 @@ the OS asks for reduced motion. The loops are transform and opacity only.
 ## Signing in, inside the WebView
 
 Email and password (`signInWithEmailAndPassword`) does not consult the
-authorised-domain list. It works in the Android and iOS shells with no
+authorised-domain list. It works in the iOS shell with no
 console change.
 
 The browser keeps using session persistence, so a shared workstation signs
@@ -149,18 +144,6 @@ failure that motivated that split: opening the camera or locking the phone
 tears the WebView down, session persistence treats that as the window
 closing, and the person standing at a cylinder is back on the login screen.
 `IdleGuard` still ends a session that sits unused.
-
-Organisation single sign-on is the part that needs a console change, and the
-two platforms are not the same.
-
-**Android.** A WebView usually refuses the popup, and the app then falls
-back to `signInWithRedirect`. The redirect can return only if the WebView's
-origin is an authorised domain. Add `localhost` under Authentication →
-Settings → Authorised domains, on the Firebase project this build talks to
-(`weehs-4eb28` for the deployment at suite.weehs.org). `localhost` is the
-hostname in `capacitor.config.json`. Do not add a port. After that, Google
-and Microsoft redirect can finish. Until it is added, use email and password;
-the redirect comes back to a domain Firebase rejects.
 
 **iOS.** The origin is `capacitor://localhost`. Authorised domains are web
 origins Firebase can put on an `https` allow-list, and this one cannot be
@@ -207,11 +190,8 @@ for an auditor. A mirror whose `orgId` is another organisation, or is
 missing, gets an explanation and no write button. The mirror being readable
 is not permission to write the asset.
 
-On Android and iOS the camera is `@capacitor-mlkit/barcode-scanning`
-(`BarcodeScanner.scan`, QR only). On Android that call uses the Google Play
-barcode module, which is not on the device until the first install. The
-scan screen waits for that download. A phone without Play services cannot
-complete it; the paste field still works. iOS uses ML Kit through CocoaPods.
+On iOS the camera is `@capacitor-mlkit/barcode-scanning`
+(`BarcodeScanner.scan`, QR only), using ML Kit through CocoaPods.
 The plugin does not support Swift Package Manager — do not switch the iOS
 project to SPM or the scanner pod will not link.
 
@@ -222,156 +202,20 @@ the camera permission and the `camera=(self)` header above.
 The native projects carry the platform strings that make those cameras
 legal to open:
 
-- `android/app/src/main/AndroidManifest.xml` — `CAMERA`, and
-  `com.google.mlkit.vision.DEPENDENCIES` = `barcode_ui` inside
-  `<application>`. Without the meta-data the module is downloaded on first
-  scan instead of with the app, and the first person on a poor connection
-  waits in front of the cylinder.
 - `ios/App/App/Info.plist` — `NSCameraUsageDescription`.
 - `ios/App/Podfile` — `platform :ios, '15.5'`, which is ML Kit's floor.
 
-## Direct install, before the stores
+## Installing on a phone
 
-The login page does not show a store badge until that listing URL is set
-(`VITE_PLAY_STORE_URL`, `VITE_APP_STORE_URL`, or the same keys in
-`public/store.json`). What it shows instead:
+Android uses the website or installed PWA. There is no Android native project,
+APK build workflow, sideload download, or Google Play listing in this repository.
+In Chrome, open the website and use the browser's Install app or Add to Home Screen option.
 
-- **Download APK** links to `/downloads/weehs-ohsms.apk` on this origin. The
-  version next to it is `version` in `public/downloads/weehs-ohsms.json`.
-  A phone will ask for permission to install from the browser. That
-  permission is per browser, in that browser's app settings. There is no
-  separate "unknown sources" switch on current Android.
-- **Install on iPhone** opens the Safari steps: Share, Add to Home Screen.
-  An iPhone cannot install an `.ipa` from the browser, so the page does not
-  offer one. `VITE_TESTFLIGHT_URL` (or `testFlightUrl` in `store.json`) adds
-  a TestFlight link when it is `https://testflight.apple.com/...`.
-- The whole block is hidden inside the Capacitor shell. Someone who already
-  has the app open does not need a second copy.
-
-### Getting the APK onto hosting
-
-The file is produced by the **Android APK** workflow
-(`.github/workflows/android-apk.yml`). It runs on a version tag (`v*`) and
-from the Actions tab. It does not run on pull requests.
-
-1. Set the same repository variables the hosting build uses (`VITE_FIREBASE_*`
-   and the rest named in `.github/workflows/deploy.yml`). Without them the
-   APK still builds, and then cannot sign in.
-2. For a signature that survives the next build, create an upload keystore
-   **outside this repository** (the command is under Building Android) and
-   add four Actions secrets: `ANDROID_KEYSTORE_BASE64` (the keystore file,
-   base64, no line breaks), `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`,
-   `ANDROID_KEY_PASSWORD`. All four must be set. If any is missing the
-   workflow ships a debug-signed APK instead. A debug-signed APK and a later
-   release-signed APK do not install over each other; the phone has to
-   uninstall first. A debug keystore created on the runner is also a new key
-   every run, so two debug APKs from CI may not install over each other either.
-3. Run the workflow. The artifact `weehs-ohsms-apk` holds `weehs-ohsms.apk`
-   and `weehs-ohsms.json`. On a tag, those two files are also attached to
-   that GitHub release.
-4. Hosting only serves what `npm run build` copied out of `public/`. The
-   Deploy workflow, on a version tag, downloads the release assets into
-   `public/downloads/` before the build. The tag push starts both workflows
-   at once, so that download usually misses. Re-run **Deploy** after
-   **Android APK** is green. If the asset is not there yet, Deploy still
-   ships the site and the button 404s.
-5. From a machine, the same placement is:
-
-```bash
-mkdir -p public/downloads
-cp weehs-ohsms.apk public/downloads/weehs-ohsms.apk
-cp weehs-ohsms.json public/downloads/weehs-ohsms.json
-npm run build
-firebase deploy --only hosting
-```
-
-`public/downloads/*.apk` is gitignored. Do not commit the binary. The JSON
-in git is the version the page shows until a deploy replaces it. A Firebase
-Storage URL may be put in that JSON's `url` instead of the hosting path;
-only `firebasestorage.googleapis.com` and `*.firebasestorage.app` are
-accepted, and anything else is ignored in favour of
-`/downloads/weehs-ohsms.apk`.
-
-## Android backup
-
-The installed app keeps the Firebase session in the WebView. Android uses
-local persistence, so the refresh token sits in IndexedDB under
-`app_webview`, and a few preferences sit in `localStorage` in that same
-directory. Auto Backup copies the private data directory. On Android 12 and
-later, some manufacturers still copy it in a device-to-device transfer when
-`android:allowBackup` is false.
-
-The manifest turns `allowBackup` off and points at two rule files that
-exclude every backup domain, including device-protected storage.
-`res/xml/backup_rules.xml` is what Android 7 through 11 read (`minSdk` is
-24). `res/xml/data_extraction_rules.xml` is what Android 12 and later read.
-It has its own `cloud-backup` and `device-transfer` sections, because the
-older file does not govern device-to-device transfer on those versions.
-`tools:replace` keeps a library manifest from switching any of those three
-attributes back on. No extra permission is involved.
-
-A phone keeps the old behaviour until it installs a build made from this
-manifest. A copy already in Google Drive, or already moved by a cable
-transfer, is not deleted, and no Firebase token is revoked. A debug APK is
-still `debuggable`; USB debugging on a developer phone can read that
-process. That path is not cloud backup.
-
-Android 16 QPR2 (API 36.1) adds transfer to iOS as a third mode. This app
-targets API 36 and does not declare that section. Declaring it needs an
-Apple team id, which is not invented here. Cache and `no_backup` directories
-are already left out by the platform; the session is not stored in them.
-
-## Building Android
-
-Needs Android Studio (current stable) and JDK 21. Capacitor 8 compiles
-against Java 21; a machine whose only JDK is 17 will fail the Gradle build
-with a source-release error. Android Studio's bundled JDK is the one to
-point `JAVA_HOME` at.
-
-```bash
-npm ci
-npm run mobile:sync    # production build, then copies dist/ into the native projects
-npm run mobile:android # opens Android Studio
-```
-
-`mobile:sync` is the step that has to be re-run after every web change. The
-native project does not watch `src/`.
-
-**Debug APK**, for a device over USB. In Android Studio: Build → Build
-APK(s). The debug keystore is the public Android debug key. It installs on
-a device with USB debugging. It is not what Play accepts.
-
-**Release AAB**, for Play. Play requires an Android App Bundle, and Play
-App Signing holds the app signing key. You hold a separate upload key.
-
-1. Create the upload keystore **outside this repository**.
-   `keytool -genkey -v -keystore upload.jks -keyalg RSA -keysize 2048 -validity 10000 -alias upload`
-   Store the file and both passwords in the organisation's password
-   manager. Losing the upload key is a support ticket with Google, not a
-   new keystore.
-2. Do not write the keystore path or the passwords into a file that is
-   committed. `android/keystore.properties` is gitignored; if you use one,
-   keep it on the build machine only. Android Studio's Build → Generate
-   Signed Bundle dialog asks for the keystore path at build time and does
-   not write it back into the project. Prefer that.
-3. Upload the `.aab` to Play Console, internal testing track first.
-4. Each upload needs a higher `versionCode` than the last one Play
-   accepted. `versionName` is the number people see. Both live in
-   `android/app/build.gradle`. Bump them in the same commit as the release
-   you intend to ship, not as a drive-by.
-
-Play Console is a separate account from Firebase (a one-time registration
-fee; the store publishes the current amount). The listing needs a privacy
-policy URL, a data-safety form, and a declaration for the camera
-permission. The camera is used to scan equipment QR codes and to attach
-photos to inspections, defects and incident reports. Content rating and
-target API level are whatever Play currently requires for new apps; the
-console blocks a release that is behind, so read that block rather than a
-number copied into this file.
-
-A build anyone can install from Play also needs the app to be reviewed.
-Internal testing is the track that does not wait on that, and it is the
-right first upload.
+On iPhone, the sign-in page's **Install on iPhone** button explains Safari's
+Share → Add to Home Screen flow. The optional App Store and TestFlight links
+appear only when `VITE_APP_STORE_URL` and `VITE_TESTFLIGHT_URL` (or their keys
+in `public/store.json`) name valid Apple listings. These links are hidden
+inside the native iOS shell.
 
 ## Building iOS
 
@@ -407,7 +251,7 @@ later promotion of a build you have already installed on a phone.
 
 The version and build numbers are the target's Marketing Version and
 Current Project Version in Xcode. The build number has to increase for
-every upload, same rule as Android's `versionCode`.
+every upload.
 
 The minimum deployment target is iOS 15.5. Do not lower it to match an
 older device: the ML Kit pod will not build.
@@ -416,12 +260,8 @@ older device: the ML Kit pod will not build.
 
 | Need                                           | Who creates it                          | Used for                       |
 | ---------------------------------------------- | --------------------------------------- | ------------------------------ |
-| Google Play Console developer account          | The organisation                        | Uploading the AAB              |
-| Upload keystore, kept outside git              | Whoever runs the release build          | Signing that AAB               |
 | Apple Developer Program membership             | The organisation                        | Signing, TestFlight, App Store |
 | A Mac with Xcode and CocoaPods                 | Whoever runs the iOS build              | `pod install` and the archive  |
-| `localhost` on the Auth authorised-domain list | Firebase console, project `weehs-4eb28` | Android SSO redirect only      |
 
-Email and password sign-in, the PWA, and the Android debug APK do not wait
-on the store accounts. The PWA waits on the hosting deploy. The debug APK
-waits on a machine with Android Studio.
+The website and installed PWA do not require a store account. Native iOS
+builds still require the Apple tools and account listed above.

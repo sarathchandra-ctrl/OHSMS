@@ -40,7 +40,6 @@ const TYPES = {
   '.woff2': 'font/woff2',
   '.ttf': 'font/ttf',
   '.txt': 'text/plain; charset=utf-8',
-  '.apk': 'application/vnd.android.package-archive',
 }
 
 // The same baseline firebase.json gives the shared site. No CSP here: the

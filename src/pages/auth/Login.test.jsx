@@ -11,7 +11,7 @@ vi.mock('../../shared/auth/AuthContext', () => ({
   useAuth: () => ({ login, isAuthed: false, profile: null }),
 }))
 vi.mock('react-router-dom', () => ({
-  Link: ({ children }) => children,
+  Link: ({ children, to }) => <a href={to}>{children}</a>,
   Navigate: () => null,
   useNavigate: () => vi.fn(),
   useLocation: () => ({ state: null }),
@@ -36,6 +36,9 @@ describe('sign-in', () => {
     expect(screen.queryByText(/company sign-in/i)).toBeNull()
     expect(screen.queryByText(/set up/i)).toBeNull()
     expect(screen.queryByText(/register/i)).toBeNull()
+    expect(screen.getByRole('link', { name: 'Forgot password?' }).getAttribute('href')).toBe(
+      '/forgot-password'
+    )
   })
 
   it('sends what was typed to the server', async () => {

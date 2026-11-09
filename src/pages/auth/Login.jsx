@@ -7,7 +7,6 @@ import { Button, Field, Input } from '../../shared/ui'
 import { safeInternalPath } from '../../shared/safeUrl'
 import AuthLayout from './AuthLayout'
 import LoginModules from './LoginModules'
-import { runtimeEnv } from '../../shared/runtimeConfig'
 
 // Email and password, checked by this installation's server. People are added
 // by an administrator (Employees → Add employee); there is no self-sign-up.
@@ -45,22 +44,24 @@ export default function Login() {
       showcase={<LoginModules />}
       footer={
         <span className="block">
-          {runtimeEnv('RESET_BY_EMAIL') === 'on' ? (
-            <Link
-              to="/forgot-password"
+          <Link
+            to="/forgot-password"
+            className="font-semibold text-brand-700 underline-offset-2 hover:underline"
+          >
+            Forgot password?
+          </Link>
+          <span className="mt-2 block">
+            <a
+              href="/privacy"
               className="font-semibold text-brand-700 underline-offset-2 hover:underline"
             >
-              Forgot password?
-            </Link>
-          ) : (
-            'Forgot your password? Ask an administrator to reset it.'
-          )}
-          <span className="mt-2 block">
-            <a href="/privacy" className="font-semibold text-brand-700 underline-offset-2 hover:underline">
               Privacy Policy
             </a>
             {' · '}
-            <a href="/terms" className="font-semibold text-brand-700 underline-offset-2 hover:underline">
+            <a
+              href="/terms"
+              className="font-semibold text-brand-700 underline-offset-2 hover:underline"
+            >
               Terms of Use
             </a>
           </span>
