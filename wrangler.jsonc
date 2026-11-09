@@ -11,6 +11,9 @@
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "ohsms",
   "main": "worker/index.js",
+  // Builds the app into dist/ before every deploy, including Cloudflare's own
+  // build from GitHub (Workers Builds), which otherwise deploys without it.
+  "build": { "command": "npm run build" },
   "compatibility_date": "2026-06-01",
   // node:crypto, Buffer and the pg driver.
   "compatibility_flags": ["nodejs_compat"],

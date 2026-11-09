@@ -159,10 +159,23 @@ export async function serveOnCloudflare(request, env, ctx) {
     // The one failure an installer can fix without reading logs: the app's
     // database user was not given the two roles (stack/planetscale-setup.sql).
     if (!schemaReady && err?.code === '42501') {
+      // What the app actually sees, so a setup run against another database,
+      // branch or user is obvious. No secrets: names only.
+      const seen = await db
+        .query(
+          `SELECT current_user AS "user", current_database() AS database,
+                  ARRAY(SELECT rolname FROM pg_roles WHERE rolname LIKE 'ohsms%' ORDER BY 1) AS roles,
+                  ARRAY(SELECT b.rolname FROM pg_auth_members m
+                          JOIN pg_roles b ON b.oid = m.roleid
+                          JOIN pg_roles u ON u.oid = m.member
+                         WHERE u.rolname = current_user AND b.rolname LIKE 'ohsms%' ORDER BY 1) AS granted`
+        )
+        .then((r) => r.rows[0])
+        .catch(() => null)
       return json(503, {
         code: 'database-setup-needed',
-        message:
-          'The database user cannot create the app roles. Run stack/planetscale-setup.sql once as the database administrator.',
+        message: `${err.message}. Run stack/planetscale-setup.sql once as the database administrator.`,
+        seen,
       })
     }
     return json(500, { code: 'internal', message: 'request failed' })
