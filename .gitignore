@@ -96,3 +96,4 @@ ux-ref/
 
 # WEEHS Installer builds (installer/build.mjs)
 dist-installer/
+.dev.vars

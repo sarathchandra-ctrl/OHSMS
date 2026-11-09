@@ -91,6 +91,24 @@ describe('forwarding', () => {
     expect(res.status).toBe(503)
   })
 
+  it('answers 404, not index.html, for a script from a previous build', async () => {
+    const html = new Response('<!doctype html>', {
+      headers: { 'Content-Type': 'text/html; charset=utf-8' },
+    })
+    const e = env({ ASSETS: { fetch: vi.fn(async () => html) } })
+    const res = await worker.fetch(new Request('https://ehs.example.com/assets/Gone-abc.js'), e)
+    expect(res.status).toBe(404)
+    expect(res.headers.get('Cache-Control')).toBe('no-store')
+  })
+
+  it('passes a script that exists straight through', async () => {
+    const js = new Response('export {}', { headers: { 'Content-Type': 'text/javascript' } })
+    const e = env({ ASSETS: { fetch: vi.fn(async () => js) } })
+    const res = await worker.fetch(new Request('https://ehs.example.com/assets/index-x.js'), e)
+    expect(res.status).toBe(200)
+    expect(await res.text()).toBe('export {}')
+  })
+
   it('serves the app for everything else', async () => {
     const e = env()
     const res = await worker.fetch(new Request('https://ehs.example.com/portal'), e)

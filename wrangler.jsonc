@@ -30,7 +30,10 @@
       "/blob",
       "/rpc/*",
       "/health",
-      "/runtime-config.js"
+      "/runtime-config.js",
+      // So a script from a previous build gets a 404 rather than index.html
+      // (worker/index.js, missingAsset).
+      "/assets/*"
     ]
   },
   // The schema is bundled as text; there is no file system on Workers.

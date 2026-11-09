@@ -5,7 +5,12 @@ async function staleWhileRevalidate(request) {
   const cached = await cache.match(request)
   const fetching = fetch(request)
     .then((response) => {
-      if (response && response.ok && response.type === 'basic') cache.put(request, response.clone())
+      // Never keep a page as a script: the host's SPA fallback answered a
+      // missing chunk with index.html, and caching it broke the module for good.
+      const type = response?.headers.get('Content-Type') || ''
+      if (response && response.ok && response.type === 'basic' && !/^text\/html\b/i.test(type)) {
+        cache.put(request, response.clone())
+      }
       return response
     })
     .catch(() => null)

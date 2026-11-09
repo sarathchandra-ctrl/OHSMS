@@ -109,6 +109,24 @@ export default {
     }
     // Everything else is the app. Unknown paths fall back to index.html
     // (not_found_handling in wrangler.jsonc).
-    return env.ASSETS.fetch(request)
+    const res = await env.ASSETS.fetch(request)
+    if (pathname.startsWith('/assets/') && isHtml(res)) return missingAsset()
+    return res
   },
+}
+
+function isHtml(res) {
+  return /^text\/html\b/i.test(res.headers.get('Content-Type') || '')
+}
+
+// A script from a previous build is gone after every deploy. Answering with
+// index.html (200, and /assets/* is cached for a year as immutable) let a tab
+// still on the old build — and its service worker — keep that HTML as the
+// module's code, so the module never loaded. A 404 lets the import fail
+// cleanly, and the app reloads onto the current build (ErrorBoundary).
+function missingAsset() {
+  return new Response('Not found', {
+    status: 404,
+    headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' },
+  })
 }

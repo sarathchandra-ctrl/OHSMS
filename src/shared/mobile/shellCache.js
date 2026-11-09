@@ -9,7 +9,8 @@
 // change behind a cached allow. Anything that is not this origin's static
 // shell is passed straight through.
 
-export const SHELL_CACHE = 'ohsms-shell-v1'
+// v2: v1 may hold index.html saved as a script chunk; activate drops other names.
+export const SHELL_CACHE = 'ohsms-shell-v2'
 
 export const PRECACHE_URLS = [
   '/',
