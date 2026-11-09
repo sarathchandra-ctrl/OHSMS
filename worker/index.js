@@ -8,11 +8,11 @@
 //      the server paths to it through a Cloudflare Tunnel, as described below.
 //
 // Cloudflare serves the built app (dist/) from its edge. Everything the app
-// asks of its server — sign-in, /data, /rpc, /presign, /blob, /setup, SCIM and
+// asks of its server — sign-in, /data, /rpc, /presign, /blob and
 // /runtime-config.js — is forwarded to the organization's own server, which
 // Cloudflare reaches through a Cloudflare Tunnel (cloudflared, next to the
 // server; selfhost/compose.yaml runs it). The browser only ever sees this one
-// hostname, so the SAML/OIDC cookies, the #session redirect and the app's
+// hostname, so the app.s
 // fetches stay same-origin, exactly as when the server serves the app itself.
 //
 // Settings (wrangler.jsonc "vars", or the dashboard):
@@ -33,10 +33,6 @@ export const SERVER_PREFIXES = [
   '/presign',
   '/blob',
   '/rpc/',
-  '/oidc/',
-  '/.well-known/',
-  '/setup',
-  '/scim/',
   '/health',
   '/runtime-config.js',
 ]

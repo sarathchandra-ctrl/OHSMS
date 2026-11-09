@@ -8,24 +8,28 @@
 # (an upgrade, a reboot, a changed image) keep .env as it is and only start.
 #
 # It never generates a second set of secrets over an existing .env. A new
-# STATE_KEY cannot read what the old one sealed and the app refuses to start;
-# new database passwords do not match the database that already exists. Both
-# are data loss in the shape of a configuration change.
+# DATA_KEY_MASTER cannot open what the old one sealed; new database passwords
+# do not match the database that already exists. Both are data loss in the
+# shape of a configuration change.
 set -euo pipefail
 
 cd "$(dirname "$0")"
 
 DOMAIN=''
 IMAGE=''
+ADMIN_EMAIL=''
 ASSUME_YES=0
 
 usage() {
   cat <<'USAGE'
-Usage: ./install.sh --domain NAME --image IMAGE [--yes]
+Usage: ./install.sh --domain NAME --image IMAGE --admin-email EMAIL [--yes]
 
   --domain NAME   The address people type, without https:// (ehs.example.com).
                   Its DNS record must point at this server.
   --image IMAGE   The image from the release page, preferably the @sha256 form.
+  --admin-email EMAIL
+                  The first administrator. A one-time password is generated
+                  into .env; it must be changed at first sign-in.
   --yes           Do not ask for confirmation.
 
 Run again with no options to start an existing install.
@@ -36,6 +40,7 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --domain) DOMAIN="${2:-}"; shift 2 ;;
     --image) IMAGE="${2:-}"; shift 2 ;;
+    --admin-email) ADMIN_EMAIL="${2:-}"; shift 2 ;;
     --yes|-y) ASSUME_YES=1; shift ;;
     -h|--help) usage; exit 0 ;;
     *) echo "Unknown option: $1" >&2; usage >&2; exit 2 ;;
@@ -59,6 +64,8 @@ if [ -f .env ]; then
 else
   [ -n "$DOMAIN" ] || { usage >&2; die '--domain is required for a first install.'; }
   [ -n "$IMAGE" ] || { usage >&2; die '--image is required for a first install.'; }
+  printf '%s' "$ADMIN_EMAIL" | grep -Eq '^[^[:space:]@|]+@[^[:space:]@|]+\.[^[:space:]@|]+$' ||
+    { usage >&2; die '--admin-email is required for a first install.'; }
   # A bare host name: the app builds every link on https://DOMAIN, and refuses
   # to start on anything that is not an origin.
   case "$DOMAIN" in
@@ -77,7 +84,7 @@ else
   say 'Writing .env with new random secrets'
   # The same commands docs/SELF-HOSTING.md gives. Hex for the database
   # passwords keeps them safe inside a connection URL; DATA_KEY_MASTER and
-  # STATE_KEY are 32 bytes of base64, the only form the app accepts.
+  # is 32 bytes of base64, the only form the app accepts.
   umask 077
   cp .env.example .env.tmp
   set_env() {
@@ -88,15 +95,16 @@ else
   set_env DOMAIN "$DOMAIN"
   set_env DB_ADMIN_PASSWORD "$(openssl rand -hex 24)"
   set_env APP_DB_PASSWORD "$(openssl rand -hex 24)"
-  set_env STATE_KEY "$(openssl rand -base64 32)"
-  set_env CONTROL_TOKEN "$(openssl rand -hex 32)"
+  set_env ADMIN_EMAIL "$ADMIN_EMAIL"
+  set_env ADMIN_PASSWORD "$(openssl rand -hex 10)"
   set_env SESSION_SECRET "$(openssl rand -hex 32)"
   set_env DATA_KEY_MASTER "$(openssl rand -base64 32)"
   chmod 600 .env.tmp
   mv .env.tmp .env
   echo '    .env written (readable by this user only).'
-  echo '    Back it up somewhere off this server now: without STATE_KEY the'
-  echo '    app cannot start, and without the passwords the data cannot be reached.'
+  echo '    Back it up somewhere off this server now: without DATA_KEY_MASTER'
+  echo '    encrypted fields cannot be opened, and without the passwords the data'
+  echo '    cannot be reached.'
 fi
 
 DOMAIN="$(grep -E '^DOMAIN=' .env | cut -d= -f2-)"
@@ -141,7 +149,6 @@ cat <<NEXT
 
 OHSMS is running at https://$DOMAIN  (health: {"ok":true})
 
-Next, in a browser: open https://$DOMAIN/setup
-  Setup code: CONTROL_TOKEN in .env
-  Enter your organization and its sign-in (SAML or OpenID Connect), then sign in.
+Next, in a browser: open https://$DOMAIN
+  Sign in with ADMIN_EMAIL and ADMIN_PASSWORD from .env, then choose your own password.
 NEXT

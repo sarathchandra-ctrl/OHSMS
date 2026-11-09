@@ -3,26 +3,24 @@
 // Same handler as the Docker server (stack/handler.mjs). What differs:
 //   - Postgres is reached through the HYPERDRIVE binding, one pool per request.
 //   - Uploaded files live in the FILES R2 bucket (worker/files.js).
-//   - Sign-ins in progress live in Postgres (worker/pending.js), because the
-//     two legs of one sign-in may reach different isolates.
-//   - The sign-in configuration is read from the database on every request,
-//     so /setup on one isolate is seen by all of them at once.
+//   - The organization and its first administrator are created on the
+//     first request (bootstrapOrganization), from ORG_NAME, ADMIN_EMAIL and
+//     ADMIN_PASSWORD. Nothing is created once an admin exists.
 //   - The schema is applied once per database version, under an advisory
 //     lock, by whichever request gets there first.
-//   - No mail: invitations are not emailed.
+//   - No mail.
 //
-// Settings: PUBLIC_ORIGIN (var). Secrets: SESSION_SECRET, STATE_KEY,
-// CONTROL_TOKEN, DATA_KEY_MASTER. docs/CLOUDFLARE.md.
+// Settings: PUBLIC_ORIGIN, ORG_NAME (vars). Secrets: SESSION_SECRET,
+// DATA_KEY_MASTER, ADMIN_EMAIL, ADMIN_PASSWORD. docs/CLOUDFLARE.md.
 
 import SCHEMA from '../stack/schema.sql'
 import { createPgDatabase } from '../stack/pg.mjs'
 import { applySchema, createEngine } from '../stack/engine.mjs'
 import { createOwnStackHandler } from '../stack/handler.mjs'
-import { openState, parseStateKey } from '../stack/state.mjs'
+import { bootstrapOrganization } from '../stack/passwords.mjs'
 import { runtimeConfigScript } from '../stack/runtimeConfig.mjs'
 import { blobKeyFrom } from '../stack/blobSign.mjs'
 import { createR2FileStore } from './files.js'
-import { pendingStore, samlCacheProvider } from './pending.js'
 import { nodeRequest, nodeResponse } from './bridge.js'
 
 // Bumps whenever schema.sql changes, so a new deploy applies it once.
@@ -37,6 +35,7 @@ function fingerprint(text) {
 export const SCHEMA_VERSION = `schema:${fingerprint(SCHEMA)}`
 
 let schemaReady = false
+let bootstrapped = null
 
 export async function ensureSchema(db) {
   if (schemaReady) return
@@ -72,14 +71,7 @@ export function settingsProblems(env) {
   const problems = []
   const origin = String(env.PUBLIC_ORIGIN || '').replace(/\/$/, '')
   if (!/^https:\/\/[^/]+$/.test(origin)) problems.push('PUBLIC_ORIGIN')
-  for (const name of ['SESSION_SECRET', 'CONTROL_TOKEN']) {
-    if (String(env[name] || '').length < 32) problems.push(name)
-  }
-  try {
-    parseStateKey(env.STATE_KEY)
-  } catch {
-    problems.push('STATE_KEY')
-  }
+  if (String(env.SESSION_SECRET || '').length < 32) problems.push('SESSION_SECRET')
   if (Buffer.from(String(env.DATA_KEY_MASTER || ''), 'base64').length !== 32) {
     problems.push('DATA_KEY_MASTER')
   }
@@ -118,14 +110,18 @@ export async function serveOnCloudflare(request, env, ctx) {
   const db = createPgDatabase(env.HYPERDRIVE.connectionString, { max: 3 })
   try {
     await ensureSchema(db)
+    // Once per isolate: the organization and its first admin, if missing.
+    bootstrapped ||= await bootstrapOrganization(createEngine(db), db, {
+      orgName: env.ORG_NAME || 'Cult Fit',
+      adminEmail: env.ADMIN_EMAIL || '',
+      adminPassword: env.ADMIN_PASSWORD || '',
+    })
     if (url.pathname === '/health') {
       await db.query('SELECT 1')
       return json(200, { ok: true, database: 'ok', files: Boolean(files), schema: SCHEMA_VERSION })
     }
-    const state = await openState(db, { key: parseStateKey(env.STATE_KEY) })
-    const auth = state.auth || { method: 'none' }
     if (url.pathname === '/runtime-config.js') {
-      return new Response(runtimeConfigScript({ origin, auth }), {
+      return new Response(runtimeConfigScript({ origin }), {
         headers: {
           'Content-Type': 'text/javascript; charset=utf-8',
           'Cache-Control': 'no-store',
@@ -136,18 +132,9 @@ export async function serveOnCloudflare(request, env, ctx) {
       engine: createEngine(db),
       db,
       sessionSecret: env.SESSION_SECRET,
-      origin,
-      auth,
-      controlToken: env.CONTROL_TOKEN,
       dataKeyMaster: env.DATA_KEY_MASTER,
       mail: null,
       blobStore: files,
-      codes: pendingStore(db),
-      samlCache: samlCacheProvider(db),
-      demoIssuer: false,
-      oidcAcceptUnverifiedEmail: env.OIDC_ACCEPT_UNVERIFIED_EMAIL === 'true',
-      ensureSchema: async () => {},
-      onAuthChange: (next) => state.saveAuth(next),
     })
     const req = nodeRequest(request)
     const { res, done, toResponse } = nodeResponse()

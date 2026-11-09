@@ -14,7 +14,8 @@ import {
   PageHeader, Badge, Button, Select, Field, Modal, MultiSelect, SkeletonTable, EmptyState, Pager,
 } from '../../shared/ui'
 import { initials } from '../../shared/lib/format'
-import OwnStackInvites from './OwnStackInvites'
+import AddEmployee, { temporaryPassword } from './AddEmployee'
+import { resetMemberPassword } from '../../shared/functions'
 
 const STATUS_TONE = { approved: 'green', pending: 'amber', suspended: 'red' }
 const emptyScope = { sites: [], regions: [], entities: [] }
@@ -45,6 +46,18 @@ export default function Users() {
 
   const approve = async (u) => wrap(() => setUserStatus(u.uid, 'approved', actor, u.name), `${u.name} approved`)
   const suspend = async (u) => wrap(() => setUserStatus(u.uid, 'suspended', actor, u.name), `${u.name} suspended`)
+  // A new temporary password, shown once to the admin to pass on.
+  const [resetDone, setResetDone] = useState(null)
+  const resetPassword = async (u) => {
+    if (!window.confirm(`Give ${u.name || u.email} a new temporary password? Their current password stops working.`)) return
+    const password = temporaryPassword()
+    try {
+      await resetMemberPassword({ uid: u.uid, password })
+      setResetDone({ name: u.name || u.email, email: u.email, password })
+    } catch (err) {
+      toast.error(err?.message || 'The password was not reset.')
+    }
+  }
   const changeRole = async (u, role) => wrap(() => setUserRole(u.uid, role, actor, u.name), `${u.name} → ${roleLabel(role)}`)
   const grantRequest = async (u) =>
     wrap(() => grantAccessRequest(u.uid, u.accessRequest, actor, u.name), `Access granted to ${u.name}`)
@@ -133,14 +146,14 @@ export default function Users() {
       <PageHeader
         title="Employees"
         subtitle={
-          'Employee repository — invite employees, approve, set roles & site access'
+          'Employee repository — add employees, set roles & site access, reset passwords'
         }
         icon={UsersRound}
         actions={
           <div className="flex flex-wrap items-center gap-2">
             {pending > 0 && <Badge tone="amber">{pending} pending approval</Badge>}
             {requests > 0 && <Badge tone="violet">{requests} access request{requests === 1 ? '' : 's'}</Badge>}
-            <OwnStackInvites />
+            <AddEmployee />
           </div>
         }
       />
@@ -148,7 +161,7 @@ export default function Users() {
       {users === null ? (
         <SkeletonTable rows={5} cols={5} />
       ) : users.length === 0 ? (
-        <EmptyState icon={UsersRound} title="No employees yet" description="Invite employees above. They join when they first sign in with your company account." />
+        <EmptyState icon={UsersRound} title="No employees yet" description="Add employees above. Each gets a temporary password to change at first sign-in." />
       ) : (
         <>
         <div className="mb-3 flex flex-wrap items-center gap-3">
@@ -231,6 +244,9 @@ export default function Users() {
                           <Button variant="soft" icon={ShieldCheck} onClick={() => grantRequest(u)} className="!py-1.5 text-xs">Grant</Button>
                         )}
                         <Button variant="ghost" icon={KeyRound} onClick={() => openManage(u)} className="!py-1.5 text-xs">Access</Button>
+                        {!isSelf && (
+                          <Button variant="ghost" onClick={() => resetPassword(u)} className="!py-1.5 text-xs">Reset password</Button>
+                        )}
                         {!isSelf && u.status === 'approved' && (
                           <button onClick={() => suspend(u)} className="rounded-lg p-1.5 text-red-500 hover:bg-red-50" title="Suspend"><X size={16} /></button>
                         )}
@@ -245,6 +261,23 @@ export default function Users() {
         <Pager className="mt-3" page={safePage} pageCount={pageCount} onPage={setPage} total={filtered.length} pageSize={PAGE_SIZE} />
         </>
       )}
+
+      <Modal
+        open={!!resetDone}
+        onClose={() => setResetDone(null)}
+        title="Temporary password"
+        footer={<Button type="button" onClick={() => setResetDone(null)}>Done</Button>}
+      >
+        {resetDone && (
+          <div className="space-y-3 text-sm text-ink-700">
+            <p>
+              Give this to <b>{resetDone.name}</b> ({resetDone.email}). They will choose their own
+              password when they next sign in. It is not shown again.
+            </p>
+            <p className="well rounded-xl p-3 font-mono">{resetDone.password}</p>
+          </div>
+        )}
+      </Modal>
 
       {/* Manage access modal */}
       <Modal

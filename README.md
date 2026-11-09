@@ -67,12 +67,13 @@ One installation serves one organization. Three deployable pieces:
   dashboard) mounts each module as a lazily-loaded feature area under
   `src/modules/<key>/`. Public routes exist for the QR flows (`/qr/:token`,
   `/permit/:token`, `/p/:id`, `/t/:id/:point`).
-- **Server** (`stack/`) — its own npm package. Sign-in through the
-  organization's identity provider (OIDC, SAML or Supabase Auth; no passwords
-  are kept here), the data gateway, server jobs (`/rpc/*`), file storage on
-  disk, SCIM, and the one-time `/setup` that creates the organization.
+- **Server** (`stack/`) — its own npm package. Email-and-password sign-in
+  (passwords kept only as PBKDF2 hashes), the data gateway, server jobs
+  (`/rpc/*`) and file storage. It creates the organization and its first
+  administrator on first start.
 - **Cloudflare Worker** (`worker/`) — serves the built app from the edge and
-  forwards the server's paths to it through a Cloudflare Tunnel.
+  runs the server on Cloudflare (Postgres through Hyperdrive, files in R2), or
+  forwards to a self-hosted server through a Cloudflare Tunnel.
 
 Cross-cutting:
 
@@ -81,8 +82,8 @@ Cross-cutting:
   security in `stack/schema.sql`: the browser's requests run as a role with no
   bypass, and only the server's own jobs may assume the bypass role.
 - **Roles** — `admin`, `manager`, `member`, `auditor`
-  (`src/shared/auth/permissions.js`) plus site scoping. People join by invite,
-  by email domain, by identity-provider group, or over SCIM.
+  (`src/shared/auth/permissions.js`) plus site scoping. An administrator adds
+  people with a temporary password and can reset passwords.
 - **Files** — stored on the server's disk (`/blob`), reached through signed
   URLs the server issues after re-reading the caller's live profile.
 - **Application-layer encryption** (`src/shared/crypto/`) — envelope
@@ -152,9 +153,9 @@ npm run dev
   pending and disabled accounts see nothing, role-gated writes, medical-record
   confinement, the server-only directory paths and the limits of the anonymous
   QR write surfaces. These send hostile payloads, not well-behaved ones.
-- **Server** — `src/shared/data/controlPlane.test.js` and
-  `ownStack.live.test.js` drive the real server: /setup, SAML and OIDC sign-in,
-  invites, SCIM, on a database set up like a managed one.
+- **Server** — `src/shared/data/server.test.js` drives the real server:
+  first start, password sign-in and lockout, the forced password change,
+  adding people and resets, on a database set up like a hosted one.
 - **Accessibility** — `e2e/accessibility.spec.js` runs axe against the rendered
   DOM and fails on any serious or critical WCAG 2.1 AA violation. It is the half
   of the gate `eslint-plugin-jsx-a11y` cannot be: this app binds most labels to

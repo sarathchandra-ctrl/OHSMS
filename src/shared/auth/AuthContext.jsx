@@ -9,10 +9,8 @@ import {
 } from '../modules/entitlements'
 import { getUserProfile, subscribeOrg } from '../org/orgData'
 import {
-  adoptSessionFromHash,
   clearAccessToken,
   currentAccessToken,
-  ownStackAuthMethod,
   ownStackGateway,
   sessionUid,
   setAccessToken,
@@ -20,11 +18,10 @@ import {
 
 const AuthContext = createContext(null)
 
-// One organization per installation. Who someone is comes from the identity
-// provider connected at /setup (OIDC, SAML or Supabase Auth); whether they
-// belong, and as what, comes from their users/{uid} profile on this server's
-// database (stack/identity.mjs). There is no registration, no "join an
-// organization" and no platform operator in this build.
+// One organization per installation. People sign in with an email and a
+// password kept by this installation's server (stack/passwords.mjs); an
+// administrator adds them. Their role and access come from their users/{uid}
+// profile. There is no registration and no external identity provider.
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null) // { uid, getIdToken }
   const [profile, setProfile] = useState(null) // users/{uid} doc
@@ -34,10 +31,6 @@ export function AuthProvider({ children }) {
   // an administrator writes the setting.
   const [moduleMap, setModuleMap] = useState(() => normalizeEntitlement(null))
   const [modulesReady, setModulesReady] = useState(false)
-
-  // During render, not in the effect below: a child's <Navigate> runs its
-  // effect first and would strip the fragment. See adoptSessionFromHash.
-  useState(() => adoptSessionFromHash())
 
   const refreshProfile = useCallback(async (uid) => {
     const p = await getUserProfile(uid)
@@ -85,30 +78,28 @@ export function AuthProvider({ children }) {
     return subscribeEntitlement()
   }, [approved])
 
-  /** @returns {{ status: 'signed-in' | 'redirecting', user? }} */
+  /** @returns {{ status: 'signed-in', user }} — throws with the server's message on refusal. */
   const login = async ({ email, password } = {}) => {
     const gateway = ownStackGateway()
-    if (!gateway) throw new Error('This server has no sign-in host configured.')
-    if (ownStackAuthMethod() === 'supabase') {
-      const res = await fetch(`${gateway}/auth/supabase`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
-      })
-      if (!res.ok) throw new Error('Sign-in was refused.')
-      const { token } = await res.json()
-      setAccessToken(token)
-      const uid = sessionUid(token)
-      const sessionUser = { uid, getIdToken: async () => token }
-      setUser(sessionUser)
-      startSession()
-      await refreshProfile(uid)
-      return { status: 'signed-in', user: sessionUser }
+    if (!gateway) throw new Error('This site cannot reach its server.')
+    const res = await fetch(`${gateway}/auth/password`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password }),
+    })
+    const body = await res.json().catch(() => ({}))
+    if (!res.ok || !body.token) {
+      const err = new Error(body.message || 'Sign-in was refused.')
+      err.code = body.reason || 'unauthenticated'
+      throw err
     }
-    // Company OIDC or SAML: the server starts the round trip and brings the
-    // browser back with /#session=<token>.
-    window.location.assign(`${gateway}/auth/start`)
-    return { status: 'redirecting' }
+    setAccessToken(body.token)
+    const uid = sessionUid(body.token)
+    const sessionUser = { uid, getIdToken: async () => body.token }
+    setUser(sessionUser)
+    startSession()
+    await refreshProfile(uid)
+    return { status: 'signed-in', user: sessionUser }
   }
 
   const signOut = async () => {

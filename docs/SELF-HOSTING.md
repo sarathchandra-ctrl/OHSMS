@@ -1,10 +1,10 @@
-# Self-hosting WEEHS on your own server
+# Self-hosting Cult Fit SMS on your own server
 
-This runs WEEHS (OHSMS) for one organization on a computer or server with
+This runs Cult Fit SMS for one organization on a computer or server with
 Docker: a virtual machine on any cloud, or a server in your own building.
 Your records and uploaded files stay on that server and its Postgres
-database, and your people sign in with your own identity provider. There is
-no shared service: one installation is one organization.
+database. People sign in with an email and password kept by the server; an
+administrator adds them. One installation is one organization.
 
 Everything is in [`selfhost/`](../selfhost): `install.sh` (sets it all up in
 one command), `compose.yaml` (the app, Postgres, and an HTTPS front door),
@@ -17,39 +17,6 @@ Two front doors, chosen by `COMPOSE_PROFILES` in `.env`:
 - `cloudflare`: Cloudflare in front, through a Cloudflare Tunnel, with no
   inbound ports. Follow [`CLOUDFLARE.md`](CLOUDFLARE.md).
 
-## Install without a terminal (recommended)
-
-Before you start: point your address (for example `ehs.example.com`) at the
-server with a DNS record, and let web traffic (ports 80 and 443) reach it.
-
-1. On the server, install **Docker**: Docker Desktop on Windows or macOS (an
-   ordinary installer), Docker Engine on Linux.
-2. From the release page, download the **WEEHS Installer** for the server
-   (`weehs-installer-windows-x64.exe`, `weehs-installer-macos-arm64` or
-   `weehs-installer-linux-x64`) and open it. The server's screen shows a
-   one-time **installer code**.
-3. On any computer, open `http://ehs.example.com`. The installer answers at
-   your address:
-   - **Installer code:** the one on the server's screen. Ten wrong codes lock
-     it for fifteen minutes.
-   - **Check the server:** Docker is running and the HTTPS port is free.
-   - **Your address:** filled in from the one you opened; email optional.
-   - **Install:** writes the settings with new secrets on the server and
-     prepares WEEHS. Then **Download settings backup** (keep it somewhere
-     safe, away from the server) and **Switch to HTTPS and finish**.
-4. The installer hands the address to WEEHS, which takes it with HTTPS, and
-   your browser lands on `https://ehs.example.com/setup` with the setup code
-   already filled in: step 4 below.
-
-Opening the installer again later starts WEEHS again with the same settings;
-it never replaces the secrets of an existing install.
-
-The installer is not code-signed yet, so Windows SmartScreen and macOS
-Gatekeeper ask for confirmation the first time.
-
-The rest of this page is the same install by command line, for servers
-without a desktop.
-
 ## What you need
 
 - A Linux server with **Docker** and the **Docker Compose plugin**. 2 vCPU,
@@ -58,8 +25,7 @@ without a desktop.
   record pointing at the server's public IP address.
 - **Ports 80 and 443** open to the internet. Port 80 is needed for the free
   certificate; everything is served over 443.
-- Your organization's **identity provider** details: SAML, or OIDC (Okta,
-  Microsoft Entra, Google, Keycloak, …). See "Known limits" below.
+- The **email address of the first administrator**.
 - The **image** for the release you are installing, from the release page
   ([`RELEASES.md`](RELEASES.md)).
 - Optional: SMTP details for outgoing mail.
@@ -89,7 +55,7 @@ docker login ghcr.io
 Then one command, with your domain and the image from the release page:
 
 ```bash
-./install.sh --domain ehs.example.com --image ghcr.io/OWNER/weehs-dedicated@sha256:DIGEST
+./install.sh --domain ehs.example.com --image ghcr.io/OWNER/ohsms-server@sha256:DIGEST --admin-email you@example.com
 ```
 
 It checks that Docker, Compose, `openssl` and `curl` are there, writes `.env`
@@ -100,8 +66,9 @@ two roles its security rules use, and an ordinary account for the app
 (`init-db.sh`). Caddy obtains the HTTPS certificate, which can take a minute.
 
 **Back up `.env` somewhere safe and separate from the server.** Without
-`STATE_KEY` the stored secrets cannot be read and the app will not start;
-without the database passwords the data cannot be reached.
+`DATA_KEY_MASTER` encrypted fields cannot be opened; without the database
+passwords the data cannot be reached. `.env` also holds `ADMIN_PASSWORD`, the
+first administrator's one-time password.
 
 Running `./install.sh` again, with or without options, never touches an
 existing `.env`: it only starts what is there. So it is also how you start
@@ -124,8 +91,10 @@ Fill in every value. The comments say what each is:
   `@sha256:` digest form.
 - `DOMAIN`: your domain, without `https://`.
 - `DB_ADMIN_PASSWORD`, `APP_DB_PASSWORD`: `openssl rand -hex 24` each.
-- `STATE_KEY`, `DATA_KEY_MASTER`: `openssl rand -base64 32` each.
-- `CONTROL_TOKEN`, `SESSION_SECRET`: `openssl rand -hex 32` each.
+- `DATA_KEY_MASTER`: `openssl rand -base64 32`.
+- `SESSION_SECRET`: `openssl rand -hex 32`.
+- `ADMIN_EMAIL`, `ADMIN_PASSWORD`: the first administrator (password at
+  least 10 characters; it must be changed at first sign-in).
 - The `SMTP_` settings and `MAIL_FROM`, if you want mail.
 
 Then make it readable only by the administrator, and start:
@@ -150,32 +119,19 @@ curl -s https://ehs.example.com/health
 
 `/health` answers `{"ok":true}`.
 
-## 4. Connect your organization, in the browser
+## 4. Sign in
 
-Open `https://ehs.example.com/setup` (the sign-in page links to it while the
-environment is not set up) and fill in:
+Open `https://ehs.example.com` and sign in with `ADMIN_EMAIL` and
+`ADMIN_PASSWORD` from `.env`. The organization (`ORG_NAME`) and this first
+administrator are created when the server first starts; you are asked to
+choose your own password straight away. Then:
 
-- **Setup code:** `CONTROL_TOKEN` from `.env`.
-- **Your organization:** its name and address, and your name and work email.
-  You become the administrator.
-- **How people sign in:** SAML or OpenID Connect. The page shows the values
-  to register this application with in your identity provider (the SAML
-  reply URL and entity ID, or the OIDC redirect URI), and asks for what the
-  identity provider gives back: for SAML its sign-in URL and certificate, for
-  OIDC the issuer URL, client ID and client secret.
-
-**Set up and go live** creates the organization in this server's database
-and connects the sign-in. Then sign in with your company account and, from
-**Employees**, invite everyone else; from **Sites**, add your locations.
-
-For an identity provider that already serves many apps, read "Known
-limits" below:
-where the app's tile in their portal should point, Microsoft Entra, and
-**Join automatically**, which lets everyone at the company's email domain in
-without an invite each.
-
-`/setup` closes for good once the organization is live. Ten wrong setup codes
-in fifteen minutes lock it for the rest of that window.
+- **Employees → Add employee** gives each person a temporary password they
+  change at first sign-in.
+- **Employees → Reset password** handles a forgotten password: the server
+  sends no mail, so an administrator sets a new temporary one and passes it
+  on.
+- **Sites**: add your locations.
 
 ## Upgrading
 
@@ -195,7 +151,7 @@ docker compose up -d
 ```
 
 The database schema is updated automatically when the new version starts.
-Never change `STATE_KEY` or `SESSION_SECRET` as part of an upgrade.
+Never change `DATA_KEY_MASTER` or `SESSION_SECRET` as part of an upgrade.
 
 ## Backups
 
@@ -261,75 +217,13 @@ and policies itself, as `ehs_app`, every time it starts.
 
 ## Known limits
 
-- **OIDC providers must vouch for the email.** The host reads the provider's
-  discovery document, so Okta, Microsoft Entra, Google, Keycloak and others
-  work. Invites are matched by email, so a sign-in is refused unless the
-  provider says the address is verified (`email_verified: true`). Microsoft
-  Entra does not send that claim at all: register the application as
-  **single-tenant** (your organization only), so every `email` it sends is one
-  your administrators set, and deploy with `OIDC_ACCEPT_UNVERIFIED_EMAIL=true`
-  (or tick "Microsoft Entra ID, single tenant" on `/setup`, which stores the
-  same choice with the sign-in configuration). Never for a multi-tenant
-  registration, which admits accounts from other tenants whose email address
-  nobody verified. An explicit `email_verified: false` is refused either way.
-- **SAML sign-in starts at WEEHS, not at the portal.** Every SAML response
-  must answer a request this host made (it is what stops a response captured
-  elsewhere from being replayed here), so an IdP-initiated sign-in from the
-  app's tile in Okta or "My Apps" is refused. Point the tile at
-  `https://ehs.example.com/auth/start` instead: the Sign-on URL in Entra, a
-  bookmark app in Okta. `/setup` shows the address. The same works for OIDC.
-- **Who joins, and as what.** The IdP decides who can sign in; WEEHS decides
-  who belongs. In Employees → Invite employee, an admin can:
-  - invite people one by one;
-  - **Join automatically**: anyone with an address at the listed domains
-    joins with one role (never admin);
-  - map **identity provider groups to roles** (`EHS-Admins` → Administrator,
-    `Safety-Managers` → Manager): applied at every sign-in, so a change in
-    the IdP shows at the person's next sign-in, and anyone in a mapped group
-    joins without an invite. The most capable mapped role wins; no mapped
-    group sent leaves the role as it is; a sign-in never moves the last
-    administrator. Groups are read from a SAML `groups` or `memberOf`
-    attribute or Entra's groups claim, and from OIDC `groups` in userinfo or
-    the ID token. Entra sends group object IDs unless configured otherwise:
-    map those IDs.
-- **SCIM sync, and leaving.** **Turn on sync** in the same dialog gives a
-  SCIM 2.0 base URL (`https://ehs.example.com/scim/v2`) and a bearer token,
-  shown once, to enter in Okta or Entra as the app's provisioning.
-  - Users: assigning someone the app invites them here; deactivating or
-    removing them disables their account at once (an open session stops at
-    its next request) and keeps them out even if their domain or a group
-    would let them join; reactivating lets them in again.
-  - Groups (Okta "Push Groups", Entra group provisioning): pushed groups and
-    their members count like groups sent at sign-in, and a change applies to
-    existing accounts at once. Entra signs people in with group object IDs;
-    a group it has pushed carries that ID as its externalId, so rules can be
-    written with the group's name.
-- **Google Workspace.** OIDC (`https://accounts.google.com`) and custom SAML
-  apps both work. Differences from Okta and Entra: Google's OIDC sends no
-  groups, so map roles with SAML (add "Group membership" to the custom app's
-  attribute mapping, named `groups`) or use invites and Join automatically;
-  and Google does not provision custom apps over SCIM, so leaving relies on
-  Google refusing a suspended user's sign-in, plus an admin disabling or
-  removing the account in Employees.
-- **Checked against the real providers.** `WEEHS_LIVE_IDP=1 npx vitest run
-src/shared/data/realProviders.test.js` reads Google's and Microsoft's live
-  discovery documents through the same code, and sends Google a real sign-in
-  request (refused only for its made-up client). A person signing in still
-  needs a real account in a real tenant: do that once with each customer's
-  provider before going live.
-- **SAML email.** Read from an attribute named `email`, `mail` or
-  `emailAddress`, or the standard claim
-  `http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress`
-  (Microsoft Entra, AD FS), and only then from NameID. Entra's NameID is the
-  user principal name, which is not always the address people were invited
-  with.
-- **One server process.** Sign-in round trips are held in the process's
-  memory, so run one `app` container, not several behind a load balancer.
+- **No mail-based password reset.** The server sends no password-reset mail;
+  an administrator resets a forgotten password from Employees.
 - **Server jobs not carried over from the hosted product.** Notification
   mail for incidents, permits and drills, the weather digest, the WhatsApp
   bot, Metabase analytics and the personal-data (subject access) export ran as
   hosted functions and are not part of this server. The screens that use them
-  report the job as unavailable. Invitation mail works when SMTP is set.
+  report the job as unavailable.
 
 ## Testing locally
 
@@ -339,7 +233,8 @@ The policy tests can run against a real Postgres as well as the embedded one:
 OHSMS_TEST_PG_URL=postgres://ehs_app:PASS@127.0.0.1:5432/ehs OHSMS_TEST_PG_ADMIN_URL=postgres://postgres@127.0.0.1:5432/ehs npx vitest run src/shared/data/adapters/postgres.rls.test.js
 ```
 
-`src/shared/data/controlPlane.test.js` runs the whole deployed path — /setup,
-restart, SAML sign-in, invites, SCIM, member reads — on an embedded database
-set up the way a managed one is (an ordinary app role, the two roles made by
-an administrator), so CI catches what only appears without superuser.
+`src/shared/data/server.test.js` runs the whole deployed path — first start,
+password sign-in and lockout, the first-sign-in password change, adding
+people, resets, member reads — on an embedded database set up the way a
+hosted one is (an ordinary app role, the two roles made by an administrator,
+no bypass right), so CI catches what only appears without superuser.

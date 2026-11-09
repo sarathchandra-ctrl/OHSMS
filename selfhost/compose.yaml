@@ -47,8 +47,6 @@ services:
     environment:
       DATABASE_URL: postgres://ehs_app:${APP_DB_PASSWORD}@db:5432/ehs
       PUBLIC_ORIGIN: https://${DOMAIN:?set DOMAIN in .env}
-      STATE_KEY: ${STATE_KEY:?set STATE_KEY in .env}
-      CONTROL_TOKEN: ${CONTROL_TOKEN:?set CONTROL_TOKEN in .env}
       SESSION_SECRET: ${SESSION_SECRET:?set SESSION_SECRET in .env}
       DATA_KEY_MASTER: ${DATA_KEY_MASTER:?set DATA_KEY_MASTER in .env}
       SMTP_HOST: ${SMTP_HOST:-}
@@ -56,7 +54,10 @@ services:
       SMTP_USER: ${SMTP_USER:-}
       SMTP_PASS: ${SMTP_PASS:-}
       MAIL_FROM: ${MAIL_FROM:-}
-      OIDC_ACCEPT_UNVERIFIED_EMAIL: ${OIDC_ACCEPT_UNVERIFIED_EMAIL:-false}
+      # First start only: the organization and its first administrator.
+      ORG_NAME: ${ORG_NAME:-Cult Fit}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
       BLOB_DIR: /srv/stack/data/files
     volumes:
       # Uploaded photos and documents. Back this up with the database.

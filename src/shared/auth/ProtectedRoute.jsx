@@ -2,6 +2,7 @@ import { Navigate, useLocation } from 'react-router-dom'
 import { useAuth } from './AuthContext'
 import { can } from './permissions'
 import SamLoading from '../layout/SamLoading'
+import ChangePassword from '../../pages/auth/ChangePassword'
 
 /**
  * Guards the authenticated app. Redirects:
@@ -20,6 +21,8 @@ export default function ProtectedRoute({ children, requireAdmin = false, require
   // Authenticated but the profile is still resolving — wait, don't bounce to
   // /login (bouncing races the login redirect and causes a loop).
   if (!profile) return <SamLoading label="Loading your profile…" />
+  // A temporary password set by an administrator must be replaced first.
+  if (profile.mustChangePassword === true) return <ChangePassword />
   if (!isApproved) return <Navigate to="/pending" replace />
   // Turned away from an admin-only screen — send them to their own home rather
   // than to /hub, which is no longer where anyone lands and which a plain

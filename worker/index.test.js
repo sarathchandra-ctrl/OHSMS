@@ -15,13 +15,10 @@ describe('which paths go to the organization server', () => {
     for (const p of API_PREFIXES) expect(SERVER_PREFIXES, p).toContain(p)
     for (const path of [
       '/data',
-      '/auth/start',
-      '/auth/saml',
+      '/auth/password',
       '/presign',
       '/blob',
       '/rpc/getDataKeys',
-      '/setup',
-      '/scim/v2/Users',
       '/health',
       '/runtime-config.js',
     ]) {
@@ -37,7 +34,8 @@ describe('which paths go to the organization server', () => {
       '/assets/main.js',
       '/privacy',
       '/database',
-      '/setupx',
+      '/setup',
+      '/scim/v2/Users',
     ]) {
       expect(isServerPath(path), path).toBe(false)
     }

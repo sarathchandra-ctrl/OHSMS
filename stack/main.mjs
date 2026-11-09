@@ -5,7 +5,6 @@
 import nodemailer from 'nodemailer'
 import { createDedicatedApp } from './app.mjs'
 import { createPgDatabase } from './pg.mjs'
-import { parseStateKey } from './state.mjs'
 
 const env = process.env
 const problems = []
@@ -20,12 +19,10 @@ function required(name, { min = 1 } = {}) {
 
 const databaseUrl = required('DATABASE_URL')
 const origin = required('PUBLIC_ORIGIN').replace(/\/$/, '')
-const controlToken = required('CONTROL_TOKEN', { min: 32 })
 const sessionSecret = required('SESSION_SECRET', { min: 32 })
 const dataKeyMaster = required('DATA_KEY_MASTER')
-const stateKeyRaw = required('STATE_KEY')
 
-// Every session redirect, SAML/OIDC callback and file URL is built on this
+// Every file URL is built on this
 // origin. Behind Cloudflare it is the Cloudflare hostname people type. Fail
 // here, not on the first sign-in.
 // Parsed, not pattern-matched: a pattern accepted `https://?x` and
@@ -52,14 +49,6 @@ if (dataKeyMaster) {
   }
 }
 
-let stateKey
-if (stateKeyRaw) {
-  try {
-    stateKey = parseStateKey(stateKeyRaw)
-  } catch (err) {
-    problems.push(err.message)
-  }
-}
 
 if (problems.length) {
   process.stderr.write(
@@ -68,8 +57,7 @@ if (problems.length) {
   process.exit(1)
 }
 
-// Mail is optional. Without it invitations are not emailed; the administrator
-// tells people to sign in.
+// Mail is optional and used only for incident notifications.
 let mail = null
 if (env.SMTP_HOST && env.SMTP_USER && env.SMTP_PASS && env.MAIL_FROM) {
   const port = Number(env.SMTP_PORT || 587)
@@ -101,15 +89,19 @@ if (env.SMTP_HOST && env.SMTP_USER && env.SMTP_PASS && env.MAIL_FROM) {
 const db = createPgDatabase(databaseUrl, { max: Number(env.DB_POOL_MAX || 5) })
 const { server } = await createDedicatedApp({
   db,
-  stateKey,
   origin,
   sessionSecret,
-  controlToken,
   dataKeyMaster,
   mail,
   staticDir: env.STATIC_DIR || new URL('./public', import.meta.url).pathname,
   blobDir: env.BLOB_DIR || new URL('./data/files', import.meta.url).pathname,
-  oidcAcceptUnverifiedEmail: env.OIDC_ACCEPT_UNVERIFIED_EMAIL === 'true',
+  // First start only: the organization and its first administrator, who must
+  // change ADMIN_PASSWORD at first sign-in. Ignored once an admin exists.
+  bootstrap: {
+    orgName: env.ORG_NAME || 'Cult Fit',
+    adminEmail: env.ADMIN_EMAIL || '',
+    adminPassword: env.ADMIN_PASSWORD || '',
+  },
 })
 
 const port = Number(env.PORT || 8080)

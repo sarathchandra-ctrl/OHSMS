@@ -66,7 +66,6 @@
     "@capacitor/cli": "^8.5.3",
     "@electric-sql/pglite": "^0.3.16",
     "@eslint/js": "^8.57.0",
-    "@node-saml/node-saml": "^5.2.0",
     "@playwright/test": "^1.62.1",
     "@tailwindcss/postcss": "^4.3.3",
     "@testing-library/dom": "^10.4.0",

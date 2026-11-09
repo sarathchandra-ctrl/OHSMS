@@ -1,13 +1,12 @@
 // The organization's server, as deployed: the gateway the app talks to
-// (/data, /rpc, /presign, /blob, sign-in), first-run /setup, and the built app
-// itself, on one origin. docs/SELF-HOSTING.md.
+// (/data, /rpc, /presign, /blob, password sign-in) and the built app itself,
+// on one origin. docs/SELF-HOSTING.md.
 //
 // stack/main.mjs reads the environment and calls this. Everything here takes
 // its database and settings as arguments, so the tests run it on PGlite.
 //
-// State survives a restart (stack/state.mjs), the demo OIDC issuer is off,
-// and the sign-in configuration connected at /setup is restored at start-up.
-// The built app is served here too, so the session redirect, the SAML
+// On start it creates the organization and its first administrator if the
+// database has none (bootstrapOrganization). The built app is served here too, so the session redirect, the SAML
 // assertion and the app's /data calls are all same-origin. When the app is
 // served from Cloudflare instead (worker/index.js), the Worker forwards these
 // same paths here, so they stay same-origin to the browser.
@@ -17,7 +16,7 @@ import { stat } from 'node:fs/promises'
 import { extname, join, normalize, sep } from 'node:path'
 import { applySchema, createEngine } from './engine.mjs'
 import { createOwnStackServer } from './server.mjs'
-import { openState } from './state.mjs'
+import { bootstrapOrganization } from './passwords.mjs'
 import { blobKeyFrom, createBlobStore } from './blobs.mjs'
 import { API_PREFIXES, runtimeConfigScript } from './runtimeConfig.mjs'
 
@@ -90,55 +89,37 @@ function serveFile(res, file, method) {
 /**
  * @param {object} o
  * @param {object} o.db              PGlite or stack/pg.mjs
- * @param {Buffer} o.stateKey        32 bytes; seals secrets at rest
- * @param {string} o.origin          the public https origin of this environment
+ * @param {string} o.origin          the public https origin of this server
  * @param {string} o.sessionSecret
- * @param {string} o.controlToken    the one-time setup code for /setup
  * @param {string} o.dataKeyMaster
- * @param {string} [o.blobDir]       where uploaded files are kept on disk
  * @param {Function|null} o.mail     ({ to, subject, text }) => { sent: boolean }
  * @param {string} [o.staticDir]     the built app; omitted means API only
- * @param {boolean} [o.oidcAcceptUnverifiedEmail]  OIDC_ACCEPT_UNVERIFIED_EMAIL
+ * @param {string} [o.blobDir]       where uploaded files are kept on disk
+ * @param {object} [o.bootstrap]     { orgName, adminEmail, adminPassword } for first start
  */
 export async function createDedicatedApp({
   db,
-  stateKey,
   origin,
   sessionSecret,
-  controlToken,
   dataKeyMaster,
   mail = null,
   staticDir = '',
   blobDir = '',
-  oidcAcceptUnverifiedEmail = false,
+  bootstrap = null,
 }) {
   await applySchema(db)
   const engine = createEngine(db)
-  const state = await openState(db, { key: stateKey })
-  // The sign-in the app is told about follows the one the host holds.
-  let currentAuth = state.auth || { method: 'none' }
+  const created = bootstrap ? await bootstrapOrganization(engine, db, bootstrap) : { created: false }
 
   const host = createOwnStackServer({
     engine,
     db,
     sessionSecret,
-    origin,
-    // Before /setup names an IdP, there is none: sign-in answers 503.
-    auth: currentAuth,
-    controlToken,
     blobStore: blobDir
       ? createBlobStore({ dir: blobDir, key: blobKeyFrom(sessionSecret), origin })
       : null,
     dataKeyMaster,
     mail,
-    oidcAcceptUnverifiedEmail,
-    demoIssuer: false,
-    // Tell the app about a sign-in only once it is stored: if the write
-    // failed, a restart would bring back the old one and the two would differ.
-    onAuthChange: async (auth) => {
-      await state.saveAuth(auth)
-      currentAuth = auth
-    },
   })
   const delegate = host.listeners('request')[0]
   host.removeAllListeners('request')
@@ -154,11 +135,10 @@ export async function createDedicatedApp({
         res.writeHead(200, {
           ...BASE_HEADERS,
           'Content-Type': 'text/javascript; charset=utf-8',
-          // Changes the moment /setup connects an IdP.
           'Cache-Control': 'no-store',
         })
         return res.end(
-          req.method === 'HEAD' ? undefined : runtimeConfigScript({ origin, auth: currentAuth })
+          req.method === 'HEAD' ? undefined : runtimeConfigScript({ origin })
         )
       }
       if (root && (req.method === 'GET' || req.method === 'HEAD') && !isApi(url.pathname)) {
@@ -175,5 +155,5 @@ export async function createDedicatedApp({
     }
   })
 
-  return { server: host, state }
+  return { server: host, created }
 }

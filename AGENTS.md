@@ -31,7 +31,7 @@ arbitrary.
 `src/` (the app) and `stack/` (the organization's server) each have their own
 `package.json` and lockfile; `worker/` is the Cloudflare Worker and has no
 dependencies of its own. The root `npm test` covers all three, but needs
-`npm ci --prefix stack` first because the server tests import `pg` and SAML.
+`npm ci --prefix stack` first because the server tests import `pg`.
 
 `stack/lib/` holds rules shared by the server and the app (file deletion,
 retention, data keys, subject data). The app imports them by relative path.

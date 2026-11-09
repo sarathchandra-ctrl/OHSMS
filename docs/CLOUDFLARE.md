@@ -30,21 +30,27 @@ Two ways, chosen by the Worker's settings in `wrangler.jsonc`:
    and uncomment the `r2_buckets` entry in `wrangler.jsonc`. Without it the
    app still works, keeping each photo or document (up to 700 KB) inside its
    record.
-4. **Secrets.** `SESSION_SECRET` and `CONTROL_TOKEN` (`openssl rand -hex 32`),
-   `STATE_KEY` and `DATA_KEY_MASTER` (`openssl rand -base64 32`), each with
-   `npx wrangler secret put NAME`. Keep a copy somewhere safe: losing
-   `STATE_KEY` loses the sign-in configuration, losing `DATA_KEY_MASTER` loses
-   encrypted fields.
+4. **Secrets**, each with `npx wrangler secret put NAME`:
+   `SESSION_SECRET` (`openssl rand -hex 32`), `DATA_KEY_MASTER`
+   (`openssl rand -base64 32`), and for the first start `ADMIN_EMAIL` and
+   `ADMIN_PASSWORD` (at least 10 characters). Keep a copy somewhere safe:
+   losing `DATA_KEY_MASTER` loses encrypted fields.
 5. **Address.** `PUBLIC_ORIGIN` in `wrangler.jsonc` is the address people
    type (the `workers.dev` URL, or a custom domain added under the Worker's
    Settings → Domains & Routes).
 6. **Deploy:** `npm run deploy:cloudflare`. Check
    `curl -s https://<address>/health` — it answers
    `{"ok":true,"database":"ok",…}`, or says what is missing.
-7. **Set up:** open `https://<address>/setup` with `CONTROL_TOKEN` as the
-   setup code, and connect the company sign-in (OIDC or SAML).
+7. **Sign in** at `https://<address>` with `ADMIN_EMAIL` and `ADMIN_PASSWORD`.
+   The organization (`ORG_NAME` in `wrangler.jsonc`) and this first
+   administrator are created on the first request; you are asked to choose
+   your own password straight away. Then add people under **Employees → Add
+   employee**: each gets a temporary password to change at first sign-in.
+   A forgotten password is reset by an administrator (Employees → Reset
+   password).
 
-Limits of A: invitation mail is not sent (no SMTP on Workers yet), and every
+Limits of A: no mail is sent (password resets go through an administrator),
+and every
 request opens its database connection through Hyperdrive, so pick a database
 region close to Cloudflare's users.
 
@@ -56,7 +62,7 @@ Postgres database**. Cloudflare sits in front of it:
 ```
  browser ──https──▶  Cloudflare Worker  (ehs.example.com)
                       │  serves the app (dist/) from Cloudflare's edge
-                      │  forwards /data /auth/* /rpc/* /presign /blob /setup
+                      │  forwards /data /auth/* /rpc/* /presign /blob
                       │           /scim/* /health /runtime-config.js
                       ▼
                      Cloudflare Tunnel  (ehs-origin.example.com, Access-protected)
@@ -84,8 +90,6 @@ Keep real hostnames, tokens and secrets out of the repository.
   Cloudflare).
 - A Linux server (VM or on-premises) with Docker and the Docker Compose plugin:
   2 vCPU, 4 GB RAM, 40 GB disk is comfortable for a few hundred users.
-- The organization's identity provider: OIDC (Okta, Microsoft Entra, Google,
-  Keycloak…) or SAML. See "Known limits" in [`SELF-HOSTING.md`](SELF-HOSTING.md).
 - Node 22 on the machine you deploy the Worker from (or use Cloudflare's Git
   integration, step 5).
 
@@ -134,16 +138,17 @@ Fill in `.env`:
 - `WEEHS_IMAGE` — the image from step 1.
 - `COMPOSE_PROFILES=cloudflare`
 - `DOMAIN=ehs.example.com` — the **Worker's** hostname, the one people type.
-  The server builds every redirect, SAML/OIDC callback and file link on it.
+  The server builds every file link on it.
 - `TUNNEL_TOKEN` — from step 2.
 - `DB_ADMIN_PASSWORD`, `APP_DB_PASSWORD` — `openssl rand -hex 24` each.
-- `STATE_KEY`, `DATA_KEY_MASTER` — `openssl rand -base64 32` each.
-- `CONTROL_TOKEN`, `SESSION_SECRET` — `openssl rand -hex 32` each.
+- `DATA_KEY_MASTER` — `openssl rand -base64 32`.
+- `SESSION_SECRET` — `openssl rand -hex 32`.
+- `ADMIN_EMAIL`, `ADMIN_PASSWORD` — the first administrator (first start only).
 - Optionally the `SMTP_` settings and `MAIL_FROM`, for invitation mail.
 
-**Back up `.env` somewhere off the server.** Without `STATE_KEY` the stored
-sign-in configuration cannot be read; without `DATA_KEY_MASTER` encrypted
-fields cannot be opened; without the passwords the data cannot be reached.
+**Back up `.env` somewhere off the server.** Without `DATA_KEY_MASTER`
+encrypted fields cannot be opened; without the passwords the data cannot be
+reached.
 
 Start it:
 
@@ -206,25 +211,18 @@ curl -s https://ehs.example.com/health
 
 It answers `{"ok":true}` — that request went browser → Worker → Tunnel → server.
 
-## 6. Set up the organization
+## 6. Sign in
 
-Open `https://ehs.example.com/setup`. Enter the setup code (`CONTROL_TOKEN`
-from `.env`), the organization's name, your name and work email, and the
-identity provider. The page shows the exact callback URLs to register with the
-provider:
-
-- **SAML:** ACS / reply URL `https://ehs.example.com/auth/saml`, entity ID
-  `https://ehs.example.com`, sign-on URL `https://ehs.example.com/auth/start`.
-- **OIDC:** redirect URI `https://ehs.example.com/auth/callback`.
-
-`/setup` runs once. It creates the organization and makes your email its
-first administrator, then closes for good. Sign in at `https://ehs.example.com`
-with your company account, and from there:
+Open `https://ehs.example.com` and sign in with `ADMIN_EMAIL` and
+`ADMIN_PASSWORD`. The organization and this first administrator were created
+when the server started; you are asked to choose your own password straight
+away. From there:
 
 1. **Settings** — organization details, departments, scope and granularity.
 2. **Sites** — add sites, including latitude and longitude.
-3. **Employees → Invite** — invite people, or set _Join automatically_ by
-   email domain, or map identity-provider groups to roles, or turn on SCIM.
+3. **Employees → Add employee** — each person gets a temporary password to
+   change at first sign-in. **Reset password** on the same page handles a
+   forgotten one.
 
 ## Updating
 
@@ -267,5 +265,5 @@ records keep their old links.
 | `/health` answers 403 from Cloudflare Access            | Worker secrets `CF_ACCESS_CLIENT_ID` / `_SECRET` missing or wrong                                  |
 | `/health` answers 502/530                               | Tunnel down: `docker compose logs cloudflared`, or the hostname's service is not `http://app:8080` |
 | Sign-in returns to the IdP with "redirect URI mismatch" | `DOMAIN` in `.env` is not the Worker hostname, or the IdP has another callback registered          |
-| Sign-in page says "Not set up yet"                      | `/setup` has not been completed                                                                    |
+| Sign-in says "That email and password do not match" for the admin | the server started without `ADMIN_EMAIL`/`ADMIN_PASSWORD`, or an admin already existed |
 | Uploads fail                                            | the `files` volume is not writable, or the upload is over 30 MB                                    |

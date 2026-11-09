@@ -5,7 +5,6 @@
 // request. Retention does not grow a scheduler that deletes statutory records:
 // planLiveAgePurge stays empty while the period is NEEDS_LEGAL_SIGN_OFF.
 
-import { randomBytes, scryptSync, timingSafeEqual } from 'node:crypto'
 import { grantsFor, generateKeyset, releaseKeyset } from '../stack/lib/dataKeys.js'
 import { mayDeleteFile } from '../stack/lib/fileDelete.js'
 import { planPurge } from '../stack/lib/retention.js'
@@ -14,25 +13,10 @@ import {
   RECORD_CLASSES,
   NEEDS_LEGAL_SIGN_OFF,
 } from '../stack/lib/retentionPolicy.js'
-import { asWorker } from './engine.mjs'
 import { planWithdrawals, withdrawnFields } from '../stack/lib/permitMirror.js'
 import { planFlags } from '../stack/lib/lotoPermitSweep.js'
 
 const WORKER = { role: 'ohsms_worker', uid: '' }
-
-function hashPassword(password, salt = randomBytes(16).toString('hex')) {
-  const hash = scryptSync(password, salt, 32).toString('hex')
-  return `scrypt$${salt}$${hash}`
-}
-
-function passwordMatches(stored, password) {
-  const parts = String(stored || '').split('$')
-  if (parts.length !== 3 || parts[0] !== 'scrypt') return false
-  const next = scryptSync(password, parts[1], 32)
-  const got = Buffer.from(parts[2], 'hex')
-  if (got.length !== next.length) return false
-  return timingSafeEqual(got, next)
-}
 
 async function liveProfile(engine, uid) {
   if (!uid) return null
@@ -51,50 +35,6 @@ export async function stampIdentity(engine, uid) {
     status: profile.status,
     mustChangePassword: false,
   }
-}
-
-export async function completePasswordChange(
-  engine,
-  db,
-  { uid, authTime, now = Date.now(), current, password, idp = false }
-) {
-  if (!uid) return { ok: false, reason: 'unauthenticated' }
-  if (idp) return { ok: false, reason: 'idp' }
-  if (typeof authTime === 'number' && now - authTime * 1000 > 5 * 60 * 1000) {
-    return { ok: false, reason: 'stale' }
-  }
-  const profile = await liveProfile(engine, uid)
-  if (!profile) return { ok: false, reason: 'no-profile' }
-  if (profile.mustChangePassword !== true) return { ok: true, reason: 'not-required' }
-  const row = await asWorker(db, 'SELECT password_hash FROM auth_secrets WHERE uid = $1', [uid])
-  const stored = row.rows[0]?.password_hash
-  if (!stored || !passwordMatches(stored, current)) return { ok: false, reason: 'current-rejected' }
-  if (!password || password === current || password.length < 10)
-    return { ok: false, reason: 'policy' }
-  await asWorker(
-    db,
-    `INSERT INTO auth_secrets (uid, email, password_hash) VALUES ($1, $2, $3)
-     ON CONFLICT (uid) DO UPDATE SET password_hash = EXCLUDED.password_hash, updated_at = now()`,
-    [uid, profile.email || uid, hashPassword(password)]
-  )
-  await engine.commit(WORKER, [
-    {
-      type: 'update',
-      path: 'users',
-      id: uid,
-      data: { mustChangePassword: false },
-    },
-  ])
-  return { ok: true, reason: 'replaced' }
-}
-
-export async function setLocalPassword(db, { uid, email, password }) {
-  await asWorker(
-    db,
-    `INSERT INTO auth_secrets (uid, email, password_hash) VALUES ($1, $2, $3)
-     ON CONFLICT (uid) DO UPDATE SET password_hash = EXCLUDED.password_hash, updated_at = now()`,
-    [uid, email, hashPassword(password)]
-  )
 }
 
 export async function releaseDataKeys(engine, { uid, master }) {

@@ -29,10 +29,6 @@
       "/presign",
       "/blob",
       "/rpc/*",
-      "/oidc/*",
-      "/.well-known/*",
-      "/setup",
-      "/scim/*",
       "/health",
       "/runtime-config.js"
     ]
@@ -51,11 +47,14 @@
   "vars": {
     // The address people type. Every sign-in redirect and file link is built on it.
     "PUBLIC_ORIGIN": "https://ohsms.sarath-chandra.workers.dev",
+    // The organization created on first start.
+    "ORG_NAME": "Cult Fit",
     // Leave empty to run the server here. Set to a Tunnel hostname
     // (https://ehs-origin.example.com) to use a server of your own instead.
     "ORIGIN_URL": ""
   },
   // Secrets, set with `npx wrangler secret put NAME` (never in this file):
-  //   SESSION_SECRET, STATE_KEY, CONTROL_TOKEN, DATA_KEY_MASTER
+  //   SESSION_SECRET, DATA_KEY_MASTER, and for the first start ADMIN_EMAIL and
+  //   ADMIN_PASSWORD (the first administrator, who must change it at sign-in)
   "observability": { "enabled": true }
 }

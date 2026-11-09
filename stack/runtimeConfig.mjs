@@ -8,31 +8,25 @@ export const API_PREFIXES = [
   '/presign',
   '/blob',
   '/rpc/',
-  '/oidc/',
-  '/.well-known/',
-  '/setup',
-  '/scim/',
   '/health',
 ]
 
 
 /**
  * The settings the app reads before it starts (src/shared/runtimeConfig.js),
- * from what this server is now rather than from how its image was built: the
- * sign-in method follows the IdP connected at /setup, and the gateway is this
- * origin.
+ * from what this server is: the gateway is this origin, and sign-in is email
+ * and password, kept by this server.
  *
  * Every value is a JSON string, and `<` is escaped, so nothing a request
  * carried can close the script or start another one.
  */
-export function runtimeConfigScript({ origin, auth }) {
-  const method = ['saml', 'oidc', 'supabase'].includes(auth?.method) ? auth.method : 'none'
+export function runtimeConfigScript({ origin }) {
   const config = {
     DATA_DRIVER: 'postgres',
     DATA_GATEWAY: origin,
     STORAGE_DRIVER: 's3',
     S3_PRESIGN_ENDPOINT: `${origin}/presign`,
-    AUTH_METHOD: method,
+    AUTH_METHOD: 'password',
     AUTH_TOTP: 'off',
   }
   const json = JSON.stringify(config).replace(/</g, '\\u003c')

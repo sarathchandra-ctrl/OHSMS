@@ -15,20 +15,21 @@ door.
 ## The pieces
 
 - **`src/`** — the web app (React + Vite). Built to `dist/`.
-- **`stack/`** — the organization's server (Node 22): sign-in through the
-  organization's identity provider (OIDC, SAML or Supabase Auth), the data
-  gateway (`/data`, enforced by Postgres row-level security in
-  `stack/schema.sql`), server jobs (`/rpc/*`), file storage on disk
-  (`/presign`, `/blob`), SCIM, and the one-time `/setup`.
-- **`worker/`** — the Cloudflare Worker: serves `dist/` and forwards the
-  server's paths through the Tunnel.
+- **`stack/`** — the organization's server: email-and-password sign-in
+  (`/auth/password`, stack/passwords.mjs), the data gateway (`/data`,
+  enforced by Postgres row-level security in `stack/schema.sql`), server jobs
+  (`/rpc/*`), and file storage (`/presign`, `/blob`).
+- **`worker/`** — the Cloudflare Worker: serves `dist/` and either runs the
+  server itself (Hyperdrive + R2) or forwards its paths through a Tunnel.
 - **`selfhost/`** — compose file, `.env.example`, install script.
 
 ## First organization
 
-There is exactly one. `/setup` creates it, once, and makes the email entered
-there its first administrator. Everyone else is invited from **Employees**
-(one by one, by email domain, by identity-provider group, or over SCIM).
+There is exactly one. It is created on the server's first start, with its
+first administrator (`ADMIN_EMAIL` / `ADMIN_PASSWORD`, changed at first
+sign-in). Everyone else is added from **Employees → Add employee**, each with
+a temporary password; **Reset password** on the same page handles forgotten
+ones.
 
 ## After each deploy
 

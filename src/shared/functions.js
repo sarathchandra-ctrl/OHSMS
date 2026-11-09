@@ -64,15 +64,30 @@ export async function getDataKeys() {
 }
 
 /**
- * Replace the signed-in user's password and lift mustChangePassword.
- *
- * The function reads the uid from the token. `current` is checked with
- * Identity Toolkit; `password` is set with the Admin SDK only when it is a
- * different string. Nothing in this module stores either value.
+ * Replace the signed-in user's password (and lift mustChangePassword).
+ * The server reads the uid from the session and checks `current` first.
+ * Resolves `{ ok, reason? }`; a refusal arrives as a thrown error with
+ * `.reason` ('current-rejected', 'policy', 'stale').
  */
 export async function completePasswordChange({ current, password } = {}) {
   const fn = await callable('completePasswordChange')
   return (await fn({ current, password })).data
+}
+
+/**
+ * Admin: add a person with a temporary password they must replace at first
+ * sign-in. Refusals carry `.reason`: 'email', 'role', 'policy',
+ * 'already-member', 'not-admin'.
+ */
+export async function createMember({ email, name, role, password } = {}) {
+  const fn = await callable('createMember')
+  return (await fn({ email, name, role, password })).data
+}
+
+/** Admin: give someone a new temporary password, to change at next sign-in. */
+export async function resetMemberPassword({ uid, password } = {}) {
+  const fn = await callable('resetMemberPassword')
+  return (await fn({ uid, password })).data
 }
 
 /**
@@ -212,11 +227,6 @@ export async function sealStoredObjects({ dryRun = true } = {}) {
   return (await fn({ dryRun })).data
 }
 
-/** Put orgId on every member's ID token, so Storage rules can read it. */
-export async function backfillClaims() {
-  const fn = await callable('backfillClaims')
-  return (await fn()).data
-}
 
 /**
  * Delete defect locks whose fault no longer exists, so the unit can be reported
@@ -227,91 +237,9 @@ export async function clearOrphanedDefectLocks({ dryRun = true } = {}) {
   return (await fn({ dryRun })).data
 }
 
-/**
- * Delete one stored file, with the caller's standing checked against their LIVE
- * profile instead of their ID token.
- *
- * `storage.rules` refuses client deletes outright, so this is the only route.
- * It exists because a Storage rule can only read the org and role a token
- * CLAIMS, and a token stays valid for up to an hour after the account behind it
- * is suspended, demoted or moved — an hour in which the evidence could still be
- * destroyed. See SECURITY.md S-19.
- *
- * Called by shared/storage removeFile(), which stays best-effort: an orphaned
- * object is a cost, a failed delete is not a correctness bug.
- */
-/**
- * Own-stack only: invite someone into the caller's organization. Their first
- * sign-in with the company's identity provider then creates their account with
- * this role. The dedicated host re-reads the caller's profile and refuses
- * anyone who is not an approved admin (stack/invites.mjs).
- * @returns {{ ok: true, email, role, emailed: boolean }}
- */
-export async function inviteMember({ email, role, name } = {}) {
-  const fn = await callable('inviteMember')
-  return (await fn({ email, role, name })).data
-}
 
-/** Own-stack only: the organization's pending invites. */
-export async function listInvites() {
-  const fn = await callable('listInvites')
-  return (await fn()).data?.invites || []
-}
 
-/** Own-stack only: withdraw a pending invite. */
-export async function revokeInvite(email) {
-  const fn = await callable('revokeInvite')
-  return (await fn({ email })).data
-}
 
-/**
- * Own-stack only: who joins without an invite. Anyone the company's identity
- * provider signs in with an address at one of these domains joins with this
- * role (never admin). Admin only; the host checks (stack/invites.mjs).
- * @returns {{ domains: string[], role: string } | null}
- */
-export async function getAutoJoin() {
-  const fn = await callable('getAutoJoin')
-  return (await fn()).data?.autoJoin || null
-}
-
-/** Own-stack only: set it, or turn it off with no domains. */
-export async function setAutoJoin({ domains, role }) {
-  const fn = await callable('setAutoJoin')
-  return (await fn({ domains, role })).data?.autoJoin || null
-}
-
-/**
- * Own-stack only: IdP groups mapped to roles, applied at every sign-in
- * (stack/directory.mjs). Admin only.
- * @returns {Array<{ group: string, role: string }>}
- */
-export async function getGroupRoles() {
-  const fn = await callable('getGroupRoles')
-  return (await fn()).data?.rules || []
-}
-
-export async function setGroupRoles(rules) {
-  const fn = await callable('setGroupRoles')
-  return (await fn({ rules })).data?.rules || []
-}
-
-/** Own-stack only: whether SCIM sync has a token, and since when. */
-export async function scimStatus() {
-  const fn = await callable('scimStatus')
-  return (await fn()).data
-}
-
-/** Own-stack only: a new SCIM token, shown once; it replaces any earlier one. */
-export async function createScimToken() {
-  const fn = await callable('createScimToken')
-  return (await fn()).data?.token
-}
-
-export async function revokeScimToken() {
-  const fn = await callable('revokeScimToken')
-  return (await fn()).data
-}
 
 export async function deleteOrgFile(path) {
   const fn = await callable('deleteOrgFile')
