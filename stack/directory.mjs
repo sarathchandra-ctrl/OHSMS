@@ -403,7 +403,7 @@ export async function handleScim({ engine, db, origin, method, pathname, query, 
         {
           type: 'oauthbearertoken',
           name: 'Bearer token',
-          description: 'Created in WEEHS → Employees',
+          description: 'Created in Cult Fit SMS → Employees',
         },
       ],
     })

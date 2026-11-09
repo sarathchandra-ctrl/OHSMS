@@ -107,10 +107,10 @@ export async function inviteMember(
     const org = cleanName(orgDoc?.name) || 'your organization'
     const sent = await mail({
       to: address,
-      subject: `You have been invited to ${org} on WEEHS`,
+      subject: `You have been invited to ${org} on Cult Fit SMS`,
       text:
         `${cleanName(admin.name) || 'An administrator'} invited you to ${org}` +
-        ` on WEEHS as ${role}.\n\n` +
+        ` on Cult Fit SMS as ${role}.\n\n` +
         `Sign in${where} with your company account (choose "Continue with company sign-in").` +
         ` Use the same email address this message was sent to.\n\n` +
         `If you were not expecting this, you can ignore it.`,

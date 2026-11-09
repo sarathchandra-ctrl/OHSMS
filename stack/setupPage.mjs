@@ -92,13 +92,13 @@ export function renderSetupForm({ origin, values = {}, reason = '' }) {
     : ''
   const checked = (m) => (method === m ? ' checked' : '')
   return page(
-    'Set up WEEHS',
-    `<h1>Set up WEEHS</h1>
+    'Set up Cult Fit SMS',
+    `<h1>Set up Cult Fit SMS</h1>
 <p class="muted">Connect your organization and its sign-in. This is done once, by whoever installed this server, and takes a few minutes.</p>
 ${error}
 <form method="post" action="/setup" autocomplete="off">
 <label for="code">Setup code
-<span class="hint">Filled in when you come from the WEEHS Installer. Otherwise: CONTROL_TOKEN in this server’s .env file.</span>
+<span class="hint">Filled in when you come from the Installer. Otherwise: CONTROL_TOKEN in this server’s settings (.env, or .env.cloudflare for the Cloudflare deployment).</span>
 <input id="code" name="code" type="password" required spellcheck="false">
 </label>
 
@@ -118,7 +118,7 @@ ${error}
 </label>
 
 <h2>How people sign in</h2>
-<p class="muted">With your company’s identity provider. WEEHS keeps no passwords.</p>
+<p class="muted">With your company’s identity provider. Cult Fit SMS keeps no passwords.</p>
 <div class="choice" role="radiogroup" aria-label="Sign-in method">
 <label><input type="radio" name="method" value="saml" required${checked('saml')}> SAML</label>
 <label><input type="radio" name="method" value="oidc"${checked('oidc')}> OpenID Connect (Microsoft Entra, Okta, Google…)</label>
@@ -184,7 +184,7 @@ and, for the app’s tile in your portal, home page / sign-in URL
 
 export function renderSetupDone({ orgName, origin, email }) {
   return page(
-    'WEEHS is live',
+    'Cult Fit SMS is live',
     `<h1>${escapeHtml(orgName)} is live</h1>
 <p>Sign in with your company account (<b>${escapeHtml(email)}</b>). You are the administrator: invite everyone else from <b>Employees</b>, and add your <b>Sites</b>.</p>
 <a class="button" href="${escapeHtml(origin)}/login">Go to sign in</a>`

@@ -535,7 +535,7 @@ describe('setting up in the browser', () => {
     const page = await fetch(`${app.origin}/setup`)
     expect(page.status).toBe(200)
     const html = await page.text()
-    expect(html).toContain('Set up WEEHS')
+    expect(html).toContain('Set up Cult Fit SMS')
     expect(html).toContain('http://127.0.0.1/auth/saml')
 
     const done = await fetch(`${app.origin}/setup`, form(saml(keys)))
@@ -577,7 +577,7 @@ describe('setting up in the browser', () => {
     // Even the right code is refused while the window is full.
     const locked = await fetch(`${app.origin}/setup`, form(saml(keys)))
     expect(locked.status).toBe(429)
-    expect(await (await fetch(`${app.origin}/setup`)).text()).toContain('Set up WEEHS')
+    expect(await (await fetch(`${app.origin}/setup`)).text()).toContain('Set up Cult Fit SMS')
     await app.stop()
   })
 
