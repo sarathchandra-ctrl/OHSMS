@@ -18,6 +18,9 @@ import { reportError } from '../monitoring'
 import { isSealedFile, openFileBytes, sealFileBytes } from '../crypto'
 import { checkFileBytes, headOf } from './sniffType'
 import { runtimeEnv } from '../runtimeConfig'
+import { MAX_UPLOAD_BYTES } from '../../../stack/lib/uploadLimits'
+
+export { MAX_UPLOAD_BYTES }
 
 /**
  * A file refused on its contents, as opposed to storage being unavailable.
@@ -72,7 +75,6 @@ export const storageDriver = DRIVER in DRIVERS ? DRIVER : 's3'
 // A file between the two is accepted when storage works and refused with a
 // straight explanation when it does not — which is far better than writing a
 // document that Firestore will reject with something unreadable.
-export const MAX_UPLOAD_BYTES = 10 * 1024 * 1024
 export const MAX_INLINE_BYTES = 700 * 1024
 
 /** Human size, for messages people read. */
@@ -159,6 +161,9 @@ export async function putFile(kind, file, fileName, { collection } = {}) {
   try {
     const blob = typeof file === 'string' ? dataUrlToBlob(file) : file
     if (!blob) return null
+    if (blob.size > MAX_UPLOAD_BYTES) {
+      throw new RejectedFileError(`File is too large. Max ${formatSize(MAX_UPLOAD_BYTES)}.`)
+    }
 
     // Is this file what it says it is? (audit finding M-6, A.8.7)
     //

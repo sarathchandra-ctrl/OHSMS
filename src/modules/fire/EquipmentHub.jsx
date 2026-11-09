@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { lazy, Suspense, useState } from 'react'
+import ModuleLoading from '../../shared/layout/ModuleLoading'
 import { Link } from 'react-router-dom'
 import {
   Flame,
@@ -10,11 +11,11 @@ import {
   Plus,
 } from 'lucide-react'
 import Dashboard from './pages/Dashboard'
-import AEDDashboard from './pages/AEDDashboard'
-import FASDashboard from './pages/FASDashboard'
-import SignageDashboard from './pages/SignageDashboard'
-import StretcherDashboard from './pages/StretcherDashboard'
-import FirstAidDashboard from './pages/FirstAidDashboard'
+const AEDDashboard = lazy(() => import('./pages/AEDDashboard'))
+const FASDashboard = lazy(() => import('./pages/FASDashboard'))
+const SignageDashboard = lazy(() => import('./pages/SignageDashboard'))
+const StretcherDashboard = lazy(() => import('./pages/StretcherDashboard'))
+const FirstAidDashboard = lazy(() => import('./pages/FirstAidDashboard'))
 
 // One dashboard for all emergency equipment — each type in its own tab, keeping
 // the existing per-equipment dashboard designs. Signage and first aid sit
@@ -55,7 +56,7 @@ export default function EquipmentHub() {
         </Link>
       </div>
 
-      <Active />
+      <Suspense fallback={<ModuleLoading />}><Active /></Suspense>
     </div>
   )
 }

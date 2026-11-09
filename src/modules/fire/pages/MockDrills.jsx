@@ -595,7 +595,7 @@ export default function MockDrills() {
                   </label>
                 )}
               </div>
-              <p className="mt-2 text-xs text-ink-400">Photos of the drill, assembly point, issues, etc. Each image up to 10 MB.</p>
+              <p className="mt-2 text-xs text-ink-400">Photos of the drill, assembly point, issues, etc. Each image up to 2 MB.</p>
             </div>
 
             <div className="flex items-center justify-end gap-2 border-t border-surface-200/60 pt-4">

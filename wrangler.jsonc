@@ -43,8 +43,9 @@
       "database_name": "ohsms",
       "database_id": "3aff9e27-04ec-4d51-b4d6-7c8bbf46830a"
     }
-  ],  // Uploaded photos and documents. Add once R2 is enabled on the account:
-  //   "r2_buckets": [{ "binding": "FILES", "bucket_name": "ohsms-files" }],
+  ],
+  // Create this private bucket once before deploying: wrangler r2 bucket create ohsms-files.
+  "r2_buckets": [{ "binding": "FILES", "bucket_name": "ohsms-files" }],
   "vars": {
     // The address people type. Every sign-in redirect and file link is built on it.
     "PUBLIC_ORIGIN": "https://ohsms.sarath-chandra.workers.dev",

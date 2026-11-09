@@ -1,35 +1,37 @@
+import { lazy, Suspense } from 'react'
+import ModuleLoading from '../../shared/layout/ModuleLoading'
 import { Routes, Route, Navigate, Outlet } from 'react-router-dom'
 import { LayoutDashboard, Boxes, Wrench, Stamp, MapPin, Trash2 } from 'lucide-react'
 import { FleetProvider } from './context/FleetContext'
 import EquipmentHub from './EquipmentHub'
-import EquipmentRepository from './EquipmentRepository'
-import DefectRepository from './DefectRepository'
-import Dashboard from './pages/Dashboard'
-import Repository from './pages/Repository'
-import Signages from './pages/Signages'
-import LinkedSites from './pages/LinkedSites'
-import AEDRepository from './pages/AEDRepository'
-import AEDDashboard from './pages/AEDDashboard'
-import FASRepository from './pages/FASRepository'
-import FASPanel from './pages/FASPanel'
-import FASDashboard from './pages/FASDashboard'
-import SignageDashboard from './pages/SignageDashboard'
-import Stretchers from './pages/Stretchers'
-import StretcherDashboard from './pages/StretcherDashboard'
-import FirstAid from './pages/FirstAid'
-import FirstAidDashboard from './pages/FirstAidDashboard'
-import AssetBulkUpload from './pages/AssetBulkUpload'
-import AssetsDue from './pages/AssetsDue'
-import AddExtinguisher from './pages/AddExtinguisher'
-import BulkUpload from './pages/BulkUpload'
-import QRPrint from './pages/QRPrint'
-import RefillDue from './pages/RefillDue'
-import InProcess from './pages/InProcess'
-import PhysicalDefects from './pages/PhysicalDefects'
-import PhysicalDefectLog from './pages/PhysicalDefectLog'
-import Closed from './pages/Closed'
-import Approvals from './pages/Approvals'
-import RecycleBin from './pages/RecycleBin'
+const EquipmentRepository = lazy(() => import('./EquipmentRepository'))
+const DefectRepository = lazy(() => import('./DefectRepository'))
+const Dashboard = lazy(() => import('./pages/Dashboard'))
+const Repository = lazy(() => import('./pages/Repository'))
+const Signages = lazy(() => import('./pages/Signages'))
+const LinkedSites = lazy(() => import('./pages/LinkedSites'))
+const AEDRepository = lazy(() => import('./pages/AEDRepository'))
+const AEDDashboard = lazy(() => import('./pages/AEDDashboard'))
+const FASRepository = lazy(() => import('./pages/FASRepository'))
+const FASPanel = lazy(() => import('./pages/FASPanel'))
+const FASDashboard = lazy(() => import('./pages/FASDashboard'))
+const SignageDashboard = lazy(() => import('./pages/SignageDashboard'))
+const Stretchers = lazy(() => import('./pages/Stretchers'))
+const StretcherDashboard = lazy(() => import('./pages/StretcherDashboard'))
+const FirstAid = lazy(() => import('./pages/FirstAid'))
+const FirstAidDashboard = lazy(() => import('./pages/FirstAidDashboard'))
+const AssetBulkUpload = lazy(() => import('./pages/AssetBulkUpload'))
+const AssetsDue = lazy(() => import('./pages/AssetsDue'))
+const AddExtinguisher = lazy(() => import('./pages/AddExtinguisher'))
+const BulkUpload = lazy(() => import('./pages/BulkUpload'))
+const QRPrint = lazy(() => import('./pages/QRPrint'))
+const RefillDue = lazy(() => import('./pages/RefillDue'))
+const InProcess = lazy(() => import('./pages/InProcess'))
+const PhysicalDefects = lazy(() => import('./pages/PhysicalDefects'))
+const PhysicalDefectLog = lazy(() => import('./pages/PhysicalDefectLog'))
+const Closed = lazy(() => import('./pages/Closed'))
+const Approvals = lazy(() => import('./pages/Approvals'))
+const RecycleBin = lazy(() => import('./pages/RecycleBin'))
 import ModuleTabs from '../../shared/layout/ModuleTabs'
 import {
   RECYCLE_BIN_PATH,
@@ -89,6 +91,7 @@ function ListLayout() {
 export default function EquipmentModule() {
   return (
     <FleetProvider>
+      <Suspense fallback={<ModuleLoading />}>
       <Routes>
         <Route element={<ListLayout />}>
           <Route index element={<EquipmentHub />} />
@@ -125,6 +128,7 @@ export default function EquipmentModule() {
         <Route path="qr-print" element={<QRPrint />} />
         <Route path="*" element={<Navigate to="/equipment" replace />} />
       </Routes>
+      </Suspense>
     </FleetProvider>
   )
 }

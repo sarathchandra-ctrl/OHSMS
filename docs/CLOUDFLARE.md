@@ -29,9 +29,13 @@ Two ways, chosen by the Worker's settings in `wrangler.jsonc`:
    ```bash
    npx wrangler r2 bucket create ohsms-files
    ```
-   and uncomment the `r2_buckets` entry in `wrangler.jsonc`. Without it the
-   app still works, keeping each photo or document (up to 700 KB) inside its
-   record.
+   `wrangler.jsonc` binds that private bucket as `FILES`. Keep public access
+   disabled: the Worker signs upload and download links and checks them before
+   accessing R2. Attachments may be up to **2 MB (2,097,152 bytes)** each; the
+   upload endpoint counts the actual body and rejects larger files. Sealed
+   files reserve an additional 16 bytes for their AES-GCM authentication tag.
+   Existing inline attachments remain readable; files are not migrated automatically.
+   After deploying, `/health` must include `"files":true`.
 4. **Secrets**, each with `npx wrangler secret put NAME`:
    `SESSION_SECRET` (`openssl rand -hex 32`), `DATA_KEY_MASTER`
    (`openssl rand -base64 32`), and for the first start `ADMIN_EMAIL` and
@@ -265,4 +269,4 @@ A backup is only real once it has been restored somewhere else and signed in to.
 | `/health` answers 502/530                               | Tunnel down: `docker compose logs cloudflared`, or the hostname's service is not `http://app:8080` |
 | Sign-in returns to the IdP with "redirect URI mismatch" | `DOMAIN` in `.env` is not the Worker hostname, or the IdP has another callback registered          |
 | Sign-in says "That email and password do not match" for the admin | the server started without `ADMIN_EMAIL`/`ADMIN_PASSWORD`, or an admin already existed |
-| Uploads fail                                            | the `files` volume is not writable, or the upload is over 30 MB                                    |
+| Uploads fail                                            | the `files` volume is not writable, or the attachment is over 2 MB                                    |

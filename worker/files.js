@@ -4,7 +4,8 @@
 // out a 15-minute upload URL and a download capability URL, and /blob checks
 // the signature before touching the bucket.
 
-import { DOWNLOAD_HEADERS, MAX_BLOB_BYTES, createBlobSigner } from '../stack/blobSign.mjs'
+import { DOWNLOAD_HEADERS, createBlobSigner } from '../stack/blobSign.mjs'
+import { storedUploadLimit } from '../stack/lib/uploadLimits.js'
 
 function deny(status, message) {
   return new Response(
@@ -34,13 +35,48 @@ export function createR2FileStore({ bucket, key, origin }) {
       if (request.method === 'PUT') {
         const path = signer.check(url, 'put', now)
         if (!path) return deny(403, 'upload link refused')
-        const length = Number(request.headers.get('content-length') || 0)
-        if (!length) return deny(411, 'Content-Length is required')
-        if (length > MAX_BLOB_BYTES) return deny(413, 'file too large')
         const type = String(
           request.headers.get('content-type') || 'application/octet-stream'
         ).slice(0, 200)
-        await bucket.put(path, request.body, { httpMetadata: { contentType: type } })
+        const limit = storedUploadLimit(type)
+        const declared = request.headers.get('content-length')
+        if (declared !== null && !/^\d+$/.test(declared)) {
+          return deny(400, 'invalid Content-Length')
+        }
+        if (declared !== null && Number(declared) > limit) {
+          return deny(413, 'file too large; attachments must be at most 2 MB')
+        }
+        // Count the actual stream, including requests without Content-Length.
+        // Buffer only this small, bounded payload so a refused upload never
+        // creates or overwrites an R2 object.
+        const chunks = []
+        let size = 0
+        const reader = request.body?.getReader()
+        if (reader) {
+          try {
+            for (let chunk = await reader.read(); !chunk.done; chunk = await reader.read()) {
+              const { value } = chunk
+              size += value.byteLength
+              if (size > limit) {
+                await reader.cancel()
+                return deny(413, 'file too large; attachments must be at most 2 MB')
+              }
+              chunks.push(value)
+            }
+          } finally {
+            reader.releaseLock()
+          }
+        }
+        if (declared !== null && Number(declared) !== size) {
+          return deny(400, 'Content-Length does not match the file')
+        }
+        const bytes = new Uint8Array(size)
+        let offset = 0
+        for (const chunk of chunks) {
+          bytes.set(chunk, offset)
+          offset += chunk.byteLength
+        }
+        await bucket.put(path, bytes, { httpMetadata: { contentType: type } })
         return new Response(JSON.stringify({ ok: true }), {
           headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' },
         })

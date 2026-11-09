@@ -233,7 +233,7 @@ export default function Courses() {
                     Remove — use category art
                   </button>
                 )}
-                <p className="text-xs text-ink-400">Image up to 10 MB. Without one, the category art is used.</p>
+                <p className="text-xs text-ink-400">Image up to 2 MB. Without one, the category art is used.</p>
               </div>
               <input ref={thumbRef} type="file" accept="image/*" className="hidden" onChange={onThumb} />
             </div>
@@ -262,7 +262,7 @@ export default function Courses() {
               <Button type="button" variant="soft" icon={Paperclip} onClick={() => fileRef.current?.click()}>Add file</Button>
               <input ref={fileRef} type="file" accept="image/*,video/*,audio/*,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.*,application/vnd.ms-excel,application/vnd.ms-powerpoint" className="hidden" onChange={addFile} />
             </div>
-            <p className="mt-1 text-xs text-ink-400">Files up to 10 MB. Link anything larger (videos, e-learning).</p>
+            <p className="mt-1 text-xs text-ink-400">Files up to 2 MB. Link anything larger (videos, e-learning).</p>
           </div>
 
           <div className="flex justify-end gap-2 pt-1">

@@ -292,7 +292,7 @@ export default function SiteDetail() {
               icon={ImageOff}
               title="No FERP plans uploaded"
               description={isManager
-                ? 'Upload this site’s fire & emergency response plans — one image per floor (select several at once). JPG/PNG up to 10 MB each.'
+                ? 'Upload this site’s fire & emergency response plans — one image per floor (select several at once). JPG/PNG up to 2 MB each.'
                 : 'The FERP plans for this site haven’t been uploaded yet — ask a manager.'}
               action={isManager && <Button icon={Upload} onClick={() => fileRef.current?.click()}>Upload floor plans</Button>}
             />

@@ -21,7 +21,8 @@ import { mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises'
 import { dirname, join, normalize, sep } from 'node:path'
 import { pipeline } from 'node:stream/promises'
 import { isAppFilePath } from './lib/fileDelete.js'
-import { DOWNLOAD_HEADERS, MAX_BLOB_BYTES, createBlobSigner } from './blobSign.mjs'
+import { DOWNLOAD_HEADERS, createBlobSigner } from './blobSign.mjs'
+import { storedUploadLimit } from './lib/uploadLimits.js'
 
 export { UPLOAD_TTL_MS, MAX_BLOB_BYTES, blobKeyFrom } from './blobSign.mjs'
 
@@ -66,8 +67,10 @@ export function createBlobStore({ dir, key, origin }) {
     if (req.method === 'PUT') {
       const file = check(url, 'put', now)
       if (!file) return deny(403, 'upload link refused')
+      const type = String(req.headers['content-type'] || 'application/octet-stream').slice(0, 200)
+      const limit = storedUploadLimit(type)
       const declared = Number(req.headers['content-length'] || 0)
-      if (declared > MAX_BLOB_BYTES) return deny(413, 'file too large')
+      if (declared > limit) return deny(413, 'file too large')
       await mkdir(dirname(file), { recursive: true })
       const tmp = `${file}.part-${process.pid}-${Date.now()}`
       let size = 0
@@ -77,7 +80,7 @@ export function createBlobStore({ dir, key, origin }) {
           async function* cap(source) {
             for await (const chunk of source) {
               size += chunk.length
-              if (size > MAX_BLOB_BYTES)
+              if (size > limit)
                 throw Object.assign(new Error('too large'), { code: 'big' })
               yield chunk
             }
@@ -89,7 +92,6 @@ export function createBlobStore({ dir, key, origin }) {
         return deny(err?.code === 'big' ? 413 : 400, 'upload failed')
       }
       await rename(tmp, file)
-      const type = String(req.headers['content-type'] || 'application/octet-stream').slice(0, 200)
       await writeFile(`${file}.type`, type)
       res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' })
       res.end(JSON.stringify({ ok: true }))

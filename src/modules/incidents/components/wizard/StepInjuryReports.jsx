@@ -191,7 +191,7 @@ export default function StepInjuryReports({
                       <FileUploader
                         accept="any"
                         label="Attach medical record"
-                        hint="Image or PDF, up to 10 MB each. Stored on the injury record, visible to admins and managers."
+                        hint="Image or PDF, up to 2 MB each. Stored on the injury record, visible to admins and managers."
                         disabled={!canEdit}
                         files={personRecords}
                         onAdd={(f) => onAddRecord?.(p.id, f)}
@@ -202,7 +202,7 @@ export default function StepInjuryReports({
                         <FileUploader
                           accept="any"
                           label="Attach medical record"
-                          hint="Image or PDF, up to 10 MB each. You can attach a file. It is not shown back here."
+                          hint="Image or PDF, up to 2 MB each. You can attach a file. It is not shown back here."
                           disabled={!canEdit}
                           files={[]}
                           onAdd={(f) => onAddRecord?.(p.id, f)}

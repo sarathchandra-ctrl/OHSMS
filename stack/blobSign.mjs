@@ -9,10 +9,10 @@
 
 import { createHmac, timingSafeEqual } from 'node:crypto'
 import { isAppFilePath } from './lib/fileDelete.js'
+import { MAX_SEALED_UPLOAD_BYTES } from './lib/uploadLimits.js'
 
 export const UPLOAD_TTL_MS = 15 * 60 * 1000
-// Above MAX_UPLOAD_BYTES in src/shared/storage, with headroom for sealing.
-export const MAX_BLOB_BYTES = 30 * 1024 * 1024
+export const MAX_BLOB_BYTES = MAX_SEALED_UPLOAD_BYTES
 
 function sign(key, parts) {
   return createHmac('sha256', key).update(parts.join('\n')).digest('base64url')

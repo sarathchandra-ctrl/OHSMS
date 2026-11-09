@@ -97,7 +97,7 @@ export default function StepIllnessInitial({ value, onChange, users, incidents =
 
       <div className="card p-6">
         <FieldLabel icon={Paperclip}>Attachments</FieldLabel>
-        <FileUploader accept="any" label="Add attachment" hint="Image or PDF, up to 10 MB each." disabled={!canEdit} files={files} onAdd={onAddFile} onRemove={onRemoveFile} />
+        <FileUploader accept="any" label="Add attachment" hint="Image or PDF, up to 2 MB each." disabled={!canEdit} files={files} onAdd={onAddFile} onRemove={onRemoveFile} />
       </div>
     </div>
   )

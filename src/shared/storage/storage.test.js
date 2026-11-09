@@ -10,9 +10,14 @@ import {
 // is a product decision, the small one is a hard Firestore constraint. If these
 // ever cross, uploads start failing with an error nobody can act on.
 describe('upload limits', () => {
-  it('accepts 10MB uploads, which is what the UI promises', () => {
-    expect(MAX_UPLOAD_BYTES).toBe(10 * 1024 * 1024)
-    expect(formatSize(MAX_UPLOAD_BYTES)).toBe('10.0 MB')
+  it('accepts attachments up to 2 MB', () => {
+    expect(MAX_UPLOAD_BYTES).toBe(2 * 1024 * 1024)
+    expect(formatSize(MAX_UPLOAD_BYTES)).toBe('2.0 MB')
+  })
+
+  it('refuses oversized files before reading bytes or trying an inline fallback', async () => {
+    const oversized = new Blob([new Uint8Array(MAX_UPLOAD_BYTES + 1)], { type: 'image/png' })
+    await expect(putFile('photos', oversized, 'large.png')).rejects.toThrow(RejectedFileError)
   })
 
   it('keeps the inline fallback under what a Firestore document can hold', () => {

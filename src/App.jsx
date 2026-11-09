@@ -3,7 +3,7 @@ import { Routes, Route, Navigate, useParams } from 'react-router-dom'
 import { isAppConfigured } from './shared/appConfigured'
 import ProtectedRoute from './shared/auth/ProtectedRoute'
 import ModuleGate from './shared/modules/ModuleGate'
-import AppChrome from './shared/layout/AppChrome'
+const AppChrome = lazy(() => import('./shared/layout/AppChrome'))
 import ModuleLoading from './shared/layout/ModuleLoading'
 import SamLoading from './shared/layout/SamLoading'
 import ErrorBoundary from './shared/ErrorBoundary'
@@ -21,8 +21,8 @@ import PendingApproval from './pages/auth/PendingApproval'
 import NotFound from './pages/NotFound'
 
 // App pages.
-import Dashboard from './pages/Dashboard'
-import Security from './pages/auth/Security'
+const Dashboard = lazy(() => import('./pages/Dashboard'))
+const Security = lazy(() => import('./pages/auth/Security'))
 const Users = lazy(() => import('./pages/admin/Users'))
 const Sites = lazy(() => import('./pages/admin/Sites'))
 const OrgSettings = lazy(() => import('./pages/admin/OrgSettings'))
@@ -87,6 +87,7 @@ function TagScanRedirect() {
 function Protected({ children, moduleKey, ...guard }) {
   return (
     <ProtectedRoute {...guard}>
+      <Suspense fallback={<SamLoading />}>
       <AppChrome>
         <ErrorBoundary>
           <Suspense fallback={<ModuleLoading />}>
@@ -94,6 +95,7 @@ function Protected({ children, moduleKey, ...guard }) {
           </Suspense>
         </ErrorBoundary>
       </AppChrome>
+      </Suspense>
     </ProtectedRoute>
   )
 }

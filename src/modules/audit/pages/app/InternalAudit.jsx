@@ -22,6 +22,8 @@ import {
   updateAuditFinding,
 } from '../../services/auditModule'
 import { sameCentreId } from '../../../../shared/org/centreId'
+import { MAX_UPLOAD_BYTES, formatSize } from '../../../../shared/storage'
+import { uploadAuditEvidence } from '../../lib/attachments'
 
 /*
  * Internal Audit module — adapted from the original OHSMS portal's Audit.jsx
@@ -34,14 +36,6 @@ import { sameCentreId } from '../../../../shared/org/centreId'
 /** Resolve a site id or code to its name; falls back to the raw value. */
 const siteNameOf = (sites = [], id) =>
   sites.find((s) => s.id === id || sameCentreId(s.code, id))?.name || id
-
-const fileToBase64 = (file) =>
-  new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.readAsDataURL(file)
-    reader.onload = () => resolve(reader.result)
-    reader.onerror = (e) => reject(e)
-  })
 
 const getTypeClass = (type) => {
   const t = type || ''
@@ -364,20 +358,16 @@ const AuditorWorkplace = ({ setView, session, isGlobalOwner, plans, findings, si
     setFindingRows((prev) => prev.map((r, idx) => (idx === i ? { ...r, [f]: v } : r)))
   const handleFile = async (i, file) => {
     if (!file) return
-    if (file.size > 10 * 1024 * 1024) return toast.error('That file is larger than 10MB.')
+    if (file.size > MAX_UPLOAD_BYTES) return toast.error(`That file is larger than ${formatSize(MAX_UPLOAD_BYTES)}.`)
     if (!file.type.match('^(image/.*|application/pdf)$')) return toast.error('Attach a PDF or an image.')
-    // try/catch because fileToBase64 rejects on a file the browser cannot read —
-    // a photo still syncing from a phone, a network drive that dropped — and an
-    // unhandled rejection here left the row looking as though nothing had
-    // happened, so the finding saved with no evidence and nobody was told.
-    let b64
+    let attachment
     try {
-      b64 = await fileToBase64(file)
-    } catch {
-      return toast.error('That file could not be read. Try attaching it again.')
+      attachment = await uploadAuditEvidence(file)
+    } catch (err) {
+      return toast.error(err.message || 'That file could not be uploaded. Try attaching it again.')
     }
     setFindingRows((prev) =>
-      prev.map((r, idx) => (idx === i ? { ...r, evidence: b64, fileName: file.name } : r)),
+      prev.map((r, idx) => (idx === i ? { ...r, evidence: attachment.url, evidencePath: attachment.path, fileName: file.name } : r)),
     )
   }
 
@@ -585,7 +575,7 @@ const AuditeeWorkplace = ({ session, users, findings }) => {
     setForm({
       rootCause: f.response?.rootCause || '', correction: f.response?.correction || '', capa: f.response?.capa || '',
       owner: f.response?.owner || '', targetDate: f.response?.targetDate || f.auditeeDueDate || todayISO(),
-      evidenceFile: f.response?.evidenceFile || null, evidenceFileName: f.response?.evidenceFileName || '',
+      evidenceFile: f.response?.evidenceFile || null, evidenceFileName: f.response?.evidenceFileName || '', evidenceFilePath: f.response?.evidenceFilePath || '',
     })
     setModal(true)
   }
@@ -593,9 +583,14 @@ const AuditeeWorkplace = ({ session, users, findings }) => {
   const handleFile = async (e) => {
     const file = e.target.files[0]
     if (file) {
-      if (file.size > 10 * 1024 * 1024) return alert('File size exceeds 10MB limit.')
+      if (file.size > MAX_UPLOAD_BYTES) return alert(`File size exceeds ${formatSize(MAX_UPLOAD_BYTES)} limit.`)
       if (!file.type.match('^(image/.*|application/pdf)$')) return alert('Only PDF and image files are allowed.')
-      const b64 = await fileToBase64(file); setForm({ ...form, evidenceFile: b64, evidenceFileName: file.name })
+      try {
+        const attachment = await uploadAuditEvidence(file)
+        setForm((prev) => ({ ...prev, evidenceFile: attachment.url, evidenceFilePath: attachment.path, evidenceFileName: file.name }))
+      } catch (err) {
+        toast.error(err.message || 'That file could not be uploaded. Try attaching it again.')
+      }
     }
   }
 

@@ -27,7 +27,26 @@ import { createR2FileStore } from './files.js'
 import { nodeRequest, nodeResponse } from './bridge.js'
 import { resendMailer } from './mail.js'
 
-let bootstrapped = null
+const initializations = new WeakMap()
+
+function initialize(db, env) {
+  if (!initializations.has(db)) {
+    const ready = (async () => {
+      await ensureSchema(db)
+      await bootstrapOrganization(createEngine(db), db, {
+        orgName: env.ORG_NAME || 'Cult Fit',
+        adminEmail: env.ADMIN_EMAIL || '',
+        adminPassword: env.ADMIN_PASSWORD || '',
+        mustChange: env.ADMIN_MUST_CHANGE !== 'false',
+      })
+    })().catch((err) => {
+      initializations.delete(db)
+      throw err
+    })
+    initializations.set(db, ready)
+  }
+  return initializations.get(db)
+}
 
 export function settingsProblems(env) {
   const problems = []
@@ -58,12 +77,23 @@ export async function serveOnCloudflare(request, env, ctx) {
     })
   }
   const origin = String(env.PUBLIC_ORIGIN).replace(/\/$/, '')
+  const url = new URL(request.url)
+  const mail = resendMailer({ apiKey: env.RESEND_API_KEY, from: env.MAIL_FROM })
+  // index.html waits for this script before running the app. Its contents
+  // depend only on settings, so loading it must never wait for D1 or bootstrap.
+  if (url.pathname === '/runtime-config.js') {
+    return new Response(runtimeConfigScript({ origin, resetByEmail: Boolean(mail) }), {
+      headers: {
+        'Content-Type': 'text/javascript; charset=utf-8',
+        'Cache-Control': 'no-store',
+      },
+    })
+  }
   // Without the FILES bucket, /presign answers 503 and the app keeps files of
   // up to 700 KB inside the record instead (src/shared/storage putFile).
   const files = env.FILES
     ? createR2FileStore({ bucket: env.FILES, key: blobKeyFrom(env.SESSION_SECRET), origin })
     : null
-  const url = new URL(request.url)
   // File bytes never touch the database.
   if (url.pathname === '/blob') {
     return files
@@ -73,14 +103,7 @@ export async function serveOnCloudflare(request, env, ctx) {
 
   const db = env.DB
   try {
-    await ensureSchema(db)
-    // Once per isolate: the organization and its first admin, if missing.
-    bootstrapped ||= await bootstrapOrganization(createEngine(db), db, {
-      orgName: env.ORG_NAME || 'Cult Fit',
-      adminEmail: env.ADMIN_EMAIL || '',
-      adminPassword: env.ADMIN_PASSWORD || '',
-      mustChange: env.ADMIN_MUST_CHANGE !== 'false',
-    })
+    await initialize(db, env)
     if (url.pathname === '/health') {
       await db.prepare('SELECT 1').first()
       return json(200, {
@@ -88,15 +111,6 @@ export async function serveOnCloudflare(request, env, ctx) {
         database: 'ok',
         files: Boolean(files),
         mail: Boolean(env.RESEND_API_KEY && env.MAIL_FROM),
-      })
-    }
-    const mail = resendMailer({ apiKey: env.RESEND_API_KEY, from: env.MAIL_FROM })
-    if (url.pathname === '/runtime-config.js') {
-      return new Response(runtimeConfigScript({ origin, resetByEmail: Boolean(mail) }), {
-        headers: {
-          'Content-Type': 'text/javascript; charset=utf-8',
-          'Cache-Control': 'no-store',
-        },
       })
     }
     const handle = createOwnStackHandler({

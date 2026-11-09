@@ -2,7 +2,7 @@
 // Evidence attached to an escalation: CCTV footage, and an ethics report.
 //
 // CCTV is the awkward one. A useful clip is video, and the app's upload ceiling
-// is 10 MB — most exports blow through that before the first minute. Refusing
+// is 2 MB — most exports blow through that before the first minute. Refusing
 // them would mean the footage that settles a dispute is the one thing not on
 // the record, so an attachment here can be EITHER an uploaded file OR a
 // reference: where the footage lives, which camera, and when.

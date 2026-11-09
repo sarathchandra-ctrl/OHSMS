@@ -63,7 +63,7 @@ export function AuthProvider({ children }) {
       setOrg(null)
       return undefined
     }
-    return subscribeOrg()
+    return subscribeOrg(setOrg)
   }, [approved])
 
   // Only an APPROVED member may read the setting, so a pending or disabled
@@ -75,7 +75,10 @@ export function AuthProvider({ children }) {
       return undefined
     }
     setModulesReady(false)
-    return subscribeEntitlement()
+    return subscribeEntitlement((map) => {
+      setModuleMap(map)
+      setModulesReady(true)
+    })
   }, [approved])
 
   /** @returns {{ status: 'signed-in', user }} — throws with the server's message on refusal. */

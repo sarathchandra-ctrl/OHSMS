@@ -7,7 +7,8 @@
 // Permit attachments go to cloud storage; the old ~750KB ceiling was the
 // Firestore document limit and now only governs the inline fallback
 // (MAX_INLINE_BYTES in shared/storage).
-export const MAX_FILE_BYTES = 10 * 1024 * 1024
+export { MAX_UPLOAD_BYTES as MAX_FILE_BYTES } from '../../../../stack/lib/uploadLimits.js'
+import { MAX_UPLOAD_BYTES as MAX_FILE_BYTES } from '../../../../stack/lib/uploadLimits.js'
 
 const ACCEPTED = ['application/pdf', 'image/'] // pdf + any image/*
 

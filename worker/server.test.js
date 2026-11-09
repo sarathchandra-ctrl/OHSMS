@@ -1,11 +1,13 @@
 import { openSqlite } from '../stack/sqlite.mjs'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { applySchema, createEngine } from '../stack/engine.mjs'
 import { createOwnStackHandler } from '../stack/handler.mjs'
 import { blobKeyFrom } from '../stack/blobSign.mjs'
 import { bootstrapOrganization } from '../stack/passwords.mjs'
 import { createR2FileStore } from './files.js'
 import { nodeRequest, nodeResponse } from './bridge.js'
+import { serveOnCloudflare } from './server.js'
+import { MAX_UPLOAD_BYTES, MAX_SEALED_UPLOAD_BYTES } from '../stack/lib/uploadLimits.js'
 
 async function database() {
   const db = openSqlite()
@@ -76,6 +78,116 @@ describe('files in R2', () => {
       Date.now() + 16 * 60 * 1000
     )
     expect(late.status).toBe(403)
+  })
+
+  it('accepts exactly 2 MB and refuses an extra byte without replacing an existing file', async () => {
+    const bucket = fakeBucket()
+    const files = createR2FileStore({ bucket, key, origin })
+    const path = 'files/photos/limit.pdf'
+    const upload = (size) =>
+      files.handle(
+        new Request(files.uploadUrl(path), {
+          method: 'PUT',
+          body: new Uint8Array(size),
+          headers: { 'Content-Type': 'application/pdf' },
+        })
+      )
+    expect((await upload(MAX_UPLOAD_BYTES)).status).toBe(200)
+    expect((await upload(MAX_UPLOAD_BYTES + 1)).status).toBe(413)
+    expect(bucket.objects.get(path).bytes.length).toBe(MAX_UPLOAD_BYTES)
+  })
+
+  it('counts a streamed body even if the declared length is smaller', async () => {
+    const bucket = fakeBucket()
+    const files = createR2FileStore({ bucket, key, origin })
+    const stream = new ReadableStream({
+      start(controller) {
+        controller.enqueue(new Uint8Array(MAX_UPLOAD_BYTES))
+        controller.enqueue(new Uint8Array(1))
+        controller.close()
+      },
+    })
+    const res = await files.handle(
+      new Request(files.uploadUrl('files/photos/stream.pdf'), {
+        method: 'PUT',
+        body: stream,
+        duplex: 'half',
+        headers: { 'Content-Type': 'application/pdf', 'Content-Length': '1' },
+      })
+    )
+    expect(res.status).toBe(413)
+    expect(bucket.objects.size).toBe(0)
+  })
+
+  it('rejects invalid or mismatched lengths before storing the file', async () => {
+    const bucket = fakeBucket()
+    const files = createR2FileStore({ bucket, key, origin })
+    for (const length of ['-1', 'NaN', '2']) {
+      const res = await files.handle(
+        new Request(files.uploadUrl('files/photos/bad.txt'), {
+          method: 'PUT',
+          body: 'x',
+          headers: { 'Content-Length': length },
+        })
+      )
+      expect(res.status).toBe(400)
+    }
+    expect(bucket.objects.size).toBe(0)
+  })
+
+  it('allows only the authentication-tag overhead for a sealed 2 MB file', async () => {
+    const bucket = fakeBucket()
+    const files = createR2FileStore({ bucket, key, origin })
+    const upload = (size) =>
+      files.handle(
+        new Request(files.uploadUrl('files/medical/a.bin'), {
+          method: 'PUT',
+          body: new Uint8Array(size),
+          headers: { 'Content-Type': 'application/octet-stream' },
+        })
+      )
+    expect((await upload(MAX_SEALED_UPLOAD_BYTES)).status).toBe(200)
+    expect((await upload(MAX_SEALED_UPLOAD_BYTES + 1)).status).toBe(413)
+  })
+})
+
+describe('Cloudflare startup', () => {
+  const settings = (DB) => ({
+    DB,
+    PUBLIC_ORIGIN: 'https://ehs.example.com',
+    SESSION_SECRET: 's'.repeat(40),
+    DATA_KEY_MASTER: Buffer.alloc(32).toString('base64'),
+    ADMIN_EMAIL: 'admin@example.test',
+    ADMIN_PASSWORD: 'first-admin-pass-1',
+  })
+
+  it('serves the blocking runtime settings script without any database calls', async () => {
+    const prepare = vi.fn(() => {
+      throw new Error('D1 unavailable')
+    })
+    const res = await serveOnCloudflare(
+      new Request('https://ehs.example.com/runtime-config.js'),
+      settings({ prepare })
+    )
+    expect(res.status).toBe(200)
+    expect(await res.text()).toContain('https://ehs.example.com')
+    expect(prepare).not.toHaveBeenCalled()
+  })
+
+  it('shares concurrent initialization and initializes each database separately', async () => {
+    for (let i = 0; i < 2; i++) {
+      const db = openSqlite()
+      try {
+        const env = settings(db)
+        const health = () => serveOnCloudflare(new Request('https://ehs.example.com/health'), env)
+        const responses = await Promise.all([health(), health(), health()])
+        for (const res of responses) expect(res.status).toBe(200)
+        const { count } = await db.prepare('SELECT count(*) AS count FROM auth_secrets').first()
+        expect(count).toBe(1)
+      } finally {
+        db.close()
+      }
+    }
   })
 })
 
