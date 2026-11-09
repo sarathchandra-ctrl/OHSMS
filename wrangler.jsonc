@@ -38,9 +38,10 @@
     ]
   },
   "vars": {
-    // The Tunnel hostname of the organization's server. Set it to yours,
-    // here or in the dashboard (Settings → Variables).
-    "ORIGIN_URL": "https://ehs-origin.example.com"
+    // The Tunnel hostname of the organization's server, e.g.
+    // "https://ehs-origin.example.com". Empty until the server is connected:
+    // the Worker then answers its paths with 503 "not configured".
+    "ORIGIN_URL": ""
   },
   "observability": { "enabled": true }
 }

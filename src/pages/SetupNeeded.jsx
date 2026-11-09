@@ -1,14 +1,17 @@
-import { PlugZap, Terminal } from 'lucide-react'
+import { PlugZap } from 'lucide-react'
 import BrandMark from '../shared/branding/BrandMark'
 
+// Shown when the app cannot find its organization's server: the Cloudflare
+// Worker has no ORIGIN_URL yet, the Tunnel is down, or a local build has no
+// VITE_DATA_GATEWAY. docs/CLOUDFLARE.md is the procedure.
 export default function SetupNeeded() {
   return (
     <div className="aurora grid min-h-screen place-items-center p-4">
       <div className="w-full max-w-lg">
         <div className="mb-6 flex flex-col items-center text-center">
           <BrandMark className="mb-3" alt="WEHS" />
-          <h1 className="text-2xl font-bold tracking-[-0.02em] text-ink-900">Connect Firebase</h1>
-          <p className="mt-1 text-sm text-ink-500">One step to start WEHS</p>
+          <h1 className="text-2xl font-bold tracking-[-0.02em] text-ink-900">Not connected yet</h1>
+          <p className="mt-1 text-sm text-ink-500">Occupational Health &amp; Safety Management System</p>
         </div>
         <div className="card space-y-4 p-6 sm:p-8">
           <div className="flex items-start gap-3">
@@ -16,27 +19,16 @@ export default function SetupNeeded() {
               <PlugZap size={20} />
             </span>
             <div>
-              <h2 className="font-semibold text-ink-900">No Firebase configuration detected</h2>
+              <h2 className="font-semibold text-ink-900">This site cannot reach its server</h2>
               <p className="mt-1 text-sm text-ink-500">
-                Copy the example env file and start the local emulators — no cloud project required.
+                The app is published, but your organization&apos;s server is not connected to it yet,
+                or is not answering right now. Please try again later.
               </p>
             </div>
           </div>
-          <div className="well space-y-2 p-4 font-mono text-sm text-ink-700">
-            <p className="flex items-center gap-2">
-              <Terminal size={14} className="text-ink-400" /> cp .env.example .env
-            </p>
-            <p className="flex items-center gap-2">
-              <Terminal size={14} className="text-ink-400" /> npm install
-            </p>
-            <p className="flex items-center gap-2">
-              <Terminal size={14} className="text-ink-400" /> npm run dev:full
-            </p>
-          </div>
           <p className="text-xs text-ink-400">
-            The emulator flow works out of the box with the demo project id in{' '}
-            <span className="font-semibold">.env.example</span>. To use a real project, set{' '}
-            <span className="font-mono">VITE_USE_EMULATORS=false</span> and add your web config.
+            For whoever installs it: start the server and its Cloudflare Tunnel, then set{' '}
+            <span className="font-mono">ORIGIN_URL</span> on the Worker (docs/CLOUDFLARE.md).
           </p>
         </div>
       </div>
