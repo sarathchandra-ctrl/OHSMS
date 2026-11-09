@@ -17,7 +17,7 @@ const IncidentContext = createContext(null)
  * Marshal's FleetContext.
  */
 export function IncidentProvider({ children }) {
-  const { orgId, user, profile, isAdmin, isInvestigator } = useAuth()
+  const { user, profile, isAdmin, isInvestigator } = useAuth()
   const [incidents, setIncidents] = useState([])
   const [illnesses, setIllnesses] = useState([])
   const [injuries, setInjuries] = useState([])
@@ -41,20 +41,19 @@ export function IncidentProvider({ children }) {
   const canReadHealth = isAdmin || isInvestigator
 
   useEffect(() => {
-    if (!orgId) return
     setLoading(true)
     let ready = false
     const done = () => { if (!ready) { ready = true; setLoading(false) } }
-    const u1 = subscribeIncidents(orgId, (list) => { setIncidents(list); done() })
-    const u3 = subscribeOrgUsers(orgId, setUsers)
-    const u4 = subscribeOrg(orgId, setOrg)
-    const u5 = subscribeStats(orgId, setStats)
-    const u7 = subscribeSites(orgId, setAllSites)
+    const u1 = subscribeIncidents((list) => { setIncidents(list); done() })
+    const u3 = subscribeOrgUsers(setUsers)
+    const u4 = subscribeOrg(setOrg)
+    const u5 = subscribeStats(setStats)
+    const u7 = subscribeSites(setAllSites)
     const noop = () => {}
-    const u2 = canReadHealth ? subscribeIllnesses(orgId, setIllnesses) : noop
-    const u6 = canReadHealth ? subscribeInjuries(orgId, setInjuries) : noop
+    const u2 = canReadHealth ? subscribeIllnesses(setIllnesses) : noop
+    const u6 = canReadHealth ? subscribeInjuries(setInjuries) : noop
     return () => { u1(); u2(); u3(); u4(); u5(); u6(); u7() }
-  }, [orgId, canReadHealth])
+  }, [canReadHealth])
 
   // Sites the current user is permitted to log incidents against.
   const sites = useMemo(

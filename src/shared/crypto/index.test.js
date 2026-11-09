@@ -90,7 +90,7 @@ const INCIDENT = {
 
 describe('sealing a document', () => {
   it('seals the policy fields and leaves everything else alone', async () => {
-    const sealed = await sealDoc(ORG, 'incidents', INCIDENT)
+    const sealed = await sealDoc('incidents', INCIDENT)
     expect(sealed.narrative).toMatch(/^enc:1:general\.1:/)
     expect(sealed.location).toBe('Bay 3')
     expect(sealed.lifecycle).toBe('reporting')
@@ -98,8 +98,8 @@ describe('sealing a document', () => {
   })
 
   it('uses the hybrid scheme for health records and the symmetric one otherwise', async () => {
-    const injury = await sealDoc(ORG, 'injuries', INJURY)
-    const incident = await sealDoc(ORG, 'incidents', INCIDENT)
+    const injury = await sealDoc('injuries', INJURY)
+    const incident = await sealDoc('incidents', INCIDENT)
     expect(injury.medication).toMatch(/^enk:1:medical\.1:/)
     expect(incident.narrative).toMatch(/^enc:1:general\.1:/)
   })
@@ -108,7 +108,7 @@ describe('sealing a document', () => {
     // purgeIncidentMedicalRecords and the retention sweep find these records by
     // querying on incidentId and personId. A record nothing can find is a
     // record nothing can delete when the law says it must be.
-    const sealed = await sealDoc(ORG, 'injuries', INJURY)
+    const sealed = await sealDoc('injuries', INJURY)
     expect(sealed.incidentId).toBe('i1')
     expect(sealed.personId).toBe('p-osei')
     expect(sealed.verified).toBe(true)
@@ -116,7 +116,7 @@ describe('sealing a document', () => {
   })
 
   it('puts no plaintext anywhere in the written document', async () => {
-    const body = JSON.stringify(await sealDoc(ORG, 'injuries', INJURY))
+    const body = JSON.stringify(await sealDoc('injuries', INJURY))
     expect(body).not.toContain('co-codamol')
     expect(body).not.toContain('laceration')
     expect(body).not.toContain('left forearm')
@@ -124,7 +124,7 @@ describe('sealing a document', () => {
   })
 
   it('seals inside arrays and nested objects', async () => {
-    const sealed = await sealDoc(ORG, 'incidents', INCIDENT)
+    const sealed = await sealDoc('incidents', INCIDENT)
     expect(sealed.capa[0].description).toMatch(/^enc:/)
     expect(sealed.capa[1].owner).toMatch(/^enc:/)
     expect(sealed.affectedPersonnel[0].contact).toMatch(/^enc:/)
@@ -135,13 +135,13 @@ describe('sealing a document', () => {
 
   it('does not touch a collection with no policy', async () => {
     const doc = { serial: 'EXT-1', location: 'Bay 3' }
-    expect(await sealDoc(ORG, 'extinguishers', doc)).toBe(doc)
+    expect(await sealDoc('extinguishers', doc)).toBe(doc)
   })
 
   it('seals a partial update without inventing the rest of the document', async () => {
     // Every module here writes with merges. A sealer that walked the policy and
     // added the missing fields would overwrite live data with blanks.
-    const sealed = await sealDoc(ORG, 'injuries', { medication: 'ibuprofen' })
+    const sealed = await sealDoc('injuries', { medication: 'ibuprofen' })
     expect(Object.keys(sealed)).toEqual(['medication'])
     expect(sealed.medication).toMatch(/^enk:/)
   })
@@ -149,7 +149,7 @@ describe('sealing a document', () => {
   it('shares one content key across the fields of one write', async () => {
     // The performance property, asserted where it can regress: a key per field
     // costs a manager seconds of RSA on every list render.
-    const sealed = await sealDoc(ORG, 'injuries', INJURY)
+    const sealed = await sealDoc('injuries', INJURY)
     const wrappedOf = (v) => v.split(':')[3]
     expect(wrappedOf(sealed.medication)).toBe(wrappedOf(sealed.injuryType))
   })
@@ -158,7 +158,7 @@ describe('sealing a document', () => {
 describe('reading it back', () => {
   it('round-trips a health record for a manager', async () => {
     signIn('manager')
-    const opened = await openDoc(ORG, 'injuries', await sealDoc(ORG, 'injuries', INJURY))
+    const opened = await openDoc('injuries', await sealDoc('injuries', INJURY))
     expect(opened.medication).toBe('co-codamol 30/500')
     expect(opened.bodyParts).toEqual(['left hand', 'left forearm'])
     expect(opened.daysToReturnToWork).toBe(3)
@@ -166,22 +166,22 @@ describe('reading it back', () => {
   })
 
   it('round-trips an incident, arrays and all', async () => {
-    const opened = await openDoc(ORG, 'incidents', await sealDoc(ORG, 'incidents', INCIDENT))
+    const opened = await openDoc('incidents', await sealDoc('incidents', INCIDENT))
     expect(opened.narrative).toBe(INCIDENT.narrative)
     expect(opened.capa.map((c) => c.owner)).toEqual(['A Kumar', 'B Singh'])
     expect(opened.affectedPersonnel[0].contact).toBe('07700 900123')
   })
 
   it('restores the original types', async () => {
-    const opened = await openDoc(ORG, 'injuries', await sealDoc(ORG, 'injuries', INJURY))
+    const opened = await openDoc('injuries', await sealDoc('injuries', INJURY))
     expect(typeof opened.daysToReturnToWork).toBe('number')
     expect(Array.isArray(opened.bodyParts)).toBe(true)
   })
 
   it('opens a list in one pass', async () => {
     const sealed = await Promise.all([INJURY, { ...INJURY, medication: 'ibuprofen' }]
-      .map((d) => sealDoc(ORG, 'injuries', d)))
-    const opened = await openDocs(ORG, 'injuries', sealed)
+      .map((d) => sealDoc('injuries', d)))
+    const opened = await openDocs('injuries', sealed)
     expect(opened.map((d) => d.medication)).toEqual(['co-codamol 30/500', 'ibuprofen'])
   })
 })
@@ -194,13 +194,13 @@ describe('who can read a health record', () => {
   let sealed
   beforeEach(async () => {
     signIn('member')                                  // a member files it…
-    sealed = await sealDoc(ORG, 'injuries', INJURY)
+    sealed = await sealDoc('injuries', INJURY)
   })
 
   it('refuses the member who wrote it', async () => {
     // firestore.rules already says a member may write /injuries and not read
     // it. Before this, that was a rule; now it is arithmetic.
-    const opened = await openDoc(ORG, 'injuries', sealed)
+    const opened = await openDoc('injuries', sealed)
     expect(opened.medication).toBe(undefined)
     expect(opened.bodyParts).toBe(undefined)
     expect(opened.personName).toBe(undefined)
@@ -211,21 +211,21 @@ describe('who can read a health record', () => {
     // THE finding this came out of: an outside party with a login, who could
     // list every colleague's medical detail in the tenant.
     signIn('auditor')
-    const opened = await openDoc(ORG, 'injuries', sealed)
+    const opened = await openDoc('injuries', sealed)
     expect(opened.medication).toBe(undefined)
     expect(isRestricted(opened, 'medication')).toBe(true)
   })
 
   it('allows the manager', async () => {
     signIn('manager')
-    expect((await openDoc(ORG, 'injuries', sealed)).medication).toBe('co-codamol 30/500')
+    expect((await openDoc('injuries', sealed)).medication).toBe('co-codamol 30/500')
   })
 
   it('still shows everyone the record itself', async () => {
     // Redaction, not refusal. The auditor confirming injuries are recorded and
     // verified can still do their job; what they cannot read is the medication.
     signIn('auditor')
-    const opened = await openDoc(ORG, 'injuries', sealed)
+    const opened = await openDoc('injuries', sealed)
     expect(opened.incidentId).toBe('i1')
     expect(opened.personId).toBe('p-osei')
     expect(opened.verified).toBe(true)
@@ -235,16 +235,16 @@ describe('who can read a health record', () => {
     // The auditor is not shut out of the safety record — that is what they are
     // given a login for.
     signIn('admin')
-    const inc = await sealDoc(ORG, 'incidents', INCIDENT)
+    const inc = await sealDoc('incidents', INCIDENT)
     signIn('auditor')
-    expect((await openDoc(ORG, 'incidents', inc)).narrative).toBe(INCIDENT.narrative)
+    expect((await openDoc('incidents', inc)).narrative).toBe(INCIDENT.narrative)
   })
 
   it('drops the field rather than leaving null or ciphertext', async () => {
     // `(injury.bodyParts || []).map(...)` is the shape all over this codebase.
     // A null throws; an envelope prints base64 to a person.
     signIn('auditor')
-    const opened = await openDoc(ORG, 'injuries', sealed)
+    const opened = await openDoc('injuries', sealed)
     expect('bodyParts' in opened).toBe(false)
     expect(() => (opened.bodyParts || []).map((x) => x)).not.toThrow()
   })
@@ -254,8 +254,8 @@ describe('who can read a health record', () => {
     const inc = { capa: [{ owner: 'A' }, { owner: 'B' }, { owner: 'C' }] }
     // Seal under the medical key by borrowing a collection that uses it, so the
     // member cannot read it back.
-    const sealedIll = await sealDoc(ORG, 'illnesses', { actions: inc.capa.map((c) => ({ owner: c.owner })) })
-    const opened = await openDoc(ORG, 'illnesses', sealedIll)
+    const sealedIll = await sealDoc('illnesses', { actions: inc.capa.map((c) => ({ owner: c.owner })) })
+    const opened = await openDoc('illnesses', sealedIll)
     expect(opened[RESTRICTED_KEY]).toEqual(['actions[].owner'])
   })
 })
@@ -273,23 +273,23 @@ describe('what reading costs when nothing is sealed', () => {
   it('does not ask for keys to open a document with no sealed values', async () => {
     signIn('admin')
     calls.length = 0
-    await openDoc(ORG, 'injuries', INJURY) // plain, never sealed
+    await openDoc('injuries', INJURY) // plain, never sealed
     expect(calls).toEqual([])
   })
 
   it('does not ask for keys to open a whole list of unsealed rows', async () => {
     signIn('admin')
     calls.length = 0
-    await openDocs(ORG, 'incidents', [INCIDENT, INCIDENT, INCIDENT])
+    await openDocs('incidents', [INCIDENT, INCIDENT, INCIDENT])
     expect(calls).toEqual([])
   })
 
   it('does ask once when there IS something sealed', async () => {
     signIn('admin')
-    const sealed = await sealDoc(ORG, 'injuries', INJURY)
+    const sealed = await sealDoc('injuries', INJURY)
     signIn('manager') // clears the cache, so the next read must fetch
     calls.length = 0
-    await openDoc(ORG, 'injuries', sealed)
+    await openDoc('injuries', sealed)
     expect(calls).toHaveLength(1)
   })
 
@@ -297,10 +297,10 @@ describe('what reading costs when nothing is sealed', () => {
     // loadKeys caches the PROMISE, so rows decrypting concurrently await one
     // call rather than racing it.
     signIn('admin')
-    const sealed = await sealDoc(ORG, 'injuries', INJURY)
+    const sealed = await sealDoc('injuries', INJURY)
     signIn('manager')
     calls.length = 0
-    await openDocs(ORG, 'injuries', [sealed, sealed, sealed, sealed])
+    await openDocs('injuries', [sealed, sealed, sealed, sealed])
     expect(calls).toHaveLength(1)
   })
 })
@@ -309,14 +309,14 @@ describe('mixed data during the rollout', () => {
   it('reads a document that was never sealed', async () => {
     // Every collection holds a mixture for as long as the backfill takes. A
     // reader that threw on plaintext would take the app down on deploy.
-    const opened = await openDoc(ORG, 'injuries', INJURY)
+    const opened = await openDoc('injuries', INJURY)
     expect(opened.medication).toBe('co-codamol 30/500')
     expect(opened[RESTRICTED_KEY]).toBe(undefined)
   })
 
   it('reads a half-sealed document', async () => {
-    const half = { ...await sealDoc(ORG, 'injuries', { medication: 'sealed one' }), injuryType: 'plain one' }
-    const opened = await openDoc(ORG, 'injuries', half)
+    const half = { ...await sealDoc('injuries', { medication: 'sealed one' }), injuryType: 'plain one' }
+    const opened = await openDoc('injuries', half)
     expect(opened.medication).toBe('sealed one')
     expect(opened.injuryType).toBe('plain one')
   })
@@ -324,8 +324,8 @@ describe('mixed data during the rollout', () => {
   it('does not re-seal a value that is already sealed', async () => {
     // Read-modify-write is how every update in this app works; wrapping again
     // each time would grow the document until Firestore refused it.
-    const once = await sealDoc(ORG, 'injuries', INJURY)
-    const twice = await sealDoc(ORG, 'injuries', once)
+    const once = await sealDoc('injuries', INJURY)
+    const twice = await sealDoc('injuries', once)
     expect(twice.medication).toBe(once.medication)
   })
 
@@ -334,7 +334,7 @@ describe('mixed data during the rollout', () => {
     // listener and freezes the screen on stale data with nothing to say so.
     signIn('auditor')
     const corrupt = { medication: 'enk:1:medical.1:' + 'A'.repeat(342) + ':AAAAAAAAAAAAAAAA:AAAAAAAAAAAAAAAAAAAAAAAA' }
-    await expect(openDoc(ORG, 'injuries', corrupt)).resolves.toBeTruthy()
+    await expect(openDoc('injuries', corrupt)).resolves.toBeTruthy()
   })
 })
 
@@ -343,26 +343,26 @@ describe('file bytes', () => {
 
   it('seals a medical record so the uploader cannot reopen it', async () => {
     signIn('member')
-    const { bytes: ct, meta } = await sealFileBytes(ORG, 'injuries/records', bytes)
+    const { bytes: ct, meta } = await sealFileBytes('injuries/records', bytes)
     expect(meta.encScheme).toBe('enk')
     expect(Array.from(ct)).not.toEqual(Array.from(bytes))
-    await expect(openFileBytes(ORG, 'injuries/records', meta, ct)).rejects.toMatchObject({ reason: 'restricted' })
+    await expect(openFileBytes('injuries/records', meta, ct)).rejects.toMatchObject({ reason: 'restricted' })
   })
 
   it('lets a manager open it', async () => {
     signIn('member')
-    const { bytes: ct, meta } = await sealFileBytes(ORG, 'injuries/records', bytes)
+    const { bytes: ct, meta } = await sealFileBytes('injuries/records', bytes)
     signIn('manager')
-    expect(Array.from(await openFileBytes(ORG, 'injuries/records', meta, ct))).toEqual(Array.from(bytes))
+    expect(Array.from(await openFileBytes('injuries/records', meta, ct))).toEqual(Array.from(bytes))
   })
 
   it('passes an unsealed file straight through', async () => {
     // A gallery mixing files from before and after the switch needs no branch.
-    expect(await openFileBytes(ORG, 'injuries/records', { path: 'orgs/x/y/z' }, bytes)).toBe(bytes)
+    expect(await openFileBytes('injuries/records', { path: 'orgs/x/y/z' }, bytes)).toBe(bytes)
   })
 
   it('does not seal files for a collection that stores none', async () => {
-    const out = await sealFileBytes(ORG, 'injuries', bytes)
+    const out = await sealFileBytes('injuries', bytes)
     expect(out.meta).toBe(null)
     expect(out.bytes).toBe(bytes)
   })

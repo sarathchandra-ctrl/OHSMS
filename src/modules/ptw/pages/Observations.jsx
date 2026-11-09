@@ -25,9 +25,8 @@ export default function Observations() {
   const [filter, setFilter] = useState('all')
 
   useEffect(() => {
-    if (!profile?.orgId) return undefined
-    return subscribeObservations(profile.orgId, setObs)
-  }, [profile?.orgId])
+    return subscribeObservations(setObs)
+  }, [])
 
   const visible = useMemo(() => {
     if (!obs) return []

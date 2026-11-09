@@ -35,7 +35,7 @@ const uniq = (arr) => Array.from(new Set(arr.filter(Boolean))).sort()
 
 export default function Repository() {
   const { assessments, loading } = useRa()
-  const { orgId, user, profile } = useAuth()
+  const { user, profile } = useAuth()
   const navigate = useNavigate()
 
   const [site, setSite] = useState('')
@@ -72,8 +72,8 @@ export default function Repository() {
   const confirmDelete = async () => {
     if (!toDelete) return
     try {
-      await deleteAssessment(orgId, toDelete.id)
-      logActivity(orgId, { uid: user?.uid, name: profile?.name }, {
+      await deleteAssessment(toDelete.id)
+      logActivity({ uid: user?.uid, name: profile?.name }, {
         type: 'deleted',
         message: `deleted risk assessment “${toDelete.name}”`,
       })

@@ -21,14 +21,12 @@ const RECORD_LABEL = {
 
 export default function FindingsRegister() {
   const { org } = useAuth()
-  const orgId = org?.id
   const [records, setRecords] = useState([])
   const [filters, setFilters] = useState({ q: '', type: '', status: '' })
 
   useEffect(() => {
-    if (!orgId) return undefined
-    return subscribeAuditFindings(orgId, setRecords)
-  }, [orgId])
+    return subscribeAuditFindings(setRecords)
+  }, [])
 
   const rows = useMemo(() => {
     const out = []

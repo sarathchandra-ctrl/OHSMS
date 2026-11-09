@@ -26,7 +26,7 @@ const KINDS = {
  * someone reconciling a spreadsheet against a database by hand.
  */
 export default function BulkUpload() {
-  const { orgId, actor, isManager } = useAuth()
+  const { actor, isManager } = useAuth()
   const { sites, dvrs, cameras } = useCctv()
   const navigate = useNavigate()
   const inputRef = useRef(null)
@@ -64,7 +64,7 @@ export default function BulkUpload() {
   const commit = async () => {
     setBusy(true)
     try {
-      const n = await bulkImport(orgId, kind, result.valid.map((r) => r.data), actor)
+      const n = await bulkImport(kind, result.valid.map((r) => r.data), actor)
       toast.success(`Imported ${n} ${cfg.label}`)
       navigate('/cctv/inventory')
     } catch (e) {

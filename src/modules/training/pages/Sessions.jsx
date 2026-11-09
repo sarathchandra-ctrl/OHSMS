@@ -38,7 +38,7 @@ const STATE_TONE = { open: 'green', upcoming: 'blue', closed: 'gray' }
 const STATE_LABEL = { open: 'Open now', upcoming: 'Upcoming', closed: 'Finished' }
 
 export default function Sessions() {
-  const { orgId, actor, isManager } = useAuth()
+  const { actor, isManager } = useAuth()
   const { courses, loading } = useTraining()
   const sites = useAccessibleSites()
 
@@ -50,10 +50,9 @@ export default function Sessions() {
   const [openRequests, setOpenRequests] = useState(null) // session id
 
   useEffect(() => {
-    if (!orgId) return undefined
-    const unsubs = [subscribeSessions(orgId, setSessions), subscribeRequests(orgId, setRequests)]
+    const unsubs = [subscribeSessions(setSessions), subscribeRequests(setRequests)]
     return () => unsubs.forEach((u) => u && u())
-  }, [orgId])
+  }, [])
 
   const classroomCourses = useMemo(() => courses.filter(isClassroom), [courses])
   const rows = useMemo(() => sortSessions(sessions), [sessions])
@@ -82,8 +81,8 @@ export default function Sessions() {
     try {
       const site = sites.find((s) => s.id === form.siteId)
       const payload = { ...form, courseName: course.name, siteName: site?.name || '' }
-      if (editing === 'new') { await createSession(orgId, payload, actor); toast.success('Session scheduled') }
-      else { await updateSession(orgId, editing.id, payload, actor); toast.success('Session updated') }
+      if (editing === 'new') { await createSession(payload, actor); toast.success('Session scheduled') }
+      else { await updateSession(editing.id, payload, actor); toast.success('Session updated') }
       setEditing(null)
     } catch (err) { toastCaught(err, 'Failed') } finally { setBusy(false) }
   }
@@ -91,12 +90,12 @@ export default function Sessions() {
   const remove = async (s) => {
     const n = counts.get(s.id)?.total || 0
     if (!window.confirm(`Delete this session for "${s.courseName}"?${n ? ` ${n} request(s) will be removed with it.` : ''}`)) return
-    try { await deleteSession(orgId, s.id, actor, s.courseName); toast.success('Session deleted') }
+    try { await deleteSession(s.id, actor, s.courseName); toast.success('Session deleted') }
     catch (err) { toastCaught(err, 'Failed') }
   }
 
   const decide = async (req, status) => {
-    try { await decideRequest(orgId, req, status, actor); toast.success(status === 'approved' ? 'Approved' : 'Declined') }
+    try { await decideRequest(req, status, actor); toast.success(status === 'approved' ? 'Approved' : 'Declined') }
     catch (err) { toastCaught(err, 'Failed') }
   }
 

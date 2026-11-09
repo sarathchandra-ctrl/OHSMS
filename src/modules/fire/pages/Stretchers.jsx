@@ -56,7 +56,7 @@ function DateCell({ value }) {
 }
 
 export default function Stretchers() {
-  const { orgId, orgName, profile, isAdmin } = useAuth()
+  const { orgName, profile, isAdmin } = useAuth()
   const { stretchers, siteInventory, incomplete, loading } = useFleet()
   const today = useMemo(() => new Date(), [])
 
@@ -95,7 +95,7 @@ export default function Stretchers() {
     if (!linkPlan?.linked.length) return
     setBusy(true)
     try {
-      const r = await linkStretchersToSites(orgId, orgName, linkPlan, { uid: profile?.uid, name: profile?.name })
+      const r = await linkStretchersToSites(orgName, linkPlan, { uid: profile?.uid, name: profile?.name })
       toast.success(`${r.linked} linked · ${r.nameChanges} renamed · ${r.entityChanges} entity value(s) corrected`)
       setLinkOpen(false)
     } catch (e) {
@@ -108,7 +108,7 @@ export default function Stretchers() {
   // and that number goes on the QR label.
   const openAdd = async () => {
     try {
-      const [assetId] = await reserveAssetIds(orgId, 'stretcher', 'STR', {
+      const [assetId] = await reserveAssetIds('stretcher', 'STR', {
         floor: highestAssetSeq('STR', stretchers, 'assetId'),
       })
       setEditing({ ...EMPTY, assetId })
@@ -151,7 +151,7 @@ export default function Stretchers() {
     const items = stretchers.filter((a) => selected.has(a.id)).map((a) => ({ id: a.id, qrToken: a.qrToken }))
     setBusy(true)
     try {
-      await bulkDeleteStretchers(orgId, items, { uid: profile?.uid, name: profile?.name })
+      await bulkDeleteStretchers(items, { uid: profile?.uid, name: profile?.name })
       toast.success(`${items.length} stretcher(s) deleted`)
       setSelected(new Set()); setBulkRemoving(false)
     } catch (e) { toastCaught(e) } finally { setBusy(false) }
@@ -164,15 +164,15 @@ export default function Stretchers() {
     setBusy(true)
     try {
       const actor = { uid: profile?.uid, name: profile?.name }
-      if (editing.id) { await updateStretcher(orgId, orgName, editing.id, editing, actor); toast.success('Stretcher updated') }
-      else { await addStretcher(orgId, orgName, editing, actor); toast.success('Stretcher added') }
+      if (editing.id) { await updateStretcher(orgName, editing.id, editing, actor); toast.success('Stretcher updated') }
+      else { await addStretcher(orgName, editing, actor); toast.success('Stretcher added') }
       setEditing(null)
     } catch (err) { toastCaught(err) } finally { setBusy(false) }
   }
 
   const confirmDelete = async () => {
     try {
-      await deleteStretcher(orgId, removing.id, removing.qrToken, { uid: profile?.uid, name: profile?.name }, `${removing.assetId || 'Stretcher'} @ ${removing.centerName}`)
+      await deleteStretcher(removing.id, removing.qrToken, { uid: profile?.uid, name: profile?.name }, `${removing.assetId || 'Stretcher'} @ ${removing.centerName}`)
       toast.success('Stretcher deleted')
     } catch (err) { toastCaught(err) } finally { setRemoving(null) }
   }
@@ -183,7 +183,7 @@ export default function Stretchers() {
     if (!isAdmin) { toast.error('Only an admin can generate QR codes'); return }
     setBusy(true)
     try {
-      const token = await generateStretcherQr(orgId, orgName, a, { uid: profile?.uid, name: profile?.name })
+      const token = await generateStretcherQr(orgName, a, { uid: profile?.uid, name: profile?.name })
       setQrFor({ ...a, qrToken: token })
       toast.success('QR code generated')
     } catch (e) { toastCaught(e) } finally { setBusy(false) }
@@ -193,7 +193,7 @@ export default function Stretchers() {
   const confirmService = async () => {
     setBusy(true)
     try {
-      await serviceStretcher(orgId, orgName, serviceFor, nextDate, { uid: profile?.uid, name: profile?.name })
+      await serviceStretcher(orgName, serviceFor, nextDate, { uid: profile?.uid, name: profile?.name })
       toast.success('Inspection logged')
       setServiceFor(null)
     } catch (err) { toastCaught(err) } finally { setBusy(false) }

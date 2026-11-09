@@ -30,7 +30,7 @@ const EMPTY = {
 }
 
 export default function AddExtinguisher() {
-  const { orgId, orgName, profile } = useAuth()
+  const { orgName, profile } = useAuth()
   const { extinguishers, deletedExtinguishers, siteInventory } = useFleet()
   const [form, setForm] = useState(EMPTY)
   const [busy, setBusy] = useState(false)
@@ -59,7 +59,7 @@ export default function AddExtinguisher() {
         return
       }
       const payload = { ...form, serialNo }
-      const res = await addExtinguisher(orgId, orgName, payload, { uid: profile?.uid, name: profile?.name })
+      const res = await addExtinguisher(orgName, payload, { uid: profile?.uid, name: profile?.name })
       setCreated({ ...res, serialNo })
       toast.success('Extinguisher added with QR code!')
     } catch (err) {

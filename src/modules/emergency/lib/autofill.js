@@ -187,7 +187,7 @@ export function planAutofill(site, siteExternalContacts, found, opts = {}) {
  * role is removed). Throws if the map lookup itself failed, so the caller
  * can report that site as failed rather than silently leaving stale data.
  */
-export async function autofillSite(orgId, site, contacts, actor, opts = {}) {
+export async function autofillSite(site, contacts, actor, opts = {}) {
   const found = await findNearestServices(site.lat, site.lng)
   const mine = externalFor(site, contacts)
   const plan = planAutofill(site, mine, found, opts)
@@ -197,15 +197,15 @@ export async function autofillSite(orgId, site, contacts, actor, opts = {}) {
   let retired = 0
   for (const step of plan.actions) {
     if (step.action === 'add') {
-      await addContact(orgId, step.payload, actor)
+      await addContact(step.payload, actor)
       added += 1
     } else if (step.action === 'update') {
-      await updateContact(orgId, step.id, step.payload, actor)
+      await updateContact(step.id, step.payload, actor)
       updated += 1
     }
     for (const id of step.retireIds) {
       const row = mine.find((c) => c.id === id)
-      await deleteContact(orgId, id, actor, `${step.role} · ${row?.name || id}`)
+      await deleteContact(id, actor, `${step.role} · ${row?.name || id}`)
       retired += 1
     }
   }
@@ -235,7 +235,6 @@ export async function autofillSite(orgId, site, contacts, actor, opts = {}) {
  * lets the caller stop it between sites, leaving already-updated sites saved.
  */
 export async function refreshSites(
-  orgId,
   sites,
   contacts,
   actor,
@@ -263,7 +262,7 @@ export async function refreshSites(
     const site = sites[i]
     onProgress?.({ done: i, total: sites.length, site, status: 'running' })
     try {
-      const r = await autofillSite(orgId, site, contacts, actor, { replaceManual })
+      const r = await autofillSite(site, contacts, actor, { replaceManual })
       summary.ok += 1
       summary.added += r.added
       summary.updated += r.updated

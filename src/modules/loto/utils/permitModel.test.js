@@ -202,7 +202,6 @@ describe('buildPermit', () => {
   it('carries the procedure snapshot, scope fields and one lock plan per point', () => {
     const snapshot = snapshotProcedure(proc())
     const doc = buildPermit({
-      orgId: 'org1',
       user: { id: 'u9', displayName: 'Req Uester' },
       snapshot,
       draft: {
@@ -217,7 +216,7 @@ describe('buildPermit', () => {
       },
     })
     expect(doc).toMatchObject({
-      orgId: 'org1', requestedBy: 'u9', procedureId: 'p1', siteId: 's1', region: 'South', entity: 'Ent',
+      requestedBy: 'u9', procedureId: 'p1', siteId: 's1', region: 'South', entity: 'Ent',
       pointCount: 2, reason: 'Rewire the panel', workOrder: 'WO-1',
     })
     expect(doc.locks.map((l) => [l.pointKey, l.lockNo])).toEqual([['k1', 'D-1'], ['k2', 'D-2']])
@@ -227,7 +226,7 @@ describe('buildPermit', () => {
   })
 
   it('gives a permit with no procedure empty values, not missing keys', () => {
-    const doc = buildPermit({ orgId: 'o', user: { id: 'u' }, snapshot: null, draft: { workType: 'machine_maintenance', reason: 'x'.repeat(12) } })
+    const doc = buildPermit({ user: { id: 'u' }, snapshot: null, draft: { workType: 'machine_maintenance', reason: 'x'.repeat(12) } })
     expect(doc).toMatchObject({ procedureId: '', pointCount: 0, pointKeys: [], locks: [], isolationPoints: [] })
   })
 })

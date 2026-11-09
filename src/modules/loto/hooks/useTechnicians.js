@@ -9,9 +9,7 @@ export function useTechnicians() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    if (!profile?.orgId) return undefined
     const unsub = subscribeTechnicians(
-      profile.orgId,
       (items) => {
         setTechnicians(items)
         setLoading(false)
@@ -19,7 +17,7 @@ export function useTechnicians() {
       () => setLoading(false),
     )
     return unsub
-  }, [profile?.orgId])
+  }, [])
 
   return { technicians, loading }
 }

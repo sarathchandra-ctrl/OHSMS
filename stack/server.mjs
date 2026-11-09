@@ -30,12 +30,15 @@ import {
   runRetention,
   withdrawStaleMirrors,
   sweepLoto,
+  isLiveAdmin,
   productMail,
 } from './workers.mjs'
 import { renderSetupClosed, renderSetupDone, renderSetupForm } from './setupPage.mjs'
 import { initializeOrganization, readOrganization } from './setup.mjs'
+import { applySchema } from './engine.mjs'
 
 const WORKER = { role: 'ohsms_worker', uid: '' }
+const ADMIN_JOBS = new Set(['purgeSoftDeleted', 'withdrawStalePermitMirrors', 'sweepLotoPermits'])
 
 function send(res, status, body, headers = {}) {
   const payload = typeof body === 'string' ? body : JSON.stringify(body)
@@ -614,6 +617,11 @@ export function createOwnStackServer({
       send(res, 404, { code: 'not-found', message: 'no such job' })
       return
     }
+    // Jobs that touch every record are an administrator's to run.
+    if (ADMIN_JOBS.has(name) && !(await isLiveAdmin(engine, uid))) {
+      send(res, 403, { ok: false, code: 'permission-denied', reason: 'not-admin' })
+      return
+    }
     const result = await fn()
     send(res, result?.ok === false ? 403 : 200, result)
   }
@@ -675,7 +683,14 @@ export function createOwnStackServer({
   // ── First-run setup in the browser (setupPage.mjs) ─────────────────────────
   // One organization per server: once it exists, /setup is closed for good,
   // whoever knows the code.
-  const isLive = async () => Boolean(await readOrganization(engine))
+  // The schema is applied once before the first look: a host built without
+  // stack/app.mjs (the tests) may not have created the tables yet.
+  let schemaReady = null
+  const isLive = async () => {
+    schemaReady ||= applySchema(db)
+    await schemaReady
+    return Boolean(await readOrganization(engine))
+  }
   // CONTROL_TOKEN is 32 random bytes, so guessing it is not the risk; a cap on
   // wrong codes still stops this page from being a free oracle.
   const SETUP_FAILURES_MAX = 10

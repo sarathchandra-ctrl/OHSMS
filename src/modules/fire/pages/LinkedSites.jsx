@@ -38,7 +38,7 @@ const Count = ({ n }) => (n ? <span className="font-semibold text-ink-800">{n}</
 
 export default function LinkedSites() {
   const { org, extinguishers, aeds, fas, signages, stretchers, firstAid, loading } = useFleet()
-  const { orgId, orgName, profile } = useAuth()
+  const { orgName, profile } = useAuth()
   const sites = useAccessibleSites()
   const [linkOpen, setLinkOpen] = useState(false)
   const [linkTab, setLinkTab] = useState('pending')
@@ -72,7 +72,7 @@ export default function LinkedSites() {
     if (!plan?.total) return
     setBusy(true)
     try {
-      const r = await linkAllEquipmentToSites(orgId, org?.name || orgName, plan.byKind, { uid: profile?.uid, name: profile?.name })
+      const r = await linkAllEquipmentToSites(org?.name || orgName, plan.byKind, { uid: profile?.uid, name: profile?.name })
       if (r.linked) toast.success(`${r.linked} linked to sites · ${r.entityChanges} entity value(s) corrected`)
       // A kind that failed is named, because "some of it worked" is not an
       // outcome anyone can act on without knowing which part.

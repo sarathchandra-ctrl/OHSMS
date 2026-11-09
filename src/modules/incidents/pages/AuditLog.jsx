@@ -13,14 +13,12 @@ function fmtTime(ts) {
 }
 
 export default function AuditLog() {
-  const { orgId } = useAuth()
   const [logs, setLogs] = useState([])
   const [search, setSearch] = useState('')
 
   useEffect(() => {
-    if (!orgId) return
-    return subscribeAuditLogs(orgId, setLogs)
-  }, [orgId])
+    return subscribeAuditLogs(setLogs)
+  }, [])
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()

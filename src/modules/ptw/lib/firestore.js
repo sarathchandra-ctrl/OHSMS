@@ -30,49 +30,36 @@ import { AUDIT } from './audit'
 import { computeWindow, derivePermitStatus } from './permitStatus'
 import { mirrorDisplayFields } from './publicPermit'
 import { generateQrToken } from './qr'
-import { logAudit as logOrgAudit, orgIndexRef } from '../../../shared/org/orgData'
+import { logAudit as logOrgAudit } from '../../../shared/org/orgData'
 import { discardMailedReport } from '../../../shared/print/mailedReport'
 
 // ── Path helpers ─────────────────────────────────────────────────────────────
-const orgRef = (orgId) => doc(db, 'organizations', orgId)
-const permitCol = (orgId) => collection(db, 'organizations', orgId, 'permits')
-const permitRef = (orgId, id) => doc(db, 'organizations', orgId, 'permits', id)
-const docCol = (orgId, permitId) => collection(db, 'organizations', orgId, 'permits', permitId, 'documents')
-const docRef = (orgId, permitId, docId) => doc(db, 'organizations', orgId, 'permits', permitId, 'documents', docId)
-const obsCol = (orgId) => collection(db, 'organizations', orgId, 'observations')
+const orgRef = () => doc(db, 'organization', 'profile')
+const permitCol = () => collection(db, 'permits')
+const permitRef = (id) => doc(db, 'permits', id)
+const docCol = (permitId) => collection(db, 'permits', permitId, 'documents')
+const docRef = (permitId, docId) => doc(db, 'permits', permitId, 'documents', docId)
+const obsCol = () => collection(db, 'observations')
 const qrRef = (token) => doc(db, 'permitQr', token)
-const countersRef = (orgId) => doc(db, 'organizations', orgId, 'meta', 'counters')
+const countersRef = () => doc(db, 'meta', 'counters')
 
 // ── Audit log ─────────────────────────────────────────────────────────────────
 // One implementation, in shared/org/orgData; this wrapper adds only the module
 // key and the default target. The private copy it replaces omitted BOTH
 // `module` and `source`, so permit entries read as "Core" in Admin → Audit Log
 // and carried no origin at all.
-const logAudit = (orgId, actor, action, details = {}) =>
-  logOrgAudit(orgId, actor, action, { module: 'ptw', target: 'permit', ...details })
+const logAudit = (actor, action, details = {}) =>
+  logOrgAudit(actor, action, { module: 'ptw', target: 'permit', ...details })
 
 // ── Organizations & users ──────────────────────────────────────────────────────
 
-/** Self-heal the public orgIndex entry (idempotent, non-blocking). */
-export async function ensureOrgIndex(org) {
-  if (!org?.id || !org?.name) return
-  try {
-    const ref = orgIndexRef(org.name)
-    const snap = await getDoc(ref)
-    if (snap.exists()) return
-    await setDoc(ref, { orgId: org.id, name: org.name })
-  } catch (e) {
-    // eslint-disable-next-line no-console
-    console.warn('[Permit to Work] orgIndex backfill skipped:', e?.message || e)
-  }
-}
 
-// Delegated to the shared ref-counted org-users listener (one per org app-wide).
+// Delegated to the shared ref-counted users listener (one app-wide).
 export { subscribeOrgUsers } from '../../../shared/org/orgData'
 
-export function subscribeOrg(orgId, cb) {
+export function subscribeOrg(cb) {
   return onSnapshot(
-    orgRef(orgId),
+    orgRef(),
     (snap) => cb(snap.exists() ? { id: snap.id, ...snap.data() } : null),
     onReadError('the organization', cb, null),
   )
@@ -82,9 +69,9 @@ export function subscribeOrg(orgId, cb) {
 
 const emptyDecision = () => ({ status: 'pending', by: null, byName: '', at: null, note: '' })
 
-async function storedPermitDocuments(orgId, permitId) {
+async function storedPermitDocuments(permitId) {
   try {
-    const snap = await getDocs(docCol(orgId, permitId))
+    const snap = await getDocs(docCol(permitId))
     return snap.docs.map((d) => ({ id: d.id, ...d.data() }))
   } catch {
     return []
@@ -94,11 +81,11 @@ async function storedPermitDocuments(orgId, permitId) {
 // The lifecycle mail reads reportPdfPath off the document this write stores.
 // The print has to be in Storage first, or the function attaches nothing and
 // sends the body alone. A failed capture must not fail the permit write.
-async function mailedPermitPdf(orgId, permit, documents) {
+async function mailedPermitPdf(permit, documents) {
   if (typeof document === 'undefined' || !permit) return ''
   try {
     const { capturePermitReport } = await import('./permitReportPdf.js')
-    return await capturePermitReport(orgId, permit, documents || [])
+    return await capturePermitReport(permit, documents || [])
   } catch (e) {
     // eslint-disable-next-line no-console
     console.warn('[Permit to Work] report PDF skipped:', e?.message || e)
@@ -107,12 +94,12 @@ async function mailedPermitPdf(orgId, permit, documents) {
 }
 
 /** Allocate the next sequential permit number for the org (PTW-YYYY-####). */
-async function nextPermitNo(orgId, year) {
+async function nextPermitNo(year) {
   const seq = await runTransaction(db, async (tx) => {
-    const snap = await tx.get(countersRef(orgId))
+    const snap = await tx.get(countersRef())
     const cur = snap.exists() ? snap.data().permitSeq || 0 : 0
     const next = cur + 1
-    tx.set(countersRef(orgId), { permitSeq: next }, { merge: true })
+    tx.set(countersRef(), { permitSeq: next }, { merge: true })
     return next
   })
   return `PTW-${year}-${String(seq).padStart(4, '0')}`
@@ -142,9 +129,8 @@ function mirrorStatusFields(p) {
 }
 
 // Full mirror written at create / backfill (display + status fields).
-function fullMirror(orgId, orgName, permitId, p) {
+function fullMirror(orgName, permitId, p) {
   return {
-    orgId,
     orgName: orgName || '',
     permitId,
     // Every field is defaulted: Firestore rejects `undefined`, and permits that
@@ -195,15 +181,15 @@ export function subscribePermitByToken(token, cb, onError) {
  * whose mirror write was previously blocked (e.g. before the permitQr rule was
  * deployed) even though the token already exists on the permit. Non-fatal.
  */
-export async function ensurePermitQr(orgId, orgName, permit) {
+export async function ensurePermitQr(orgName, permit) {
   if (!permit?.id) return null
   let token = permit.qrToken
   try {
     if (!token) {
       token = generateQrToken()
-      await updateDoc(permitRef(orgId, permit.id), { qrToken: token, updatedAt: serverTimestamp() })
+      await updateDoc(permitRef(permit.id), { qrToken: token, updatedAt: serverTimestamp() })
     }
-    await setDoc(qrRef(token), fullMirror(orgId, orgName, permit.id, { ...permit, qrToken: token }))
+    await setDoc(qrRef(token), fullMirror(orgName, permit.id, { ...permit, qrToken: token }))
   } catch (e) {
     // eslint-disable-next-line no-console
     console.warn('[Permit to Work] permit QR mirror ensure skipped:', e?.message || e)
@@ -212,15 +198,15 @@ export async function ensurePermitQr(orgId, orgName, permit) {
 }
 
 /** Create a new permit (status Draft, both team approvals pending). */
-export async function createPermit(orgId, data, actor) {
+export async function createPermit(data, actor) {
   const year = (data.date || new Date().toISOString().slice(0, 10)).slice(0, 4)
-  const permitNo = await nextPermitNo(orgId, year)
+  const permitNo = await nextPermitNo(year)
   const { validFrom, validTo } = computeWindow(data.date, data.time)
   const qrToken = generateQrToken()
-  const ref = doc(permitCol(orgId))
+  const ref = doc(permitCol())
   const permit = {
     permitNo,
-    docId: await reserveDocId(orgId, 'ptw'),
+    docId: await reserveDocId('ptw'),
     qrToken,
     date: data.date || '',
     time: data.time || '',
@@ -273,12 +259,11 @@ export async function createPermit(orgId, data, actor) {
   // The permit number is still consumed, which reserve.js already treats as the
   // right trade: a gap in the sequence is harmless, a half-permit is not.
   const docPayloads = await Promise.all(
-    (data.documents || []).map((d) => permitDocPayload(orgId, d, actor)),
+    (data.documents || []).map((d) => permitDocPayload(d, actor)),
   )
   // Before the create that sends the raised mail. The documents are not in
   // the subcollection yet; the print only needs their names and keys.
   const reportPdfPath = await mailedPermitPdf(
-    orgId,
     permit,
     docPayloads.map((d, i) => ({ ...d, id: `new-${i}` })),
   )
@@ -290,20 +275,20 @@ export async function createPermit(orgId, data, actor) {
   // are not batched with the permit: several inline documents would exceed the
   // batch's own ceiling.
   for (const payload of docPayloads) {
-    await addDoc(docCol(orgId, ref.id), payload)
+    await addDoc(docCol(ref.id), payload)
   }
   // Public QR mirror so the permit is scannable immediately.
-  await setDoc(qrRef(qrToken), fullMirror(orgId, actor?.orgName, ref.id, permit)).catch((e) =>
+  await setDoc(qrRef(qrToken), fullMirror(actor?.orgName, ref.id, permit)).catch((e) =>
     console.warn('[Permit to Work] mirror create skipped:', e?.message || e))
-  await logAudit(orgId, actor, AUDIT.PERMIT_CREATE, {
+  await logAudit(actor, AUDIT.PERMIT_CREATE, {
     targetId: ref.id, targetLabel: permitNo, summary: `${permit.typeOfWork} @ ${permit.jobLocation}`,
   })
   return { id: ref.id, permitNo, qrToken }
 }
 
 // ── Observations (safety observations logged via QR scan or in-app) ──────────
-export function subscribeObservations(orgId, cb) {
-  const q = query(obsCol(orgId), orderBy('at', 'desc'), limit(500))
+export function subscribeObservations(cb) {
+  const q = query(obsCol(), orderBy('at', 'desc'), limit(500))
   return onSnapshot(
     q,
     (snap) => cb(snap.docs.map((d) => ({ id: d.id, ...d.data() }))),
@@ -311,8 +296,8 @@ export function subscribeObservations(orgId, cb) {
   )
 }
 
-export function subscribePermitObservations(orgId, permitId, cb) {
-  const q = query(obsCol(orgId), where('permitId', '==', permitId))
+export function subscribePermitObservations(permitId, cb) {
+  const q = query(obsCol(), where('permitId', '==', permitId))
   return onSnapshot(
     q,
     (snap) => {
@@ -328,10 +313,10 @@ export function subscribePermitObservations(orgId, permitId, cb) {
  * Log a safety observation against a permit. A SAFE observation leaves the
  * permit open; an UNSAFE observation closes it for non-compliance (terminal).
  */
-export async function createObservation(orgId, data, actor) {
-  const ref = await addDoc(obsCol(orgId), {
+export async function createObservation(data, actor) {
+  const ref = await addDoc(obsCol(), {
     permitId: data.permitId,
-    docId: await reserveDocId(orgId, 'observations'),
+    docId: await reserveDocId('observations'),
     permitNo: data.permitNo || '',
     token: data.token || '',
     type: data.type, // 'safe' | 'unsafe'
@@ -351,14 +336,13 @@ export async function createObservation(orgId, data, actor) {
       at: new Date().toISOString(),
       note: data.note || '',
     }
-    const current = await getPermit(orgId, data.permitId)
+    const current = await getPermit(data.permitId)
     const merged = { ...(current || {}), closedDueToObservation: closure }
     const reportPdfPath = await mailedPermitPdf(
-      orgId,
       merged,
-      await storedPermitDocuments(orgId, data.permitId),
+      await storedPermitDocuments(data.permitId),
     )
-    await updateDoc(permitRef(orgId, data.permitId), {
+    await updateDoc(permitRef(data.permitId), {
       closedDueToObservation: closure,
       storedStatus: 'closed_noncompliance',
       updatedAt: serverTimestamp(),
@@ -367,7 +351,7 @@ export async function createObservation(orgId, data, actor) {
     await updatePermitMirror(data.token || current?.qrToken, merged)
   }
 
-  await logAudit(orgId, actor, data.type === 'unsafe' ? AUDIT.OBSERVATION_UNSAFE : AUDIT.OBSERVATION_SAFE, {
+  await logAudit(actor, data.type === 'unsafe' ? AUDIT.OBSERVATION_UNSAFE : AUDIT.OBSERVATION_SAFE, {
     targetId: data.permitId, targetLabel: data.permitNo || data.permitId,
     summary: `${data.type === 'unsafe' ? 'Unsafe — permit closed for non-compliance' : 'Safe observation'}${data.note ? ` — ${data.note}` : ''}`,
   })
@@ -398,8 +382,8 @@ export const OBSERVER_ROLES = [
  * It also cannot reserve a document id or write an audit entry, both of which
  * require membership. The observation is its own record.
  */
-export async function createPublicObservation(orgId, data) {
-  const ref = await addDoc(obsCol(orgId), {
+export async function createPublicObservation(data) {
+  const ref = await addDoc(obsCol(), {
     permitId: data.permitId,
     permitNo: data.permitNo || '',
     token: data.token || '',
@@ -416,8 +400,8 @@ export async function createPublicObservation(orgId, data) {
 }
 
 // ── Permit documents (base64 files in a subcollection) ───────────────────────
-export function subscribePermitDocuments(orgId, permitId, cb) {
-  const q = query(docCol(orgId, permitId), orderBy('uploadedAt', 'asc'))
+export function subscribePermitDocuments(permitId, cb) {
+  const q = query(docCol(permitId), orderBy('uploadedAt', 'asc'))
   // fileData is normalised at the seam so the download links keep working for
   // both eras: inline base64 (legacy) and cloud URL (new).
   return onSnapshot(
@@ -436,8 +420,8 @@ export function subscribePermitDocuments(orgId, permitId, cb) {
  * falling back to inline when the bucket is unavailable, so attaching a
  * document never fails harder than it did before storage existed.
  */
-async function permitDocPayload(orgId, meta, actor) {
-  const up = meta.fileData ? await putFile(orgId, 'permit-documents', meta.fileData, meta.fileName) : null
+async function permitDocPayload(meta, actor) {
+  const up = meta.fileData ? await putFile('permit-documents', meta.fileData, meta.fileName) : null
   if (!up && meta.fileData && (meta.size || 0) > MAX_INLINE_BYTES) {
     throw new Error(tooLargeForInline(meta.fileName))
   }
@@ -457,32 +441,32 @@ async function permitDocPayload(orgId, meta, actor) {
 }
 
 /** Attach a document to an existing permit; updates attachedDocKeys. */
-export async function addPermitDocument(orgId, permitId, meta, actor) {
-  await addDoc(docCol(orgId, permitId), await permitDocPayload(orgId, meta, actor))
+export async function addPermitDocument(permitId, meta, actor) {
+  await addDoc(docCol(permitId), await permitDocPayload(meta, actor))
   if (meta.key) {
-    await updateDoc(permitRef(orgId, permitId), {
+    await updateDoc(permitRef(permitId), {
       attachedDocKeys: arrayUnion(meta.key), updatedAt: serverTimestamp(),
     })
   }
-  await logAudit(orgId, actor, AUDIT.PERMIT_EDIT, {
+  await logAudit(actor, AUDIT.PERMIT_EDIT, {
     targetId: permitId, summary: `Attached document: ${meta.label || meta.fileName || meta.key}`,
   })
 }
 
-export async function deletePermitDocument(orgId, permitId, docId, actor, label) {
+export async function deletePermitDocument(permitId, docId, actor, label) {
   // The doc is the only record of its cloud path.
   try {
-    const snap = await getDoc(docRef(orgId, permitId, docId))
+    const snap = await getDoc(docRef(permitId, docId))
     if (snap.data()?.filePath) removeFile(snap.data().filePath)
   } catch { /* orphan tolerated */ }
-  await deleteDoc(docRef(orgId, permitId, docId))
-  await logAudit(orgId, actor, AUDIT.PERMIT_EDIT, {
+  await deleteDoc(docRef(permitId, docId))
+  await logAudit(actor, AUDIT.PERMIT_EDIT, {
     targetId: permitId, summary: `Removed document: ${label || docId}`,
   })
 }
 
-export function subscribePermits(orgId, cb) {
-  const q = query(permitCol(orgId), orderBy('createdAt', 'desc'), limit(1000))
+export function subscribePermits(cb) {
+  const q = query(permitCol(), orderBy('createdAt', 'desc'), limit(1000))
   return onSnapshot(
     q,
     (snap) => cb(snap.docs.map((d) => ({ id: d.id, ...d.data() }))),
@@ -490,16 +474,16 @@ export function subscribePermits(orgId, cb) {
   )
 }
 
-export async function getPermit(orgId, id) {
-  const snap = await getDoc(permitRef(orgId, id))
+export async function getPermit(id) {
+  const snap = await getDoc(permitRef(id))
   return snap.exists() ? { id, ...snap.data() } : null
 }
 
 /** Recompute + persist storedStatus when it drifts; keep the public mirror in sync. */
-async function syncStoredStatus(orgId, id, merged) {
+async function syncStoredStatus(id, merged) {
   const live = derivePermitStatus(merged, Date.now())
   if (merged.storedStatus !== live) {
-    await updateDoc(permitRef(orgId, id), { storedStatus: live, updatedAt: serverTimestamp() })
+    await updateDoc(permitRef(id), { storedStatus: live, updatedAt: serverTimestamp() })
   }
   await updatePermitMirror(merged.qrToken, merged)
 }
@@ -508,11 +492,11 @@ async function syncStoredStatus(orgId, id, merged) {
  * Opportunistically persist an expired permit's status (Not Closed) so the
  * repository/dashboard reflect it without a backend cron. Fire-and-forget.
  */
-export async function reconcilePermitStatus(orgId, permit) {
+export async function reconcilePermitStatus(permit) {
   try {
     const live = derivePermitStatus(permit, Date.now())
     if (permit?.id && permit.storedStatus !== live) {
-      await updateDoc(permitRef(orgId, permit.id), { storedStatus: live })
+      await updateDoc(permitRef(permit.id), { storedStatus: live })
       await updatePermitMirror(permit.qrToken, permit)
     }
   } catch (e) {
@@ -529,17 +513,17 @@ export async function reconcilePermitStatus(orgId, permit) {
  * simply not resolving. The audit entry is written before the document is
  * removed, because afterwards there is nothing left to describe.
  */
-export async function deletePermit(orgId, permit, actor) {
+export async function deletePermit(permit, actor) {
   const id = permit?.id
   if (!id) throw new Error('No permit to delete')
 
-  await logAudit(orgId, actor, AUDIT.PERMIT_DELETE, {
+  await logAudit(actor, AUDIT.PERMIT_DELETE, {
     targetId: id,
     targetLabel: permit.permitNo || id,
     summary: `Deleted permit ${permit.permitNo || id}${permit.typeOfWork ? ` (${permit.typeOfWork})` : ''}`,
   })
 
-  discardMailedReport(orgId, permit.reportPdfPath)
+  discardMailedReport(permit.reportPdfPath)
 
   if (permit.qrToken) {
     try {
@@ -552,13 +536,13 @@ export async function deletePermit(orgId, permit, actor) {
 
   // Attachments live in a subcollection, which deleting the parent leaves
   // orphaned and unreachable.
-  const docs = await getDocs(docCol(orgId, id))
+  const docs = await getDocs(docCol(id))
   for (const d of docs.docs) {
     if (d.data().filePath) removeFile(d.data().filePath)
     await deleteDoc(d.ref)
   }
 
-  await deleteDoc(permitRef(orgId, id))
+  await deleteDoc(permitRef(id))
 }
 
 function decisionBlock(decision, actor, note) {
@@ -572,30 +556,29 @@ function decisionBlock(decision, actor, note) {
 }
 
 /** Record a team's approve/reject decision on the permit itself. */
-export async function decideApproval(orgId, permitId, team, decision, note, actor) {
-  const current = await getPermit(orgId, permitId)
+export async function decideApproval(permitId, team, decision, note, actor) {
+  const current = await getPermit(permitId)
   if (!current) throw new Error('Permit no longer exists')
   const block = decisionBlock(decision, actor, note)
   const merged = { ...current, [team]: block }
   const reportPdfPath = await mailedPermitPdf(
-    orgId,
     merged,
-    await storedPermitDocuments(orgId, permitId),
+    await storedPermitDocuments(permitId),
   )
-  await updateDoc(permitRef(orgId, permitId), {
+  await updateDoc(permitRef(permitId), {
     [team]: block,
     updatedAt: serverTimestamp(),
     ...(reportPdfPath ? { reportPdfPath } : {}),
   })
-  await syncStoredStatus(orgId, permitId, merged)
-  await logAudit(orgId, actor, decision === 'approved' ? AUDIT.APPROVE : AUDIT.REJECT, {
+  await syncStoredStatus(permitId, merged)
+  await logAudit(actor, decision === 'approved' ? AUDIT.APPROVE : AUDIT.REJECT, {
     targetId: permitId, targetLabel: current.permitNo,
     summary: `${team} ${decision}${note ? ` — ${note}` : ''}`,
   })
 }
 
 /** The raiser submits the completed work for closure (both teams must approve). */
-export async function requestClosure(orgId, permitId, actor) {
+export async function requestClosure(permitId, actor) {
   const closure = {
     requestedBy: actor?.uid || null,
     requestedByName: actor?.name || '',
@@ -603,45 +586,43 @@ export async function requestClosure(orgId, permitId, actor) {
     engineering: emptyDecision(),
     operations: emptyDecision(),
   }
-  const current = await getPermit(orgId, permitId)
+  const current = await getPermit(permitId)
   const merged = { ...(current || {}), closure }
   const reportPdfPath = await mailedPermitPdf(
-    orgId,
     merged,
-    await storedPermitDocuments(orgId, permitId),
+    await storedPermitDocuments(permitId),
   )
-  await updateDoc(permitRef(orgId, permitId), {
+  await updateDoc(permitRef(permitId), {
     closure,
     updatedAt: serverTimestamp(),
     ...(reportPdfPath ? { reportPdfPath } : {}),
   })
-  await logAudit(orgId, actor, AUDIT.CLOSURE_REQUEST, { targetId: permitId, summary: 'Submitted for closure' })
+  await logAudit(actor, AUDIT.CLOSURE_REQUEST, { targetId: permitId, summary: 'Submitted for closure' })
 }
 
-export async function decideClosure(orgId, permitId, team, decision, note, actor) {
-  const current = await getPermit(orgId, permitId)
+export async function decideClosure(permitId, team, decision, note, actor) {
+  const current = await getPermit(permitId)
   if (!current?.closure) throw new Error('No closure request is pending')
   const block = decisionBlock(decision, actor, note)
   const closure = { ...current.closure, [team]: block }
   const merged = { ...current, closure }
   const reportPdfPath = await mailedPermitPdf(
-    orgId,
     merged,
-    await storedPermitDocuments(orgId, permitId),
+    await storedPermitDocuments(permitId),
   )
-  await updateDoc(permitRef(orgId, permitId), {
+  await updateDoc(permitRef(permitId), {
     closure,
     updatedAt: serverTimestamp(),
     ...(reportPdfPath ? { reportPdfPath } : {}),
   })
-  await syncStoredStatus(orgId, permitId, merged)
-  await logAudit(orgId, actor, AUDIT.CLOSURE_DECISION, {
+  await syncStoredStatus(permitId, merged)
+  await logAudit(actor, AUDIT.CLOSURE_DECISION, {
     targetId: permitId, targetLabel: current.permitNo, summary: `Closure ${team} ${decision}`,
   })
 }
 
 /** Request a time extension (reason + new end + participant/risk changes). */
-export async function requestExtension(orgId, permitId, { reason, newValidTo, participantChanges, riskChanges }, actor) {
+export async function requestExtension(permitId, { reason, newValidTo, participantChanges, riskChanges }, actor) {
   const extension = {
     requestedBy: actor?.uid || null,
     requestedByName: actor?.name || '',
@@ -654,25 +635,24 @@ export async function requestExtension(orgId, permitId, { reason, newValidTo, pa
     engineering: emptyDecision(),
     operations: emptyDecision(),
   }
-  const current = await getPermit(orgId, permitId)
+  const current = await getPermit(permitId)
   const merged = { ...(current || {}), extension }
   const reportPdfPath = await mailedPermitPdf(
-    orgId,
     merged,
-    await storedPermitDocuments(orgId, permitId),
+    await storedPermitDocuments(permitId),
   )
-  await updateDoc(permitRef(orgId, permitId), {
+  await updateDoc(permitRef(permitId), {
     extension,
     updatedAt: serverTimestamp(),
     ...(reportPdfPath ? { reportPdfPath } : {}),
   })
-  await logAudit(orgId, actor, AUDIT.EXTENSION_REQUEST, {
+  await logAudit(actor, AUDIT.EXTENSION_REQUEST, {
     targetId: permitId, summary: `Extension requested${reason ? ` — ${reason}` : ''}`,
   })
 }
 
 /** An approver adds a suggestion and may revise the proposed new end time. */
-export async function addExtensionSuggestion(orgId, permitId, { text, newValidTo }, actor) {
+export async function addExtensionSuggestion(permitId, { text, newValidTo }, actor) {
   const updates = {
     'extension.suggestions': arrayUnion({
       by: actor?.uid || null,
@@ -683,14 +663,14 @@ export async function addExtensionSuggestion(orgId, permitId, { text, newValidTo
     updatedAt: serverTimestamp(),
   }
   if (newValidTo) updates['extension.newValidTo'] = newValidTo
-  await updateDoc(permitRef(orgId, permitId), updates)
-  await logAudit(orgId, actor, AUDIT.EXTENSION_SUGGESTION, {
+  await updateDoc(permitRef(permitId), updates)
+  await logAudit(actor, AUDIT.EXTENSION_SUGGESTION, {
     targetId: permitId, summary: `Suggestion: ${text || ''}${newValidTo ? ` (new end ${newValidTo})` : ''}`,
   })
 }
 
-export async function decideExtension(orgId, permitId, team, decision, note, actor) {
-  const current = await getPermit(orgId, permitId)
+export async function decideExtension(permitId, team, decision, note, actor) {
+  const current = await getPermit(permitId)
   if (!current?.extension) throw new Error('No extension request is pending')
   const block = decisionBlock(decision, actor, note)
   const extension = { ...current.extension, [team]: block }
@@ -703,14 +683,13 @@ export async function decideExtension(orgId, permitId, team, decision, note, act
     merged.validTo = extension.newValidTo
   }
   const reportPdfPath = await mailedPermitPdf(
-    orgId,
     merged,
-    await storedPermitDocuments(orgId, permitId),
+    await storedPermitDocuments(permitId),
   )
   if (reportPdfPath) patch.reportPdfPath = reportPdfPath
-  await updateDoc(permitRef(orgId, permitId), patch)
-  await syncStoredStatus(orgId, permitId, merged)
-  await logAudit(orgId, actor, AUDIT.EXTENSION_DECISION, {
+  await updateDoc(permitRef(permitId), patch)
+  await syncStoredStatus(permitId, merged)
+  await logAudit(actor, AUDIT.EXTENSION_DECISION, {
     targetId: permitId, targetLabel: current.permitNo, summary: `Extension ${team} ${decision}`,
   })
 }

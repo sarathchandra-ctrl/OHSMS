@@ -9,9 +9,9 @@ afterEach(() => vi.restoreAllMocks())
 describe('onSiteCreated', () => {
   it('runs a registered hook with the new sites', async () => {
     const seen = []
-    onSiteCreated('a', (orgId, sites) => seen.push({ orgId, ids: sites.map((s) => s.id) }))
-    await notifySiteCreated('org1', [site('s1'), site('s2')], { name: 'Alice' })
-    expect(seen).toEqual([{ orgId: 'org1', ids: ['s1', 's2'] }])
+    onSiteCreated('a', (sites) => seen.push({ ids: sites.map((s) => s.id) }))
+    await notifySiteCreated([site('s1'), site('s2')], { name: 'Alice' })
+    expect(seen).toEqual([{ ids: ['s1', 's2'] }])
   })
 
   it('awaits async hooks before returning', async () => {
@@ -20,7 +20,7 @@ describe('onSiteCreated', () => {
       await new Promise((r) => setTimeout(r, 10))
       done = true
     })
-    await notifySiteCreated('org1', [site()])
+    await notifySiteCreated([site()])
     expect(done).toBe(true)
   })
 
@@ -28,7 +28,7 @@ describe('onSiteCreated', () => {
     const ran = []
     onSiteCreated('a', () => ran.push('a'))
     onSiteCreated('b', () => ran.push('b'))
-    await notifySiteCreated('org1', [site()])
+    await notifySiteCreated([site()])
     expect(ran.sort()).toEqual(['a', 'b'])
   })
 
@@ -38,7 +38,7 @@ describe('onSiteCreated', () => {
     let calls = 0
     onSiteCreated('cctv', () => { calls += 1 })
     onSiteCreated('cctv', () => { calls += 1 })
-    await notifySiteCreated('org1', [site()])
+    await notifySiteCreated([site()])
     expect(calls).toBe(1)
   })
 
@@ -46,7 +46,7 @@ describe('onSiteCreated', () => {
     let calls = 0
     const off = onSiteCreated('a', () => { calls += 1 })
     off()
-    await notifySiteCreated('org1', [site()])
+    await notifySiteCreated([site()])
     expect(calls).toBe(0)
   })
 })
@@ -57,13 +57,13 @@ describe('notifySiteCreated never breaks the site creation', () => {
   it('swallows a throwing hook', async () => {
     vi.spyOn(console, 'warn').mockImplementation(() => {})
     onSiteCreated('bad', () => { throw new Error('boom') })
-    await expect(notifySiteCreated('org1', [site()])).resolves.toBeUndefined()
+    await expect(notifySiteCreated([site()])).resolves.toBeUndefined()
   })
 
   it('swallows a rejecting async hook', async () => {
     vi.spyOn(console, 'warn').mockImplementation(() => {})
     onSiteCreated('bad', async () => { throw new Error('boom') })
-    await expect(notifySiteCreated('org1', [site()])).resolves.toBeUndefined()
+    await expect(notifySiteCreated([site()])).resolves.toBeUndefined()
   })
 
   it('still runs the other modules when one fails', async () => {
@@ -71,14 +71,14 @@ describe('notifySiteCreated never breaks the site creation', () => {
     let good = 0
     onSiteCreated('bad', () => { throw new Error('boom') })
     onSiteCreated('good', () => { good += 1 })
-    await notifySiteCreated('org1', [site()])
+    await notifySiteCreated([site()])
     expect(good).toBe(1)
   })
 
   it('names the failing module in the warning, so it is diagnosable', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
     onSiteCreated('cctv', () => { throw new Error('boom') })
-    await notifySiteCreated('org1', [site()])
+    await notifySiteCreated([site()])
     expect(warn.mock.calls[0][0]).toContain('cctv')
   })
 })
@@ -87,9 +87,9 @@ describe('notifySiteCreated does nothing when there is nothing to do', () => {
   it('skips with no hooks, no sites, or no org', async () => {
     let calls = 0
     onSiteCreated('a', () => { calls += 1 })
-    await notifySiteCreated('org1', [])
-    await notifySiteCreated('', [site()])
-    await notifySiteCreated('org1')
+    await notifySiteCreated([])
+    await notifySiteCreated([site()])
+    await notifySiteCreated()
     expect(calls).toBe(0)
   })
 })

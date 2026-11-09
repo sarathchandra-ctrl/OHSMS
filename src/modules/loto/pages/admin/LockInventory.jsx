@@ -55,7 +55,7 @@ export default function LockInventory() {
     }
     setSaving(true)
     try {
-      await addLock({ orgId: profile.orgId, lockNo: form.lockNo, type: 'department', tagNo: form.tagNo, color: form.color }, profile)
+      await addLock({ lockNo: form.lockNo, type: 'department', tagNo: form.tagNo, color: form.color }, profile)
       setForm({ lockNo: '', type: 'department', tagNo: '', color: 'red' })
       toast.success('Department lock added')
     } catch (err) {

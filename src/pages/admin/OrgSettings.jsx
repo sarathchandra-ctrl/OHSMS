@@ -97,7 +97,7 @@ const TABS = [
 const MAX_LOGO_BYTES = 2 * 1024 * 1024
 
 export default function OrgSettings() {
-  const { orgId, actor } = useAuth()
+  const { actor } = useAuth()
   const [org, setOrg] = useState(null)
   const [tab, setTab] = useState('general')
   const [sites, setSites] = useState([])
@@ -147,8 +147,7 @@ export default function OrgSettings() {
   const [scopeBusy, setScopeBusy] = useState(false)
 
   useEffect(() => {
-    if (!orgId) return
-    return subscribeOrg(orgId, (o) => {
+    return subscribeOrg((o) => {
       setOrg(o)
       if (o) {
         setForm({
@@ -169,19 +168,18 @@ export default function OrgSettings() {
         setModuleLevels(cfg.modules)
       }
     })
-  }, [orgId])
+  }, [])
 
   useEffect(() => {
-    if (!orgId) return
-    return subscribeSites(orgId, setSites)
-  }, [orgId])
+    return subscribeSites(setSites)
+  }, [])
 
   // Path-only logos (uploads that landed after M-5 with an empty logoUrl) leave
   // the header depending on Storage. When an admin opens this page and the path
   // resolves, write the small thumb back so every member has a chrome fallback
   // without re-uploading.
   useEffect(() => {
-    if (!orgId || !actor || !org?.logoPath || org?.logoUrl || !logoSrc || logoLoading) return
+    if (!actor || !org?.logoPath || org?.logoUrl || !logoSrc || logoLoading) return
     let cancelled = false
     ;(async () => {
       try {
@@ -190,7 +188,7 @@ export default function OrgSettings() {
         if (!blob.type.startsWith('image/')) return
         const thumb = await fileToLogoThumb(blob)
         if (cancelled || !thumb) return
-        await updateOrgSettings(orgId, { logoUrl: thumb }, actor)
+        await updateOrgSettings({ logoUrl: thumb }, actor)
       } catch {
         // Best-effort. A failed backfill leaves the path in place; re-upload
         // still writes a thumb.
@@ -199,7 +197,7 @@ export default function OrgSettings() {
     return () => {
       cancelled = true
     }
-  }, [orgId, actor, org?.logoPath, org?.logoUrl, logoSrc, logoLoading])
+  }, [actor, org?.logoPath, org?.logoUrl, logoSrc, logoLoading])
 
   const activityOptions = useMemo(
     () => activityPickerOptions(form.activityTypes),
@@ -235,7 +233,7 @@ export default function OrgSettings() {
   // Firestore document imposes.
   const saveLogo = async (patch) => {
     const previousPath = org?.logoPath || ''
-    await updateOrgSettings(orgId, patch, actor)
+    await updateOrgSettings(patch, actor)
     // Only after the document points somewhere else. Deleting first would leave
     // the header pointing at bytes that are already gone if the write failed.
     if (previousPath && previousPath !== patch.logoPath) removeFile(previousPath)
@@ -278,7 +276,7 @@ export default function OrgSettings() {
         }
       }
       const theme = themePatchForLogo(org?.theme, palette)
-      const up = await putFile(orgId, 'org-logo', file, file.name)
+      const up = await putFile('org-logo', file, file.name)
       // Always keep a small inline thumb in `logoUrl`. putFile returns an empty
       // url after M-5 (no permanent download token). The header paints that
       // thumb even when the Storage fetch later returns a download URL it
@@ -326,7 +324,7 @@ export default function OrgSettings() {
     setThemeBusy(true)
     try {
       const theme = nextTheme(org?.theme, patch)
-      await updateOrgSettings(orgId, { theme }, actor)
+      await updateOrgSettings({ theme }, actor)
       toast.success(ok)
     } catch (err) {
       toastCaught(err, 'Could not save appearance')
@@ -344,7 +342,6 @@ export default function OrgSettings() {
       const palette = await extractPaletteFromSrc(logoSrc)
       const prev = normalizeTheme(org?.theme)
       await updateOrgSettings(
-        orgId,
         {
           theme: nextTheme(prev, {
             accent: palette.accent,
@@ -367,7 +364,6 @@ export default function OrgSettings() {
     setBusy(true)
     try {
       await updateOrgSettings(
-        orgId,
         {
           name: form.name,
           address: form.address,
@@ -397,8 +393,8 @@ export default function OrgSettings() {
     setBusy(true)
     try {
       const packed = packSiteTypeByEntity(form.siteTypeByEntityRows, form.activityTypes)
-      await updateOrgSettings(orgId, { siteTypeByEntity: packed.map }, actor)
-      const n = await backfillEmptySiteTypes(orgId, plan.updates, actor)
+      await updateOrgSettings({ siteTypeByEntity: packed.map }, actor)
+      const n = await backfillEmptySiteTypes(plan.updates, actor)
       toast.success(
         n ? `Filled the site type on ${n} site${n === 1 ? '' : 's'}` : 'No sites needed a type'
       )
@@ -485,7 +481,7 @@ export default function OrgSettings() {
         )
         if (JSON.stringify(keys) !== JSON.stringify(DEFAULT_LEVEL_KEYS)) modules[m.key] = keys
       }
-      await updateOrgSettings(orgId, { scopeConfig: { customFields, modules } }, actor)
+      await updateOrgSettings({ scopeConfig: { customFields, modules } }, actor)
       toast.success('Scope settings saved')
     } catch (err) {
       toastCaught(err, 'Failed')
@@ -1104,8 +1100,8 @@ export default function OrgSettings() {
 
       {tab === 'integrations' && (
         <div className="space-y-8">
-          <WhatsAppConnect orgId={orgId} actor={actor} />
-          <MetabaseSettings orgId={orgId} actor={actor} />
+          <WhatsAppConnect actor={actor} />
+          <MetabaseSettings actor={actor} />
         </div>
       )}
     </>

@@ -28,30 +28,29 @@ import { formatPermitNo, permitSeqKind, permitYearNow } from '../utils/permitNum
 import { toMs } from '../utils/permitWindow'
 import { assertClaimsFree, readClaims } from './lockClaims'
 
-const permitsCol = (orgId) => collection(db, 'organizations', orgId, PERMIT_COLLECTION)
-const permitRef = (orgId, permitNo) => doc(db, 'organizations', orgId, PERMIT_COLLECTION, permitNo)
-const seqRef = (orgId, year) => doc(db, 'organizations', orgId, 'docSeq', permitSeqKind(year))
+const permitsCol = () => collection(db, PERMIT_COLLECTION)
+const permitRef = (permitNo) => doc(db, PERMIT_COLLECTION, permitNo)
+const seqRef = (year) => doc(db, 'docSeq', permitSeqKind(year))
 
 /** Newest first. Capped like every other list: it grows for as long as the org does. */
-export function subscribePermits(orgId, cb, onError) {
-  if (!orgId) return () => {}
-  const opened = openSnapshots(orgId, PERMIT_COLLECTION, cb)
+export function subscribePermits(cb, onError) {
+  const opened = openSnapshots(PERMIT_COLLECTION, cb)
   return onSnapshot(
-    query(permitsCol(orgId), orderBy('requestedAt', 'desc'), limit(COLLECTION_READ_CAP)),
+    query(permitsCol(), orderBy('requestedAt', 'desc'), limit(COLLECTION_READ_CAP)),
     (snap) => opened(snap.docs.map((d) => ({ id: d.id, ...d.data() }))),
     onError,
   )
 }
 
 /** One permit, live. `cb(null)` when it does not exist (or was purged). */
-export function subscribePermit(orgId, permitNo, cb, onError) {
-  if (!orgId || !permitNo) return () => {}
+export function subscribePermit(permitNo, cb, onError) {
+  if ((!permitNo)) return () => {}
   let latest = 0
   return onSnapshot(
-    permitRef(orgId, permitNo),
+    permitRef(permitNo),
     async (snap) => {
       const mine = ++latest
-      const row = snap.exists() ? await openDoc(orgId, PERMIT_COLLECTION, { id: snap.id, ...snap.data() }) : null
+      const row = snap.exists() ? await openDoc(PERMIT_COLLECTION, { id: snap.id, ...snap.data() }) : null
       // Decryption is async: drop a result that a newer snapshot has overtaken.
       if (mine === latest) cb(row)
     },
@@ -78,9 +77,8 @@ export function toStoredPermit(permit, { permitNo, permitSeq, now = () => server
 }
 
 /** The register entry for a padlock the requester typed in while raising the permit. */
-export function inlineLockDoc({ orgId, lockNo }, user, now = () => serverTimestamp()) {
+export function inlineLockDoc({ lockNo }, user, now = () => serverTimestamp()) {
   return {
-    orgId,
     lockNo: String(lockNo).trim(),
     // Registered inline = a shared department padlock. A personal lock belongs
     // to a technician and is added on the Technicians screen, not on the fly.
@@ -102,20 +100,19 @@ export function inlineLockDoc({ orgId, lockNo }, user, now = () => serverTimesta
  * at the machine. It is checked again, and enforced by the database, when the
  * locks are actually taken (permitActions.startIsolation).
  */
-export async function createPermit({ orgId, user, permit, inlineLocks = [] }) {
-  if (!orgId || !user?.id) throw new Error('Not signed in to an organization')
+export async function createPermit({ user, permit, inlineLocks = [] }) {
+  if ((!user?.id)) throw new Error('Not signed in to an organization')
   const year = permitYearNow()
   const permitNo = await runTransaction(db, async (tx) => {
     // Reads first: Firestore refuses a read after a write.
-    const counter = await tx.get(seqRef(orgId, year))
+    const counter = await tx.get(seqRef(year))
     const held = await readClaims(
       tx,
-      orgId,
       permit.locks.map((l) => l.lockNo),
     )
     const groupNo = permit.groupLock?.groupNo
     const groupDoc = groupNo
-      ? await tx.get(doc(db, 'organizations', orgId, 'lotoGroupNumbers', groupNo))
+      ? await tx.get(doc(db, 'lotoGroupNumbers', groupNo))
       : null
     if (groupNo && (!groupDoc.exists() || groupDoc.data()?.openPermitId)) {
       throw new Error('That group lockout number is not free.')
@@ -123,11 +120,11 @@ export async function createPermit({ orgId, user, permit, inlineLocks = [] }) {
     assertClaimsFree(held, permit.procedureId)
     const seq = (counter.exists() ? Number(counter.data().n) || 0 : 0) + 1
     const number = formatPermitNo(year, seq)
-    tx.set(seqRef(orgId, year), { n: seq })
-    tx.set(permitRef(orgId, number), await sealDoc(orgId, PERMIT_COLLECTION, toStoredPermit(permit, { permitNo: number, permitSeq: seq })))
-    if (groupNo) tx.update(doc(db, 'organizations', orgId, 'lotoGroupNumbers', groupNo), { openPermitId: number })
+    tx.set(seqRef(year), { n: seq })
+    tx.set(permitRef(number), await sealDoc(PERMIT_COLLECTION, toStoredPermit(permit, { permitNo: number, permitSeq: seq })))
+    if (groupNo) tx.update(doc(db, 'lotoGroupNumbers', groupNo), { openPermitId: number })
     for (const lockNo of inlineLocks) {
-      tx.set(doc(collection(db, 'locks')), inlineLockDoc({ orgId, lockNo }, user))
+      tx.set(doc(collection(db, 'locks')), inlineLockDoc({ lockNo }, user))
     }
     return number
   })
@@ -135,10 +132,10 @@ export async function createPermit({ orgId, user, permit, inlineLocks = [] }) {
 }
 
 /** The permit's timeline, oldest first. Opened: it carries names and notes. */
-export function subscribePermitEvents(orgId, permitNo, cb, onError) {
-  if (!orgId || !permitNo) return () => {}
-  const col = collection(db, 'organizations', orgId, PERMIT_COLLECTION, permitNo, 'events')
-  const opened = openSnapshots(orgId, `${PERMIT_COLLECTION}/events`, (rows) =>
+export function subscribePermitEvents(permitNo, cb, onError) {
+  if ((!permitNo)) return () => {}
+  const col = collection(db, PERMIT_COLLECTION, permitNo, 'events')
+  const opened = openSnapshots(`${PERMIT_COLLECTION}/events`, (rows) =>
     cb(rows.sort((a, b) => (toMs(a.at) || 0) - (toMs(b.at) || 0))),
   )
   return onSnapshot(

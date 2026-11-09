@@ -45,7 +45,7 @@ function isoInDays(n) {
 }
 
 export default function Dashboard() {
-  const { orgId, profile, moduleMap } = useAuth()
+  const { profile, moduleMap } = useAuth()
   const modules = useMemo(() => enabledModules(moduleMap), [moduleMap])
   const [incidents, setIncidents] = useState(null)
   const [risks, setRisks] = useState(null)
@@ -54,28 +54,26 @@ export default function Dashboard() {
   const [logs, setLogs] = useState(null)
 
   useEffect(() => {
-    if (!orgId) return
     const unsubs = [
-      incidentsSvc.subscribe(orgId, setIncidents, () =>
+      incidentsSvc.subscribe(setIncidents, () =>
         setLoadError('Incidents could not be loaded. This is not an empty list.')
       ),
-      assessmentsSvc.subscribe(orgId, setRisks, () =>
+      assessmentsSvc.subscribe(setRisks, () =>
         setLoadError('Assessments could not be loaded. This is not an empty list.')
       ),
-      subscribeAuditLogs(orgId, setLogs, 8),
+      subscribeAuditLogs(setLogs, 8),
     ]
     return () => unsubs.forEach((u) => u && u())
-  }, [orgId])
+  }, [])
 
   useEffect(() => {
-    if (!orgId) return undefined
     let live = true
     const cutoff = isoInDays(30)
     Promise.all([
-      dataProvider.count(`organizations/${orgId}/permits`, {
+      dataProvider.count(`permits`, {
         where: [{ field: 'status', op: 'in', value: LIVE_PERMIT_STATUS }],
       }),
-      dataProvider.count(`organizations/${orgId}/trainingRecords`, {
+      dataProvider.count(`trainingRecords`, {
         where: [
           { field: 'expiresOn', op: '>=', value: NEVER_EXPIRES },
           { field: 'expiresOn', op: '<=', value: cutoff },
@@ -91,7 +89,7 @@ export default function Dashboard() {
     return () => {
       live = false
     }
-  }, [orgId])
+  }, [])
 
   const loading = !loadError && (incidents === null || risks === null || tallies === null)
 

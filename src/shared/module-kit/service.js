@@ -13,14 +13,14 @@ import { AUDIT } from '../audit/audit'
 import { reserveDocId } from '../docId/reserve'
 
 export function createModuleService(collectionName, moduleKey = collectionName) {
-  const path = (orgId) => `organizations/${orgId}/${collectionName}`
+  const path = () => `${collectionName}`
 
   return {
     collectionName,
 
-    subscribe(orgId, cb, onError) {
+    subscribe(cb, onError) {
       return dataProvider.subscribe(
-        path(orgId),
+        path(),
         { orderBy: ['createdAt', 'desc'], limit: 1000 },
         cb,
         // A refused read must not look like an empty module. Callers that care
@@ -36,20 +36,20 @@ export function createModuleService(collectionName, moduleKey = collectionName) 
       )
     },
 
-    async list(orgId) {
-      return dataProvider.list(path(orgId), { orderBy: ['createdAt', 'desc'] })
+    async list() {
+      return dataProvider.list(path(), { orderBy: ['createdAt', 'desc'] })
     },
 
-    async create(orgId, data, actor, label) {
-      const id = await dataProvider.create(path(orgId), {
+    async create(data, actor, label) {
+      const id = await dataProvider.create(path(), {
         ...data,
-        docId: await reserveDocId(orgId, moduleKey),
+        docId: await reserveDocId(moduleKey),
         createdAt: dataProvider.serverTimestamp(),
         updatedAt: dataProvider.serverTimestamp(),
         createdBy: actor?.uid || null,
         createdByName: actor?.name || 'Unknown',
       })
-      await logAudit(orgId, actor, AUDIT.CREATE, {
+      await logAudit(actor, AUDIT.CREATE, {
         module: moduleKey,
         target: collectionName,
         targetId: id,
@@ -59,12 +59,12 @@ export function createModuleService(collectionName, moduleKey = collectionName) 
       return id
     },
 
-    async update(orgId, id, data, actor, label) {
-      await dataProvider.update(path(orgId), id, {
+    async update(id, data, actor, label) {
+      await dataProvider.update(path(), id, {
         ...data,
         updatedAt: dataProvider.serverTimestamp(),
       })
-      await logAudit(orgId, actor, AUDIT.UPDATE, {
+      await logAudit(actor, AUDIT.UPDATE, {
         module: moduleKey,
         target: collectionName,
         targetId: id,
@@ -72,12 +72,12 @@ export function createModuleService(collectionName, moduleKey = collectionName) 
       })
     },
 
-    async setStatus(orgId, id, status, actor, label) {
-      await dataProvider.update(path(orgId), id, {
+    async setStatus(id, status, actor, label) {
+      await dataProvider.update(path(), id, {
         status,
         updatedAt: dataProvider.serverTimestamp(),
       })
-      await logAudit(orgId, actor, AUDIT.STATUS, {
+      await logAudit(actor, AUDIT.STATUS, {
         module: moduleKey,
         target: collectionName,
         targetId: id,
@@ -86,9 +86,9 @@ export function createModuleService(collectionName, moduleKey = collectionName) 
       })
     },
 
-    async remove(orgId, id, actor, label) {
-      await dataProvider.remove(path(orgId), id)
-      await logAudit(orgId, actor, AUDIT.DELETE, {
+    async remove(id, actor, label) {
+      await dataProvider.remove(path(), id)
+      await logAudit(actor, AUDIT.DELETE, {
         module: moduleKey,
         target: collectionName,
         targetId: id,

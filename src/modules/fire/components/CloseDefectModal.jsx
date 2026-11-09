@@ -14,7 +14,7 @@ import { safeHref } from '../../../shared/safeUrl'
  * Close one open defect: remarks, the day it was closed, who closed it (the
  * signed-in user), and an optional photograph of the repair.
  */
-export default function CloseDefectModal({ open, onClose, row, orgId, orgName, actor }) {
+export default function CloseDefectModal({ open, onClose, row, orgName, actor }) {
   const [remarks, setRemarks] = useState('')
   const [closedOn, setClosedOn] = useState('')
   const [file, setFile] = useState(null)
@@ -50,7 +50,6 @@ export default function CloseDefectModal({ open, onClose, row, orgId, orgName, a
     setBusy(true)
     try {
       await closeDefect(
-        orgId,
         orgName,
         descriptorOf(row),
         {

@@ -8,11 +8,11 @@ import { reserveDocId } from '../../../shared/docId/reserve'
 import { logAudit, COLLECTION_READ_CAP } from '../../../shared/org/orgData'
 import { KPIS } from './kpis'
 
-const col = (orgId) => collection(db, 'organizations', orgId, 'objectives')
-const ref = (orgId, id) => doc(db, 'organizations', orgId, 'objectives', id)
+const col = () => collection(db, 'objectives')
+const ref = (id) => doc(db, 'objectives', id)
 
-export function subscribeObjectives(orgId, cb) {
-  return onSnapshot(query(col(orgId), orderBy('kpi'), limit(COLLECTION_READ_CAP)),
+export function subscribeObjectives(cb) {
+  return onSnapshot(query(col(), orderBy('kpi'), limit(COLLECTION_READ_CAP)),
     (s) => cb(s.docs.map((d) => ({ id: d.id, ...d.data() }))), () => cb([]))
 }
 
@@ -31,43 +31,43 @@ const clean = (d) => ({
 
 const label = (d) => `${KPIS.find((k) => k.key === d.kpi)?.label || d.kpi} · ${d.scopeLabel || 'Organization'}`
 
-export async function addObjective(orgId, data, actor) {
-  const r = await addDoc(col(orgId), { ...clean(data), docId: await reserveDocId(orgId, 'objectives'), createdAt: serverTimestamp(), createdBy: actor?.uid || null })
-  await logAudit(orgId, actor, 'objective.create', {
+export async function addObjective(data, actor) {
+  const r = await addDoc(col(), { ...clean(data), docId: await reserveDocId('objectives'), createdAt: serverTimestamp(), createdBy: actor?.uid || null })
+  await logAudit(actor, 'objective.create', {
     module: 'objectives', target: 'objective', targetId: r.id, targetLabel: label(data),
     summary: `Set target ${data.target} for ${label(data)}`,
   })
   return r.id
 }
 
-export async function updateObjective(orgId, id, data, actor) {
-  await updateDoc(ref(orgId, id), { ...clean(data), updatedAt: serverTimestamp() })
-  await logAudit(orgId, actor, 'objective.update', {
+export async function updateObjective(id, data, actor) {
+  await updateDoc(ref(id), { ...clean(data), updatedAt: serverTimestamp() })
+  await logAudit(actor, 'objective.update', {
     module: 'objectives', target: 'objective', targetId: id, targetLabel: label(data),
     summary: `Updated target to ${data.target} for ${label(data)}`,
   })
 }
 
-export async function deleteObjective(orgId, id, actor, lbl) {
-  await deleteDoc(ref(orgId, id))
-  await logAudit(orgId, actor, 'objective.delete', {
+export async function deleteObjective(id, actor, lbl) {
+  await deleteDoc(ref(id))
+  await logAudit(actor, 'objective.delete', {
     module: 'objectives', target: 'objective', targetId: id, targetLabel: lbl,
     summary: `Removed target for ${lbl}`,
   })
 }
 
 /** Seed one org-level target per KPI at its default, for orgs starting out. */
-export async function seedDefaultTargets(orgId, period, actor) {
+export async function seedDefaultTargets(period, actor) {
   const batch = writeBatch(db)
   for (const k of KPIS) {
-    batch.set(doc(col(orgId)), {
+    batch.set(doc(col()), {
       ...clean({ kpi: k.key, level: 'org', scope: '', scopeLabel: 'Organization', entity: 'all', target: k.defaultTarget, period }),
-      docId: await reserveDocId(orgId, 'objectives'),
+      docId: await reserveDocId('objectives'),
       createdAt: serverTimestamp(), createdBy: actor?.uid || null,
     })
   }
   await batch.commit()
-  await logAudit(orgId, actor, 'objective.seed', {
+  await logAudit(actor, 'objective.seed', {
     module: 'objectives', target: 'objective', targetLabel: 'Organization',
     summary: `Seeded ${KPIS.length} organization-level targets for ${period}`,
   })

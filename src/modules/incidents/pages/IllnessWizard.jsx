@@ -24,7 +24,7 @@ export default function IllnessWizard() {
   const { id } = useParams()
   const navigate = useNavigate()
   const [params, setParams] = useSearchParams()
-  const { user, profile, orgId } = useAuth()
+  const { user, profile } = useAuth()
   const { users, incidents, org, sites } = useIncidents()
   const actor = useMemo(() => ({ uid: user?.uid, name: profile?.name || '' }), [user, profile])
 
@@ -41,9 +41,9 @@ export default function IllnessWizard() {
   const [actions, setActions] = useState([])
 
   useEffect(() => {
-    if (!id || !orgId) return
+    if ((!id)) return
     let live = true
-    getIllness(orgId, id).then((ill) => {
+    getIllness(id).then((ill) => {
       if (!live || !ill) return
       setIllness(ill)
       setDraft({
@@ -56,21 +56,21 @@ export default function IllnessWizard() {
       setActions(ill.actions || [])
       setLoading(false)
     })
-    const unsub = subscribeIllnessFiles(orgId, id, setFiles)
+    const unsub = subscribeIllnessFiles(id, setFiles)
     return () => { live = false; unsub() }
-  }, [id, orgId])
+  }, [id])
 
   const step = params.get('step') && STEPS.includes(params.get('step')) ? params.get('step') : 'initial'
   const goStep = (s) => setParams({ step: s })
 
   const addFile = async (f) => {
     if (!illness) return
-    try { await addIllnessFile(orgId, illness.id, { ...f, uploadedBy: actor.name }) }
+    try { await addIllnessFile(illness.id, { ...f, uploadedBy: actor.name }) }
     catch (e) { toastCaught(e, 'File upload failed') }
   }
   const removeFile = async (fid) => {
     if (!illness) return
-    try { await deleteIllnessFile(orgId, illness.id, fid) }
+    try { await deleteIllnessFile(illness.id, fid) }
     catch (e) { toastCaught(e, 'File removal failed') }
   }
 
@@ -84,13 +84,13 @@ export default function IllnessWizard() {
     setSaving(true)
     try {
       if (!illness) {
-        const newId = await createIllness(orgId, actor, { ...draft })
-        await updateIllness(orgId, newId, { 'stagesDone.initial': true }, { silent: true })
+        const newId = await createIllness(actor, { ...draft })
+        await updateIllness(newId, { 'stagesDone.initial': true }, { silent: true })
         toast.success('Illness report created')
         navigate(`/incidents/illness/${newId}?step=actions`, { replace: true })
       } else {
-        await updateIllness(orgId, illness.id, { ...draft, 'stagesDone.initial': true }, { actor, summary: 'Updated illness report' })
-        setIllness(await getIllness(orgId, illness.id))
+        await updateIllness(illness.id, { ...draft, 'stagesDone.initial': true }, { actor, summary: 'Updated illness report' })
+        setIllness(await getIllness(illness.id))
         toast.success('Saved')
         goStep('actions')
       }
@@ -104,14 +104,14 @@ export default function IllnessWizard() {
   const saveActions = async (alsoClose) => {
     setSaving(true)
     try {
-      await updateIllness(orgId, illness.id, { actions, 'stagesDone.actions': true, lifecycle: 'actions' }, { actor, summary: 'Updated corrective actions' })
+      await updateIllness(illness.id, { actions, 'stagesDone.actions': true, lifecycle: 'actions' }, { actor, summary: 'Updated corrective actions' })
       if (alsoClose) {
-        await closeIllness(orgId, illness.id, actor)
+        await closeIllness(illness.id, actor)
         toast.success('Illness report closed')
         navigate('/incidents/illness')
         return
       }
-      setIllness(await getIllness(orgId, illness.id))
+      setIllness(await getIllness(illness.id))
       toast.success('Saved')
     } catch (e) {
       toastCaught(e, 'Could not save')

@@ -199,7 +199,7 @@ export function opensBackIntact(collection, before, after) {
  * Returns `{ ok, update, reason }`. `update` is the partial payload to write,
  * and is null when there is nothing to do or when the check failed.
  */
-export async function sealAndVerify(orgId, collection, docData) {
+export async function sealAndVerify(collection, docData) {
   if (!needsSealing(collection, docData)) return { ok: true, update: null, reason: 'already-sealed' }
 
   // `id` is a local handle the readers attach, not a stored field. Sealing is
@@ -210,10 +210,10 @@ export async function sealAndVerify(orgId, collection, docData) {
   // eslint-disable-next-line no-unused-vars -- destructured to REMOVE them
   const { id, _restricted, ...stored } = docData
 
-  const sealed = await sealDoc(orgId, collection, stored)
+  const sealed = await sealDoc(collection, stored)
   if (sealed === stored) return { ok: false, update: null, reason: 'sealing-produced-nothing' }
 
-  const reopened = await openDoc(orgId, collection, sealed)
+  const reopened = await openDoc(collection, sealed)
   if (!opensBackIntact(collection, stored, reopened)) {
     return { ok: false, update: null, reason: 'failed-round-trip' }
   }
@@ -228,23 +228,23 @@ export async function sealAndVerify(orgId, collection, docData) {
 
 // ── The run ──────────────────────────────────────────────────────────────────
 
-const colRef = (orgId, name) => collection(db, 'organizations', orgId, name)
-const subRef = (orgId, parent, id, sub) =>
-  collection(db, 'organizations', orgId, parent, id, sub)
+const colRef = (name) => collection(db, name)
+const subRef = (parent, id, sub) =>
+  collection(db, parent, id, sub)
 
 /** Every document of one target, as `{ ref, data }`. */
-async function readTarget(orgId, target) {
+async function readTarget(target) {
   const rows = []
   if (target.root) {
     // A root collection is shared by every tenant; the query is what keeps this
     // run inside one organization (and the rules refuse a read that is not
     // constrained to it).
-    const snap = await getDocs(query(collection(db, target.collection), where('orgId', '==', orgId)))
+    const snap = await getDocs(query(collection(db, target.collection)))
     for (const d of snap.docs) rows.push({ ref: d.ref, data: { id: d.id, ...d.data() } })
     return rows
   }
   if (!target.parent) {
-    const snap = await getDocs(colRef(orgId, target.collection))
+    const snap = await getDocs(colRef(target.collection))
     for (const d of snap.docs) rows.push({ ref: d.ref, data: { id: d.id, ...d.data() } })
     return rows
   }
@@ -253,9 +253,9 @@ async function readTarget(orgId, target) {
   // SECOND grant on the same data, and the one easiest to write too wide — and
   // this job runs once. The same reasoning subscribeMedicalRecords records for
   // preferring one listener per person.
-  const parents = await getDocs(colRef(orgId, target.parent))
+  const parents = await getDocs(colRef(target.parent))
   for (const p of parents.docs) {
-    const snap = await getDocs(subRef(orgId, target.parent, p.id, target.sub))
+    const snap = await getDocs(subRef(target.parent, p.id, target.sub))
     for (const d of snap.docs) rows.push({ ref: d.ref, data: { id: d.id, ...d.data() } })
   }
   return rows
@@ -269,9 +269,9 @@ async function readTarget(orgId, target) {
  * reports are the numbers a real run would produce, and a document that would
  * fail the check is named before anything is touched.
  */
-export async function backfillCollection(orgId, target, { dryRun = true, cap = MAX_SEALS_PER_RUN } = {}) {
+export async function backfillCollection(target, { dryRun = true, cap = MAX_SEALS_PER_RUN } = {}) {
   const name = target.collection
-  const rows = await readTarget(orgId, target)
+  const rows = await readTarget(target)
 
   let sealed = 0
   let alreadySealed = 0
@@ -282,7 +282,7 @@ export async function backfillCollection(orgId, target, { dryRun = true, cap = M
     if (!needsSealing(name, row.data)) { alreadySealed += 1; continue }
     if (sealed >= cap) { remaining += 1; continue }
 
-    const result = await sealAndVerify(orgId, name, row.data)
+    const result = await sealAndVerify(name, row.data)
     if (!result.ok) {
       // NEVER the field values, and never the filename — the same rule
       // planMedicalStrip and planMedicalRecordMove follow. A migration report
@@ -309,15 +309,14 @@ export async function backfillCollection(orgId, target, { dryRun = true, cap = M
  * which reads as a broken migration rather than as the wrong person running it.
  * Better to say so in one sentence before touching anything.
  */
-export async function backfillAll(orgId, { dryRun = true, cap = MAX_SEALS_PER_RUN, onProgress } = {}) {
-  if (!orgId) throw new Error('An organization is required.')
+export async function backfillAll({ dryRun = true, cap = MAX_SEALS_PER_RUN, onProgress } = {}) {
   if (!sealingEnabled) {
     throw new Error(
       'Encryption is switched off for this build, so there is nothing to seal with. ' +
       'Set VITE_ENCRYPTION=on, redeploy, and run this again.',
     )
   }
-  if (!(await canOpen(orgId, MEDICAL))) {
+  if (!(await canOpen(MEDICAL))) {
     throw new Error(
       'Sealing history needs an account that can read health records, so the migration ' +
       'can prove every record it seals can still be opened. Run this as an administrator.',
@@ -328,7 +327,7 @@ export async function backfillAll(orgId, { dryRun = true, cap = MAX_SEALS_PER_RU
   let budget = cap
   for (const target of TARGETS) {
     onProgress?.(target.collection)
-    const r = await backfillCollection(orgId, target, { dryRun, cap: budget })
+    const r = await backfillCollection(target, { dryRun, cap: budget })
     results.push(r)
     // One budget across the whole run, not one per collection: the cap exists to
     // bound the WRITES a single run performs, and nine independent caps would

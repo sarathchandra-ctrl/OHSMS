@@ -20,7 +20,7 @@ import { describe, it, expect, vi } from 'vitest'
 // equipmentMirrorFields() or permitMirrorFields() — and then here.
 // ─────────────────────────────────────────────────────────────────────────────
 
-vi.mock('firebase/firestore', () => ({
+vi.mock('../../../shared/data/client.js', () => ({
   collection: () => ({}), doc: () => ({}), getDoc: vi.fn(), getDocs: vi.fn(),
   setDoc: vi.fn(), addDoc: vi.fn(), updateDoc: vi.fn(), deleteDoc: vi.fn(),
   query: () => ({}), orderBy: () => ({}), onSnapshot: () => () => {},

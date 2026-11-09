@@ -1,8 +1,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Shared data-access base: organizations, users, the public org-name index, the
+// Shared data-access base: the organization document, users, the
 // append-only audit log, and sites. Every module builds on top of these helpers
-// and the org-scoped collection factory (moduleCol) so tenant scoping is
-// automatic and consistent.
+// and the collection factory (moduleCol).
 // ─────────────────────────────────────────────────────────────────────────────
 import {
   collection,
@@ -31,31 +30,23 @@ import { notifySiteCreated } from './siteHooks'
 import { canonicalFacility } from '../weather/activityPrecautions'
 
 // ── Path helpers ──────────────────────────────────────────────────────────────
-export const orgRef = (orgId) => doc(db, 'organizations', orgId)
+export const orgRef = () => doc(db, 'organization', 'profile')
 export const userRef = (uid) => doc(db, 'users', uid)
-export const auditCol = (orgId) => collection(db, 'organizations', orgId, 'auditLogs')
+export const auditCol = () => collection(db, 'auditLogs')
 
 /**
- * Org-scoped collection factory — THE way modules reach their data. Guarantees
- * every read/write is namespaced under /organizations/{orgId}/<name>, which is
- * what the security rules enforce for tenant isolation.
+ * Collection factory — the way modules reach their data. One organization per
+ * installation, so a collection is just its name; who may read or write it is
+ * decided by the database's row level security (stack/schema.sql).
  */
-export const moduleCol = (orgId, name) => collection(db, 'organizations', orgId, name)
-export const moduleDoc = (orgId, name, id) => doc(db, 'organizations', orgId, name, id)
-
-// Public, minimal name→org index so signup can resolve an org by name WITHOUT
-// read access to the member-only organizations collection.
-// Exported because five module service layers each carried a byte-identical
-// private copy of this pair. One name-to-key rule, in one place.
-export const orgIndexKey = (name) => (name || '').trim().toLowerCase()
-export const orgIndexRef = (name) => doc(db, 'orgIndex', orgIndexKey(name))
+export const moduleCol = (name) => collection(db, name)
+export const moduleDoc = (name, id) => doc(db, name, id)
 
 // ── Audit log ───────────────────────────────────────────────────────────────
 // Append-only trail. Never let an audit failure break the primary write.
-export async function logAudit(orgId, actor, action, details = {}) {
-  if (!orgId) return
+export async function logAudit(actor, action, details = {}) {
   try {
-    await addDoc(auditCol(orgId), {
+    await addDoc(auditCol(), {
       at: serverTimestamp(),
       actorUid: actor?.uid || null,
       actorName: actor?.name || actor?.displayName || 'Unknown',
@@ -89,17 +80,16 @@ export async function logAudit(orgId, actor, action, details = {}) {
  * The `to` bound covers the whole day it names. Somebody asking for the 31st
  * means the 31st, not the instant it began.
  */
-export async function fetchAuditLogs(orgId, { from = '', to = '', max = 5000 } = {}) {
-  if (!orgId) return []
+export async function fetchAuditLogs({ from = '', to = '', max = 5000 } = {}) {
   const clauses = [orderBy('at', 'desc'), limit(max)]
   if (from) clauses.unshift(where('at', '>=', new Date(from + 'T00:00:00')))
   if (to) clauses.unshift(where('at', '<=', new Date(to + 'T23:59:59.999')))
-  const snap = await getDocs(query(auditCol(orgId), ...clauses))
+  const snap = await getDocs(query(auditCol(), ...clauses))
   return snap.docs.map((d) => ({ id: d.id, ...d.data() }))
 }
 
-export function subscribeAuditLogs(orgId, cb, max = 300) {
-  const q = query(auditCol(orgId), orderBy('at', 'desc'), limit(max))
+export function subscribeAuditLogs(cb, max = 300) {
+  const q = query(auditCol(), orderBy('at', 'desc'), limit(max))
   return onSnapshot(
     q,
     (snap) => cb(snap.docs.map((d) => ({ id: d.id, ...d.data() }))),
@@ -108,115 +98,6 @@ export function subscribeAuditLogs(orgId, cb, max = 300) {
 }
 
 // ── Organizations & users ─────────────────────────────────────────────────────
-
-/** Create an org + its first admin user + public name index, atomically. */
-export async function createOrganization({ orgName, address, uid, name, email }) {
-  const org = doc(collection(db, 'organizations'))
-  const batch = writeBatch(db)
-  batch.set(org, {
-    name: orgName,
-    nameLower: orgName.trim().toLowerCase(),
-    address: address || '',
-    createdBy: uid,
-    notificationEmail: email,
-    createdAt: serverTimestamp(),
-  })
-  batch.set(userRef(uid), {
-    name,
-    email,
-    orgId: org.id,
-    orgName,
-    role: 'admin',
-    status: 'approved',
-    dept: '',
-    createdAt: serverTimestamp(),
-  })
-  // Public lookup index (no sensitive fields).
-  batch.set(orgIndexRef(orgName), { orgId: org.id, name: orgName })
-  await batch.commit()
-  return org.id
-}
-
-/**
- * One public index row, as the signup screen needs it.
- *
- * A WEEHS organization is `{ orgId, name }`. An own-database reservation is
- * `{ name, stack: 'own', requestId }` and has no orgId — the request reserved
- * the name so a second person cannot found a WEEHS tenant under it, and this
- * lookup can say which door the name uses. Treating a missing orgId as "no
- * such organization" is how that duplicate tenant used to get created.
- */
-export function orgFromIndex(data) {
-  if (!data) return null
-  if (data.stack === 'own') {
-    return {
-      id: null,
-      name: data.name || '',
-      stack: 'own',
-      requestId: data.requestId || null,
-    }
-  }
-  if (!data.orgId || !data.name) return null
-  return { id: data.orgId, name: data.name, stack: 'weehs' }
-}
-
-/** Find an organization by exact (case-insensitive) name via the public orgIndex. */
-export async function findOrgByName(orgName) {
-  const snap = await getDoc(orgIndexRef(orgName))
-  if (!snap.exists()) return null
-  return orgFromIndex(snap.data())
-}
-
-/**
- * List every organization on the platform, as [{ id, name }] sorted by name.
- *
- * PLATFORM OPERATOR ONLY. `allow list` on /orgIndex is refused to everyone else,
- * including a signed-in tenant admin, because this is the product's customer
- * list — and until recently the sign-up page called it UNAUTHENTICATED to fill a
- * dropdown, which handed that list, and every orgId with it, to anyone who
- * opened /signup. Joining an organization now goes through findOrgByName above,
- * which reads a single document.
- */
-export async function listOrganizations() {
-  const snap = await getDocs(collection(db, 'orgIndex'))
-  return snap.docs
-    .map((d) => {
-      const data = d.data()
-      // Own-stack reservations share this index so a typed name can say which
-      // door it uses. They are not tenants, and /platform does not choose
-      // their modules. Listing them here would show a request as a customer.
-      if (data.stack === 'own') return null
-      return { id: data.orgId, name: data.name }
-    })
-    .filter((o) => o && o.id && o.name)
-    .sort((a, b) => a.name.localeCompare(b.name))
-}
-
-/**
- * Create a pending member joining an existing org (defaults to a standard member).
- *
- * `department` is what they typed on the signup form. It is stored as
- * departmentRequest and not as the grant. Approval writes { status } only, and
- * committee close trusts department / dept, so a value written here would
- * become that privilege when an admin clicked Approve. An admin assigns the
- * real department afterwards, the same way they assign site access.
- */
-export async function createPendingMember({ uid, name, email, orgId, orgName, department }) {
-  await setDoc(userRef(uid), {
-    name,
-    email,
-    orgId,
-    orgName,
-    role: 'member',
-    status: 'pending',
-    dept: '',
-    department: '',
-    departmentRequest: department || '',
-    access: { sites: [], regions: [], entities: [] },
-    accessRequest: null,
-    createdAt: serverTimestamp(),
-  })
-}
 
 export async function getUserProfile(uid) {
   const snap = await getDoc(userRef(uid))
@@ -235,9 +116,9 @@ export async function getUserProfile(uid) {
 // permission failure looked like "no outstanding actions", which on a safety
 // system is the most dangerous possible way to be wrong.
 const sharedOrgCollection = createSharedSubscription((key, emit) => {
-  const [orgId, name] = key.split('/')
+  const name = key
   return onSnapshot(
-    query(collection(db, 'organizations', orgId, name), limit(COLLECTION_READ_CAP)),
+    query(collection(db, name), limit(COLLECTION_READ_CAP)),
     (snap) =>
       emit({
         rows: snap.docs.map((d) => ({ id: d.id, ...d.data() })),
@@ -268,8 +149,8 @@ const sharedOrgCollection = createSharedSubscription((key, emit) => {
  * subscribeCollections: a caller that can reach the rows is holding the reason
  * they may be short. status is 'ok' | 'capped' | 'failed' | 'denied'.
  */
-export function subscribeOrgCollection(orgId, name, cb) {
-  return sharedOrgCollection(`${orgId}/${name}`, cb)
+export function subscribeOrgCollection(name, cb) {
+  return sharedOrgCollection(name, cb)
 }
 
 // Shared listeners historically emitted a bare array so ~20 callers could
@@ -292,7 +173,7 @@ function emitLive(emit, rows, status) {
 }
 
 // ONE org-users listener shared by every module context.
-const sharedOrgUsers = createSharedSubscription((orgId, emit) =>
+const sharedOrgUsers = createSharedSubscription((_key, emit) =>
   onSnapshot(
     // Capped like every other live register. This was the last uncapped
     // listener in the shared layer, and it is opened by nearly every module
@@ -303,7 +184,7 @@ const sharedOrgUsers = createSharedSubscription((orgId, emit) =>
     // PICKERS — assigning a course, naming an attendee — and a directory that
     // silently stops at the name you were looking for is worse than a slow one.
     // Nothing here is counted, so there is no total to be short.
-    query(collection(db, 'users'), where('orgId', '==', orgId), limit(COLLECTION_READ_CAP)),
+    query(collection(db, 'users'), limit(COLLECTION_READ_CAP)),
     (snap) =>
       emitLive(
         emit,
@@ -319,21 +200,21 @@ const sharedOrgUsers = createSharedSubscription((orgId, emit) =>
     }
   )
 )
-export function subscribeOrgUsers(orgId, cb) {
-  return sharedOrgUsers(orgId, (payload) => cb(liveRows(payload)))
+export function subscribeOrgUsers(cb) {
+  return sharedOrgUsers('users', (payload) => cb(liveRows(payload)))
 }
 
 /** Same listener as subscribeOrgUsers, carrying whether the read succeeded. */
-export function subscribeOrgUsersRead(orgId, cb) {
-  return sharedOrgUsers(orgId, (payload) =>
+export function subscribeOrgUsersRead(cb) {
+  return sharedOrgUsers('users', (payload) =>
     cb({ rows: liveRows(payload), status: liveStatus(payload) })
   )
 }
 
 /** Live org document. */
-export function subscribeOrg(orgId, cb) {
+export function subscribeOrg(cb) {
   return onSnapshot(
-    orgRef(orgId),
+    orgRef(),
     (snap) => cb(snap.exists() ? { id: snap.id, ...snap.data() } : null),
     // null rather than []: this is one document, and every caller tests it for
     // existence. Handing back an array would make `org.name` undefined instead
@@ -343,17 +224,17 @@ export function subscribeOrg(orgId, cb) {
 }
 
 /** Admin updates org-level settings. */
-export async function updateOrgSettings(orgId, updates, actor) {
-  await updateDoc(orgRef(orgId), updates)
-  await logAudit(orgId, actor, AUDIT.ORG_SETTINGS, {
+export async function updateOrgSettings(updates, actor) {
+  await updateDoc(orgRef(), updates)
+  await logAudit(actor, AUDIT.ORG_SETTINGS, {
     target: 'org',
     summary: `Updated org settings: ${Object.keys(updates).join(', ')}`,
   })
 }
 
-export async function setUserStatus(uid, status, orgId, actor, userLabel) {
+export async function setUserStatus(uid, status, actor, userLabel) {
   await updateDoc(userRef(uid), { status })
-  await logAudit(orgId, actor, AUDIT.USER_STATUS, {
+  await logAudit(actor, AUDIT.USER_STATUS, {
     target: 'user',
     targetId: uid,
     targetLabel: userLabel || uid,
@@ -361,9 +242,9 @@ export async function setUserStatus(uid, status, orgId, actor, userLabel) {
   })
 }
 
-export async function setUserRole(uid, role, orgId, actor, userLabel) {
+export async function setUserRole(uid, role, actor, userLabel) {
   await updateDoc(userRef(uid), { role })
-  await logAudit(orgId, actor, AUDIT.USER_ROLE, {
+  await logAudit(actor, AUDIT.USER_ROLE, {
     target: 'user',
     targetId: uid,
     targetLabel: userLabel || uid,
@@ -373,8 +254,8 @@ export async function setUserRole(uid, role, orgId, actor, userLabel) {
 
 // ── Sites (shared across modules) ───────────────────────────────────────────
 // Same multiplexing as users — the site registry is read by nearly every module.
-const sharedSites = createSharedSubscription((orgId, emit) => {
-  const q = query(moduleCol(orgId, 'sites'), orderBy('name'))
+const sharedSites = createSharedSubscription((_key, emit) => {
+  const q = query(moduleCol('sites'), orderBy('name'))
   return onSnapshot(
     q,
     (snap) =>
@@ -409,13 +290,13 @@ const sharedSites = createSharedSubscription((orgId, emit) => {
     }
   )
 })
-export function subscribeSites(orgId, cb) {
-  return sharedSites(orgId, (payload) => cb(liveRows(payload)))
+export function subscribeSites(cb) {
+  return sharedSites('sites', (payload) => cb(liveRows(payload)))
 }
 
 /** Same listener as subscribeSites, carrying whether the read succeeded. */
-export function subscribeSitesRead(orgId, cb) {
-  return sharedSites(orgId, (payload) =>
+export function subscribeSitesRead(cb) {
+  return sharedSites('sites', (payload) =>
     cb({ rows: liveRows(payload), status: liveStatus(payload) })
   )
 }
@@ -464,13 +345,13 @@ function siteFields(data) {
   }
 }
 
-export async function createSite(orgId, data, actor) {
+export async function createSite(data, actor) {
   const fields = siteFields(data)
-  const ref = await addDoc(moduleCol(orgId, 'sites'), {
+  const ref = await addDoc(moduleCol('sites'), {
     ...fields,
     createdAt: serverTimestamp(),
   })
-  await logAudit(orgId, actor, AUDIT.SITE_CREATE, {
+  await logAudit(actor, AUDIT.SITE_CREATE, {
     target: 'site',
     targetId: ref.id,
     targetLabel: data.name,
@@ -480,7 +361,7 @@ export async function createSite(orgId, data, actor) {
   // here. Deliberately not awaited for its result and it cannot throw — the
   // site is already written, and a failed hook must not report the creation as
   // failed. See siteHooks.js.
-  await notifySiteCreated(orgId, [{ id: ref.id, ...fields }], actor)
+  await notifySiteCreated([{ id: ref.id, ...fields }], actor)
   return ref.id
 }
 
@@ -488,7 +369,7 @@ export async function createSite(orgId, data, actor) {
  * Bulk-create sites from parsed rows in one batch. Callers must pre-validate
  * (every row needs a name + numeric lat/lng); this writes what it's given.
  */
-export async function bulkCreateSites(orgId, rows, actor) {
+export async function bulkCreateSites(rows, actor) {
   const names = []
   const created = []
   // Firestore limits a single writeBatch to 500 operations. Chunk into slices
@@ -496,7 +377,7 @@ export async function bulkCreateSites(orgId, rows, actor) {
   for (let i = 0; i < rows.length; i += 400) {
     const batch = writeBatch(db)
     rows.slice(i, i + 400).forEach((r) => {
-      const ref = doc(moduleCol(orgId, 'sites'))
+      const ref = doc(moduleCol('sites'))
       const fields = siteFields(r)
       batch.set(ref, { ...fields, createdAt: serverTimestamp() })
       names.push(r.name)
@@ -504,14 +385,14 @@ export async function bulkCreateSites(orgId, rows, actor) {
     })
     await batch.commit()
   }
-  await logAudit(orgId, actor, AUDIT.SITE_CREATE, {
+  await logAudit(actor, AUDIT.SITE_CREATE, {
     target: 'site',
     summary: `Bulk imported ${names.length} site(s): ${names.slice(0, 6).join(', ')}${names.length > 6 ? '…' : ''}`,
   })
   // The import path needs the hooks as much as the single-site one: fifty sites
   // added at once would otherwise be fifty sites with no Meraki, which is the
   // case where the health cascade is most obviously wrong.
-  await notifySiteCreated(orgId, created, actor)
+  await notifySiteCreated(created, actor)
   return names.length
 }
 
@@ -531,17 +412,17 @@ export async function bulkCreateSites(orgId, rows, actor) {
  * Two audit entries, not one per site: an import of four hundred rows would
  * otherwise bury every other entry in the trail for that day.
  */
-export async function bulkUpsertSites(orgId, { creates = [], updates = [] }, actor) {
+export async function bulkUpsertSites({ creates = [], updates = [] }, actor) {
   for (let i = 0; i < updates.length; i += 400) {
     const batch = writeBatch(db)
     for (const u of updates.slice(i, i + 400)) {
-      batch.update(moduleDoc(orgId, 'sites', u.id), u.payload)
+      batch.update(moduleDoc('sites', u.id), u.payload)
     }
     await batch.commit()
   }
   if (updates.length) {
     const names = updates.map((u) => u.name)
-    await logAudit(orgId, actor, AUDIT.SITE_UPDATE, {
+    await logAudit(actor, AUDIT.SITE_UPDATE, {
       target: 'site',
       summary: `CSV import updated ${names.length} existing site(s): ${names.slice(0, 6).join(', ')}${names.length > 6 ? '…' : ''}`,
     })
@@ -549,7 +430,7 @@ export async function bulkUpsertSites(orgId, { creates = [], updates = [] }, act
 
   // Reuses the create path wholesale, so imported sites get the same audit
   // entry and the same per-site hooks a manually added one does.
-  const created = creates.length ? await bulkCreateSites(orgId, creates, actor) : 0
+  const created = creates.length ? await bulkCreateSites(creates, actor) : 0
   return { created, updated: updates.length }
 }
 
@@ -559,16 +440,16 @@ export async function bulkUpsertSites(orgId, { creates = [], updates = [] }, act
  * would otherwise bury the trail. Chunked at 400, the same size as a CSV
  * import. An empty list writes nothing.
  */
-async function commitFacilityUpdates(orgId, rows, actor, summary) {
+async function commitFacilityUpdates(rows, actor, summary) {
   for (let i = 0; i < rows.length; i += 400) {
     const batch = writeBatch(db)
     for (const u of rows.slice(i, i + 400)) {
-      batch.update(moduleDoc(orgId, 'sites', u.id), { facility: u.facility })
+      batch.update(moduleDoc('sites', u.id), { facility: u.facility })
     }
     await batch.commit()
   }
   if (rows.length) {
-    await logAudit(orgId, actor, AUDIT.SITE_UPDATE, {
+    await logAudit(actor, AUDIT.SITE_UPDATE, {
       target: 'site',
       summary,
     })
@@ -590,10 +471,9 @@ function facilitySummary(rows, lead) {
  * chosen the documents and the label (planSiteTypeBackfill). A second call
  * with an empty list writes nothing.
  */
-export async function backfillEmptySiteTypes(orgId, updates, actor) {
+export async function backfillEmptySiteTypes(updates, actor) {
   const rows = facilityRows(updates)
   return commitFacilityUpdates(
-    orgId,
     rows,
     actor,
     facilitySummary(rows, `Filled site type on ${rows.length} site(s) that had none`)
@@ -605,11 +485,10 @@ export async function backfillEmptySiteTypes(orgId, updates, actor) {
  * already has a type. This is the bulk edit on the Sites page. The backfill
  * above is the other write: it refuses a site that already has one.
  */
-export async function assignSiteType(orgId, updates, actor) {
+export async function assignSiteType(updates, actor) {
   const rows = facilityRows(updates)
   const label = rows[0]?.facility || ''
   return commitFacilityUpdates(
-    orgId,
     rows,
     actor,
     facilitySummary(rows, `Set site type to “${label}” on ${rows.length} site(s)`)
@@ -624,13 +503,13 @@ const cleanScope = (scope = {}) => ({
 })
 
 /** Admin sets a user's department + granted access scope (and clears any request). */
-export async function setUserAccess(uid, { department, access }, orgId, actor, userLabel) {
+export async function setUserAccess(uid, { department, access }, actor, userLabel) {
   await updateDoc(userRef(uid), {
     department: department || '',
     access: cleanScope(access),
     accessRequest: null,
   })
-  await logAudit(orgId, actor, AUDIT.USER_ROLE, {
+  await logAudit(actor, AUDIT.USER_ROLE, {
     target: 'user',
     targetId: uid,
     targetLabel: userLabel || uid,
@@ -646,7 +525,7 @@ export async function setUserAccess(uid, { department, access }, orgId, actor, u
  * update is the member's own. An admin copies it across from the Users page
  * if they accept it.
  */
-export async function requestAccess(uid, { department, scope }, orgId, actor) {
+export async function requestAccess(uid, { department, scope }, actor) {
   await updateDoc(userRef(uid), {
     accessRequest: {
       ...cleanScope(scope),
@@ -655,7 +534,7 @@ export async function requestAccess(uid, { department, scope }, orgId, actor) {
       by: actor?.name || '',
     },
   })
-  await logAudit(orgId, actor, AUDIT.USER_STATUS, {
+  await logAudit(actor, AUDIT.USER_STATUS, {
     target: 'user',
     targetId: uid,
     targetLabel: actor?.name || uid,
@@ -664,12 +543,12 @@ export async function requestAccess(uid, { department, scope }, orgId, actor) {
 }
 
 /** Admin applies a user's pending request → grant, then clears the request. */
-export async function grantAccessRequest(uid, request, orgId, actor, userLabel) {
+export async function grantAccessRequest(uid, request, actor, userLabel) {
   await updateDoc(userRef(uid), {
     access: cleanScope(request),
     accessRequest: null,
   })
-  await logAudit(orgId, actor, AUDIT.USER_ROLE, {
+  await logAudit(actor, AUDIT.USER_ROLE, {
     target: 'user',
     targetId: uid,
     targetLabel: userLabel || uid,
@@ -823,7 +702,7 @@ export function emptyCollections(names = []) {
  * 5 000 by document ID, which is an arbitrary 5 000, but which 5 000 only
  * matters once the notice is already up.
  */
-export function subscribeCollections(orgId, names, cb) {
+export function subscribeCollections(names, cb) {
   const data = Object.fromEntries(names.map((n) => [n, []]))
   const status = Object.fromEntries(names.map((n) => [n, 'pending']))
   const emit = () =>
@@ -831,7 +710,7 @@ export function subscribeCollections(orgId, names, cb) {
 
   const unsubs = names.map((name) =>
     onSnapshot(
-      query(moduleCol(orgId, name), limit(COLLECTION_READ_CAP)),
+      query(moduleCol(name), limit(COLLECTION_READ_CAP)),
       (snap) => {
         data[name] = snap.docs.map((d) => ({ id: d.id, ...d.data() }))
         // A snapshot that exactly fills the cap is the only signal Firestore
@@ -865,14 +744,14 @@ export function subscribeCollections(orgId, names, cb) {
   return () => unsubs.forEach((u) => u && u())
 }
 
-export async function updateSite(orgId, id, updates, actor) {
-  await updateDoc(moduleDoc(orgId, 'sites', id), updates)
-  await logAudit(orgId, actor, AUDIT.SITE_UPDATE, { target: 'site', targetId: id })
+export async function updateSite(id, updates, actor) {
+  await updateDoc(moduleDoc('sites', id), updates)
+  await logAudit(actor, AUDIT.SITE_UPDATE, { target: 'site', targetId: id })
 }
 
-export async function deleteSite(orgId, id, actor, label) {
-  await deleteDoc(moduleDoc(orgId, 'sites', id))
-  await logAudit(orgId, actor, AUDIT.SITE_DELETE, {
+export async function deleteSite(id, actor, label) {
+  await deleteDoc(moduleDoc('sites', id))
+  await logAudit(actor, AUDIT.SITE_DELETE, {
     target: 'site',
     targetId: id,
     targetLabel: label,
@@ -885,14 +764,14 @@ export async function deleteSite(orgId, id, actor, label) {
  * are NOT touched — they keep their stored site name, so history stays readable.
  * One audit entry names every site removed.
  */
-export async function deleteSites(orgId, sites, actor) {
+export async function deleteSites(sites, actor) {
   const list = sites.filter(Boolean)
   for (let i = 0; i < list.length; i += 400) {
     const batch = writeBatch(db)
-    for (const s of list.slice(i, i + 400)) batch.delete(moduleDoc(orgId, 'sites', s.id))
+    for (const s of list.slice(i, i + 400)) batch.delete(moduleDoc('sites', s.id))
     await batch.commit()
   }
-  await logAudit(orgId, actor, AUDIT.SITE_DELETE, {
+  await logAudit(actor, AUDIT.SITE_DELETE, {
     target: 'site',
     targetLabel: `${list.length} sites`,
     summary: `Deleted ${list.length} site(s): ${list

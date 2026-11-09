@@ -91,7 +91,7 @@ const emptyDoc = (location, seed) => ({
 })
 
 export default function DocumentDialog({
-  open, mode, doc, seed, nodeId, tree, sites, orgId, busy, onClose, onSubmit,
+  open, mode, doc, seed, nodeId, tree, sites, busy, onClose, onSubmit,
 }) {
   /**
    * Where the form starts, and why it can start NOWHERE.
@@ -116,7 +116,7 @@ export default function DocumentDialog({
   })
 
   const choices = useMemo(() => fileChoices(tree), [tree])
-  const lookups = useMemo(() => ({ orgId, sites, tree }), [orgId, sites, tree])
+  const lookups = useMemo(() => ({ sites, tree }), [sites, tree])
 
   // The full path, spelled out under the picker. A select can only indent, and
   // "Pre Launch" on its own is the same label under forty different sites.

@@ -31,7 +31,7 @@ import { readableOnTint } from '../../../shared/lib/contrast'
 
 export default function PhysicalDefects() {
   const { physicalDefects, siteInventory, loading } = useFleet()
-  const { orgId, orgName, profile } = useAuth()
+  const { orgName, profile } = useAuth()
   const today = useMemo(() => new Date(), [])
   const [reportFor, setReportFor] = useState(null)
   const [quoteFor, setQuoteFor] = useState(null)
@@ -74,7 +74,7 @@ export default function PhysicalDefects() {
       const remaining = (resolving.physicalDefects || []).filter(
         (k) => !PHYSICAL_DEFECT_KEYS.includes(k)
       )
-      await resolveDefects(orgId, orgName, resolving.id, remaining, profile?.name)
+      await resolveDefects(orgName, resolving.id, remaining, profile?.name)
       toast.success('Physical defects resolved')
       setResolving(null)
     } catch (e) {
@@ -193,7 +193,7 @@ export default function PhysicalDefects() {
         open={!!reportFor}
         onClose={() => setReportFor(null)}
         ext={reportFor}
-        orgId={orgId}
+       
         reporter={{ uid: profile?.uid, name: profile?.name }}
       />
 
@@ -201,7 +201,7 @@ export default function PhysicalDefects() {
         open={!!quoteFor}
         onClose={() => setQuoteFor(null)}
         ext={quoteFor}
-        orgId={orgId}
+       
         orgName={orgName}
         actor={{ uid: profile?.uid, name: profile?.name }}
       />
@@ -210,7 +210,7 @@ export default function PhysicalDefects() {
         open={!!hptFor}
         onClose={() => setHptFor(null)}
         ext={hptFor}
-        orgId={orgId}
+       
         orgName={orgName}
         actor={{ uid: profile?.uid, name: profile?.name }}
       />

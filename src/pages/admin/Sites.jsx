@@ -46,7 +46,7 @@ const EMPTY = { name: '', code: '', region: '', entity: '', address: '', lat: ''
 const COLLECTIONS = ['extinguishers', 'aeds', 'fas', 'incidents']
 
 export default function Sites() {
-  const { orgId, actor, role, org } = useAuth()
+  const { actor, role, org } = useAuth()
   const customFields = useMemo(() => normalizeScopeConfig(org?.scopeConfig).customFields, [org])
   const siteTypes = useMemo(() => siteTypeOptions(org?.activityTypes), [org])
   const [sites, setSites] = useState(null)
@@ -95,14 +95,13 @@ export default function Sites() {
   }, [storedMapKey, activityKey])
 
   useEffect(() => {
-    if (!orgId) return
     const unsubs = [
-      subscribeSites(orgId, setSites),
-      subscribeOrgUsers(orgId, setUsers),
-      subscribeCollections(orgId, COLLECTIONS, setStore),
+      subscribeSites(setSites),
+      subscribeOrgUsers(setUsers),
+      subscribeCollections(COLLECTIONS, setStore),
     ]
     return () => unsubs.forEach((u) => u && u())
-  }, [orgId])
+  }, [])
 
   const { extinguishers, aeds, fas, incidents } = store.data
 
@@ -140,10 +139,10 @@ export default function Sites() {
     setBusy(true)
     try {
       if (editing === 'new') {
-        await createSite(orgId, form, actor)
+        await createSite(form, actor)
         toast.success('Site added')
       } else {
-        await updateSite(orgId, editing.id, {
+        await updateSite(editing.id, {
           name: form.name, code: form.code, region: form.region, entity: form.entity, address: form.address,
           lat: form.lat === '' ? null : Number(form.lat),
           lng: form.lng === '' ? null : Number(form.lng),
@@ -164,7 +163,7 @@ export default function Sites() {
   const remove = async (s) => {
     if (!window.confirm(`Delete site "${s.name}"?`)) return
     try {
-      await deleteSite(orgId, s.id, actor, s.name)
+      await deleteSite(s.id, actor, s.name)
       toast.success('Site deleted')
       setSelected(null)
     } catch (err) {
@@ -212,7 +211,7 @@ export default function Sites() {
     // The register, coordinates included, has left the system. No preventive
     // control exists for a read the reader may make; the record that it
     // happened is what remains.
-    logAudit(orgId, actor, AUDIT.EXPORT, {
+    logAudit(actor, AUDIT.EXPORT, {
       module: 'core',
       targetLabel: `${rows.length} sites`,
       summary: `Exported ${rows.length} sites (${withCoords} with coordinates)`,
@@ -241,7 +240,7 @@ export default function Sites() {
         name: r.__match.renameTo ? `${r.__match.name} → ${r.__match.renameTo}` : r.__match.name,
         payload: updatePayload(r, byId.get(r.__match.id) || {}, bulkResult.present),
       }))
-      const { created, updated } = await bulkUpsertSites(orgId, { creates: bulkResult.creates, updates }, actor)
+      const { created, updated } = await bulkUpsertSites({ creates: bulkResult.creates, updates }, actor)
       toast.success(
         [
           created && `${created} site${created === 1 ? '' : 's'} added`,
@@ -324,7 +323,6 @@ export default function Sites() {
     setBusy(true)
     try {
       const n = await assignSiteType(
-        orgId,
         pickedSites.map((s) => ({ id: s.id, name: s.name, facility })),
         actor,
       )
@@ -344,8 +342,8 @@ export default function Sites() {
     setTypeBusy(true)
     try {
       const packed = packSiteTypeByEntity(typeRows, org?.activityTypes || [])
-      await updateOrgSettings(orgId, { siteTypeByEntity: packed.map }, actor)
-      const n = await backfillEmptySiteTypes(orgId, plan.updates, actor)
+      await updateOrgSettings({ siteTypeByEntity: packed.map }, actor)
+      const n = await backfillEmptySiteTypes(plan.updates, actor)
       toast.success(n ? `Filled the site type on ${n} site${n === 1 ? '' : 's'}` : 'No sites needed a type')
     } catch (err) {
       toastCaught(err, 'Could not fill site types')
@@ -358,7 +356,7 @@ export default function Sites() {
     if (confirmText.trim().toUpperCase() !== 'DELETE') return toast.error('Type DELETE to confirm')
     setBusy(true)
     try {
-      const n = await deleteSites(orgId, pickedSites, actor)
+      const n = await deleteSites(pickedSites, actor)
       toast.success(`${n} site${n === 1 ? '' : 's'} deleted`)
       setConfirmBulk(false); setConfirmText(''); exitSelect(); setSelected(null)
     } catch (err) {

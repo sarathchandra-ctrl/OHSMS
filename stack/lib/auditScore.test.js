@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest'
-import { TERMINAL_STATUSES, normalizeRow } from './metabase.js'
 import { OPEN_POINT_TERMINAL, auditPopulation, day0Of, lastSiteAudit, n7Of } from './auditScore.js'
 
 // Invented centres. Nothing here is a real site or a real person.
@@ -35,11 +34,6 @@ const point = (over = {}) => ({
 })
 
 describe('lastSiteAudit', () => {
-  it('uses the same pass-rate readers as the dashboard, and the same terminal statuses', () => {
-    expect(day0Of({ passPct: 82, checksPassed: 1, checksTotal: 2 })).toBe(82)
-    expect(n7Of({ passPctN7: null, checksPassedN7: 9, checksFailedN7: 1 })).toBe(90)
-    expect(OPEN_POINT_TERMINAL).toEqual(TERMINAL_STATUSES)
-  })
 
   it('reports the latest scored audit and only the open points from that audit', () => {
     const out = lastSiteAudit(
@@ -189,105 +183,6 @@ describe('lastSiteAudit', () => {
     expect(out.openPoints).toEqual(['Fire: On the day — Open'])
   })
 
-  it('reads the score and ticket questions by their column names', () => {
-    // The names the two saved questions actually return. Matching is by
-    // header, not by position, and a ticket raised on a different day is
-    // still this centre's open point.
-    const score = normalizeRow({
-      center_service_id: 'DEMO001',
-      centername: 'Demo North Hub',
-      start_date: '2026-03-02',
-      Oringinal_calcultated_CAS_score: 82.4,
-      cas_seven_day_score: null,
-      TypeOfAudit: 'Quarterly FLS Audit',
-    })
-    const older = normalizeRow({
-      center_service_id: 'DEMO001',
-      centername: 'Demo North Hub',
-      start_date: '2026-01-02',
-      Oringinal_calcultated_CAS_score: 40,
-      cas_seven_day_score: 40,
-    })
-    const ticket = normalizeRow({
-      center_service_id: 'DEMO001',
-      center_name: 'Demo North Hub',
-      ticket_date: '2026-02-11',
-      ticket_status: 'in_progress',
-      L1_tag: 'Facility',
-      L2_Tag: 'FLS - Extinguisher',
-      checkpoint: 'Are all extinguishers placed on metal stands?',
-      labels: '[Quarterly FLS Audit]',
-    })
-    const held = normalizeRow({
-      center_service_id: 'DEMO001',
-      center_name: 'Demo North Hub',
-      ticket_date: '2026-02-12',
-      ticket_status: 'On Hold',
-      checkpoint: 'Sign missing',
-    })
-    const done = normalizeRow({
-      center_service_id: 'DEMO001',
-      center_name: 'Demo North Hub',
-      ticket_date: '2026-02-12',
-      ticket_status: 'done',
-      checkpoint: 'Already fixed',
-    })
-    const spaced = normalizeRow({ ticket_status: 'In Progress' })
-    expect(score).toMatchObject({
-      siteId: 'DEMO001',
-      site: 'Demo North Hub',
-      auditDate: '2026-03-02',
-      passPct: 82.4,
-      passPctN7: null,
-    })
-    // The score column wins when it is a number. PASS/FAIL/NA are verdicts.
-    // A numeric cas_seven_day_result is the score when the score column is
-    // empty. cas_current_day_result is not the N+7 reading.
-    const fromScore = normalizeRow({
-      cas_seven_day_score: 91.25,
-      cas_seven_day_result: 'PASS',
-      cas_current_day_result: 'FAIL',
-    })
-    const fromResult = normalizeRow({
-      cas_seven_day_score: null,
-      cas_seven_day_result: '88.5%',
-      cas_current_day_result: '70',
-    })
-    const pending = normalizeRow({
-      cas_seven_day_score: '',
-      cas_seven_day_result: 'NA',
-      cas_current_day_result: '96.2',
-    })
-    expect(fromScore.passPctN7).toBe(91.25)
-    expect(fromResult.passPctN7).toBe(88.5)
-    expect(pending.passPctN7).toBe(null)
-    const scored = lastSiteAudit(
-      site,
-      [],
-      [
-        normalizeRow({
-          center_service_id: 'DEMO001',
-          centername: 'Demo North Hub',
-          start_date: '2026-03-02',
-          Oringinal_calcultated_CAS_score: 82,
-          cas_seven_day_score: null,
-          cas_seven_day_result: '91.5',
-          cas_current_day_result: 'NA',
-        }),
-      ]
-    )
-    expect(scored).toMatchObject({ scoreOnDay: 82, scoreAfter7: 91.5 })
-    expect(ticket.status).toBe('in_progress')
-    expect(held.status).toBe('on_hold')
-    expect(done.status).toBe('closed')
-    expect(spaced.status).toBe('in_progress')
-    const out = lastSiteAudit(site, [ticket, held, done], [older, score])
-    expect(out).toMatchObject({ date: '2026-03-02', scoreOnDay: 82.4, scoreAfter7: null })
-    expect(out.openPoints).toEqual([
-      'FLS - Extinguisher: Are all extinguishers placed on metal stands? — In Progress',
-      'Sign missing — On Hold',
-    ])
-  })
 
   it('says when the findings question was not available, and when there is no dated audit', () => {
     const missing = lastSiteAudit(site, null, [audit()])

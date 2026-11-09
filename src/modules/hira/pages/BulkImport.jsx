@@ -12,7 +12,7 @@ import { parseCsv, downloadTemplate, previewRows, CSV_COLUMNS } from '../lib/csv
 import { bulkCreateAssessments, logActivity } from '../lib/firestore'
 
 export default function BulkImport() {
-  const { orgId, profile, user } = useAuth()
+  const { profile, user } = useAuth()
   const inputRef = useRef(null)
   const [fileName, setFileName] = useState('')
   const [parsing, setParsing] = useState(false)
@@ -60,8 +60,8 @@ export default function BulkImport() {
     if (!result?.assessments.length) return
     setCommitting(true)
     try {
-      const created = await bulkCreateAssessments(orgId, result.assessments, { uid: user?.uid, name: profile?.name }, importKind)
-      logActivity(orgId, { uid: user?.uid, name: profile?.name }, {
+      const created = await bulkCreateAssessments(result.assessments, { uid: user?.uid, name: profile?.name }, importKind)
+      logActivity({ uid: user?.uid, name: profile?.name }, {
         type: 'imported',
         message: `imported ${created} ${importKind === 'baseline' ? 'baseline' : 'risk'} assessment(s) from CSV`,
       })

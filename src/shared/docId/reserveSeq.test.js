@@ -8,7 +8,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 let store
 let legacy
 
-vi.mock('firebase/firestore', () => ({
+vi.mock('../data/client.js', () => ({
   collection: (_db, ...p) => ({ __path: p.join('/') }),
   doc: (_db, ...p) => ({ __path: p.join('/') }),
   getDoc: async (ref) => {
@@ -40,67 +40,67 @@ beforeEach(() => {
 
 describe('reserveSeq', () => {
   it('starts at 1 on a counter that does not exist yet', async () => {
-    expect(await reserveSeq('org1', 'aed')).toBe(1)
+    expect(await reserveSeq('aed')).toBe(1)
   })
 
   it('hands consecutive callers different numbers', async () => {
-    expect(await reserveSeq('org1', 'aed')).toBe(1)
-    expect(await reserveSeq('org1', 'aed')).toBe(2)
-    expect(await reserveSeq('org1', 'aed')).toBe(3)
+    expect(await reserveSeq('aed')).toBe(1)
+    expect(await reserveSeq('aed')).toBe(2)
+    expect(await reserveSeq('aed')).toBe(3)
   })
 
   it('leaves the counter at the last number it issued', async () => {
-    await reserveSeq('org1', 'aed')
-    await reserveSeq('org1', 'aed')
+    await reserveSeq('aed')
+    await reserveSeq('aed')
     expect(store[SEQ]).toEqual({ n: 2 })
   })
 
   it('reserves a whole block and returns its first number', async () => {
     // generateAll creates one asset per site. Reserving one at a time would let
     // another operator's unit land in the middle of the batch.
-    expect(await reserveSeq('org1', 'aed', { count: 5 })).toBe(1)
+    expect(await reserveSeq('aed', { count: 5 })).toBe(1)
     expect(store[SEQ]).toEqual({ n: 5 })
-    expect(await reserveSeq('org1', 'aed')).toBe(6)
+    expect(await reserveSeq('aed')).toBe(6)
   })
 
   it('seeds from the floor when the register predates the counter', async () => {
     // An org with AED-0001..0041 already on the wall and no counter: without
     // the floor the first reservation would issue AED-0001 again.
-    expect(await reserveSeq('org1', 'aed', { floor: 41 })).toBe(42)
+    expect(await reserveSeq('aed', { floor: 41 })).toBe(42)
   })
 
   it('never moves backwards when the floor is stale', async () => {
     // The floor comes from a list capped at COLLECTION_READ_CAP, so it can
     // understate. The counter is the authority once it exists.
-    await reserveSeq('org1', 'aed', { floor: 41 })
-    expect(await reserveSeq('org1', 'aed', { floor: 10 })).toBe(43)
+    await reserveSeq('aed', { floor: 41 })
+    expect(await reserveSeq('aed', { floor: 10 })).toBe(43)
   })
 
   it('respects a legacy per-org counter so ids continue past it', async () => {
     legacy = { aed: 77 }
-    expect(await reserveSeq('org1', 'aed')).toBe(78)
+    expect(await reserveSeq('aed')).toBe(78)
   })
 
   it('treats a count below one as one rather than rewinding the counter', async () => {
-    expect(await reserveSeq('org1', 'aed', { count: 0 })).toBe(1)
+    expect(await reserveSeq('aed', { count: 0 })).toBe(1)
     expect(store[SEQ]).toEqual({ n: 1 })
   })
 
   it('keeps kinds independent', async () => {
-    await reserveSeq('org1', 'aed', { count: 9 })
-    expect(await reserveSeq('org1', 'fas')).toBe(1)
+    await reserveSeq('aed', { count: 9 })
+    expect(await reserveSeq('fas')).toBe(1)
   })
 })
 
 describe('reserveDocId still rides on it', () => {
   it('formats the reserved number into the document reference', async () => {
-    const id = await reserveDocId('org1', 'incidents', { orgCode: 'ACME' })
+    const id = await reserveDocId('incidents', { orgCode: 'ACME' })
     expect(id).toBe('INC-ACME_0001')
   })
 
   it('does not repeat a number under consecutive calls', async () => {
-    const a = await reserveDocId('org1', 'incidents', { orgCode: 'ACME' })
-    const b = await reserveDocId('org1', 'incidents', { orgCode: 'ACME' })
+    const a = await reserveDocId('incidents', { orgCode: 'ACME' })
+    const b = await reserveDocId('incidents', { orgCode: 'ACME' })
     expect(a).not.toBe(b)
   })
 })

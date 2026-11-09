@@ -93,7 +93,7 @@ export class NoKeyError extends Error {
 // resolved value would let all twenty call the callable before the first
 // returned. Caching the promise means one call and twenty awaits.
 
-let cached = null // { orgId, promise }
+let cached = null // { promise }
 
 /**
  * Unwrapped content keys, keyed by their wrapped form.
@@ -132,9 +132,8 @@ export function contentKeyCache() {
  * write, redact the read) and neither has one for an exception thrown out of a
  * Firestore snapshot handler.
  */
-export async function loadKeys(orgId) {
-  if (!orgId) return {}
-  if (cached?.orgId === orgId) return cached.promise
+export async function loadKeys() {
+  if (cached) return cached.promise
 
   const promise = (async () => {
     let raw
@@ -170,7 +169,7 @@ export async function loadKeys(orgId) {
     return out
   })()
 
-  cached = { orgId, promise }
+  cached = { promise }
   return promise
 }
 
@@ -206,7 +205,7 @@ export function clearKeyring() {
  * SealedValueError with reason 'restricted', and the document layer drops the
  * field.
  */
-export function resolverFor(orgId) {
+export function resolverFor() {
   // SYNCHRONOUS, and the keys are fetched inside the returned function rather
   // than here. That is the difference between "this app calls getDataKeys once
   // per session" and "this app calls getDataKeys on every screen that reads a
@@ -220,7 +219,7 @@ export function resolverFor(orgId) {
   // every route. It also meant every tenant paid a callable round trip to
   // decrypt nothing.
   return async (keyId, scheme) => {
-    const keys = await loadKeys(orgId)
+    const keys = await loadKeys()
     if (scheme === HYBRID_SCHEME) {
       // The member's case: they hold medical.publicKey and no privateKey, so
       // this is null and the clinical fields are redacted — which is precisely
@@ -246,10 +245,10 @@ export function resolverFor(orgId) {
  * encryption on yet; the other is a session that should not be writing health
  * records at all.
  */
-export async function sealerFor(orgId, keyClass) {
+export async function sealerFor(keyClass) {
   if (!sealingEnabled) return null
 
-  const keys = await loadKeys(orgId)
+  const keys = await loadKeys()
   const hybrid = isHybridClass(keyClass)
   const entry = hybrid ? keys.medical : keys.general
   const key = hybrid ? entry?.publicKey : entry?.key
@@ -260,12 +259,12 @@ export async function sealerFor(orgId, keyClass) {
   // write. See hybridSealer in envelope.js for the measurement behind it: a key
   // per field would cost a manager about nine seconds of RSA on a large injury
   // list, every time the list re-rendered.
-  if (hybrid) return hybridSealer(key, entry.keyId, orgId)
+  if (hybrid) return hybridSealer(key, entry.keyId)
 
   return {
     keyId: entry.keyId,
-    seal: (fieldPath, value) => sealValue(key, entry.keyId, orgId, fieldPath, value),
-    sealFile: (label, bytes) => sealBytes(key, entry.keyId, orgId, label, bytes),
+    seal: (fieldPath, value) => sealValue(key, entry.keyId, fieldPath, value),
+    sealFile: (label, bytes) => sealBytes(key, entry.keyId, label, bytes),
   }
 }
 
@@ -273,8 +272,8 @@ export async function sealerFor(orgId, keyClass) {
  * Can this session open the given class? Used by screens that want to say
  * "restricted" rather than render a record with holes in it and no explanation.
  */
-export async function canOpen(orgId, keyClass) {
-  const keys = await loadKeys(orgId)
+export async function canOpen(keyClass) {
+  const keys = await loadKeys()
   return isHybridClass(keyClass) ? Boolean(keys.medical?.privateKey) : Boolean(keys.general?.key)
 }
 

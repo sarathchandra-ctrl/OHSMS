@@ -17,7 +17,7 @@ const Ctx = createContext(null)
  * per page would mean each tab could only ever show half the picture.
  */
 export function StakeholderProvider({ children }) {
-  const { orgId, orgName } = useAuth()
+  const { orgName } = useAuth()
   const [escalations, setEscalations] = useState([])
   const [legalIssues, setLegalIssues] = useState([])
   const [sites, setSites] = useState([])
@@ -26,7 +26,6 @@ export function StakeholderProvider({ children }) {
   const [denied, setDenied] = useState(false)
 
   useEffect(() => {
-    if (!orgId) return undefined
     setLoaded({ escalations: false, legalIssues: false })
     setError(null)
     setDenied(false)
@@ -35,7 +34,7 @@ export function StakeholderProvider({ children }) {
     // "no complaints" when the truth is "could not load them". Permission-denied
     // is the viewer not being allowed the module — empty, AccessDenied in the shell.
     const bind = (subscribe, set, key) =>
-      subscribe(orgId, (rows, err) => {
+      subscribe((rows, err) => {
         if (err) {
           if (isPermissionDenied(err)) {
             set([])
@@ -52,10 +51,10 @@ export function StakeholderProvider({ children }) {
     const unsubs = [
       bind(subscribeEscalations, setEscalations, 'escalations'),
       bind(subscribeLegalIssues, setLegalIssues, 'legalIssues'),
-      subscribeSites(orgId, (rows) => setSites(rows || [])),
+      subscribeSites((rows) => setSites(rows || [])),
     ]
     return () => unsubs.forEach((u) => u?.())
-  }, [orgId])
+  }, [])
 
   // Joined once here rather than per page, so every tab agrees about which
   // complaints turned into legal matters.
@@ -72,7 +71,6 @@ export function StakeholderProvider({ children }) {
 
   const value = useMemo(
     () => ({
-      orgId,
       orgName,
       sites,
       escalations: joinedEscalations,
@@ -90,7 +88,6 @@ export function StakeholderProvider({ children }) {
       })),
     }),
     [
-      orgId,
       orgName,
       sites,
       joinedEscalations,

@@ -45,7 +45,7 @@ function Cell({ ok, children }) {
 }
 
 export default function SiteRepository() {
-  const { orgId, actor, isManager } = useAuth()
+  const { actor, isManager } = useAuth()
   const navigate = useNavigate()
   const [refreshOpen, setRefreshOpen] = useState(false)
   const [refreshScope, setRefreshScope] = useState('recompute') // 'recompute' | 'needed' | 'all'
@@ -59,16 +59,15 @@ export default function SiteRepository() {
   const [page, setPage] = useState(1)
 
   useEffect(() => {
-    if (!orgId) return undefined
-    const u1 = subscribeContacts(orgId, setContacts)
-    const u2 = subscribeLayouts(orgId, setLayouts)
-    const u3 = subscribeRescuePlans(orgId, setPlans)
+    const u1 = subscribeContacts(setContacts)
+    const u2 = subscribeLayouts(setLayouts)
+    const u3 = subscribeRescuePlans(setPlans)
     return () => {
       u1()
       u2()
       u3()
     }
-  }, [orgId])
+  }, [])
 
   useEffect(() => {
     setPage(1)
@@ -190,7 +189,6 @@ export default function SiteRepository() {
     })
     const log = []
     const summary = await refreshSites(
-      orgId,
       targets,
       contacts || [],
       actor,

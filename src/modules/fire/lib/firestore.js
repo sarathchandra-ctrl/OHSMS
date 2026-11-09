@@ -61,7 +61,7 @@ import { reserveDocId, reserveSeq } from '../../../shared/docId/reserve'
 import { reportError } from '../../../shared/monitoring'
 import { discardMailedReport } from '../../../shared/print/mailedReport'
 import { AUDIT, diffSummary } from './audit'
-import { logAudit as logOrgAudit, auditCol, orgIndexRef, COLLECTION_READ_CAP } from '../../../shared/org/orgData'
+import { logAudit as logOrgAudit, auditCol, COLLECTION_READ_CAP } from '../../../shared/org/orgData'
 import { onReadError } from '../../../shared/org/readError'
 import {
   hptUpdate,
@@ -102,31 +102,31 @@ const SEALED_DRILLS = 'mockDrills'
 const SEALED_DRILL_PHOTOS = 'mockDrills/photos'
 
 // ── Path helpers ─────────────────────────────────────────────────────────────
-const orgRef = (orgId) => doc(db, 'organizations', orgId)
-const extCol = (orgId) => collection(db, 'organizations', orgId, 'extinguishers')
-const extRef = (orgId, id) => doc(db, 'organizations', orgId, 'extinguishers', id)
-const reportCol = (orgId) => collection(db, 'organizations', orgId, 'reports')
-const closureCol = (orgId) => collection(db, 'organizations', orgId, 'defectClosures')
-const reportRef = (orgId, id) => doc(db, 'organizations', orgId, 'reports', id)
-const defectLockRef = (orgId, extId, defectType) =>
-  doc(db, 'organizations', orgId, 'defectLocks', lockId(extId, defectType))
+const orgRef = () => doc(db, 'organization', 'profile')
+const extCol = () => collection(db, 'extinguishers')
+const extRef = (id) => doc(db, 'extinguishers', id)
+const reportCol = () => collection(db, 'reports')
+const closureCol = () => collection(db, 'defectClosures')
+const reportRef = (id) => doc(db, 'reports', id)
+const defectLockRef = (extId, defectType) =>
+  doc(db, 'defectLocks', lockId(extId, defectType))
 const qrRef = (token) => doc(db, 'qr', token)
-const statsRef = (orgId) => doc(db, 'organizations', orgId, 'meta', 'stats')
-const signageCol = (orgId) => collection(db, 'organizations', orgId, 'signages')
-const signageRef = (orgId, id) => doc(db, 'organizations', orgId, 'signages', id)
-const drillCol = (orgId) => collection(db, 'organizations', orgId, 'mockDrills')
-const drillRef = (orgId, id) => doc(db, 'organizations', orgId, 'mockDrills', id)
-const aedCol = (orgId) => collection(db, 'organizations', orgId, 'aeds')
-const aedRef = (orgId, id) => doc(db, 'organizations', orgId, 'aeds', id)
-const fasCol = (orgId) => collection(db, 'organizations', orgId, 'fas')
-const fasRef = (orgId, id) => doc(db, 'organizations', orgId, 'fas', id)
-const firstAidCol = (orgId) => collection(db, 'organizations', orgId, 'firstAid')
-const firstAidRef = (orgId, id) => doc(db, 'organizations', orgId, 'firstAid', id)
-const stretcherCol = (orgId) => collection(db, 'organizations', orgId, 'stretchers')
-const stretcherRef = (orgId, id) => doc(db, 'organizations', orgId, 'stretchers', id)
+const statsRef = () => doc(db, 'meta', 'stats')
+const signageCol = () => collection(db, 'signages')
+const signageRef = (id) => doc(db, 'signages', id)
+const drillCol = () => collection(db, 'mockDrills')
+const drillRef = (id) => doc(db, 'mockDrills', id)
+const aedCol = () => collection(db, 'aeds')
+const aedRef = (id) => doc(db, 'aeds', id)
+const fasCol = () => collection(db, 'fas')
+const fasRef = (id) => doc(db, 'fas', id)
+const firstAidCol = () => collection(db, 'firstAid')
+const firstAidRef = (id) => doc(db, 'firstAid', id)
+const stretcherCol = () => collection(db, 'stretchers')
+const stretcherRef = (id) => doc(db, 'stretchers', id)
 // Mock-drill evidence photos live in a per-drill subcollection (one doc each, ≤~700 KB)
 // so the live drill list never carries the image blobs.
-const drillPhotoCol = (orgId, drillId) => collection(db, 'organizations', orgId, 'mockDrills', drillId, 'photos')
+const drillPhotoCol = (drillId) => collection(db, 'mockDrills', drillId, 'photos')
 
 // ── Audit log ──────────────────────────────────────────────────────────────────
 // The trail is written by ONE implementation, in shared/org/orgData. This
@@ -136,11 +136,11 @@ const drillPhotoCol = (orgId, drillId) => collection(db, 'organizations', orgId,
 // MODULE_BY_KEY[l.module] — so every entry the fleet wrote displayed as "Core",
 // and the log could not be filtered back to the module that produced it. Drill
 // writes pass module: 'drills' at the call site; this file serves both keys.
-const logAudit = (orgId, actor, action, details = {}) =>
-  logOrgAudit(orgId, actor, action, { module: 'equipment', target: 'extinguisher', ...details })
+const logAudit = (actor, action, details = {}) =>
+  logOrgAudit(actor, action, { module: 'equipment', target: 'extinguisher', ...details })
 
-export function subscribeAuditLogs(orgId, cb) {
-  const q = query(auditCol(orgId), orderBy('at', 'desc'), limit(200))
+export function subscribeAuditLogs(cb) {
+  const q = query(auditCol(), orderBy('at', 'desc'), limit(200))
   return onSnapshot(
     q,
     (snap) => cb(snap.docs.map((d) => ({ id: d.id, ...d.data() }))),
@@ -160,7 +160,7 @@ export function subscribeAuditLogs(orgId, cb) {
 // stats are a convenience overlay; a stats write failing (e.g. rules not yet
 // published for meta/stats) must never block or roll back the real extinguisher
 // write. (Same philosophy as logAudit.)
-async function bumpStats(orgId, delta) {
+async function bumpStats(delta) {
   if (!delta) return
   const fields = {}
   if (delta.total) fields.total = increment(delta.total)
@@ -175,16 +175,16 @@ async function bumpStats(orgId, delta) {
   fields.updatedAt = serverTimestamp()
   try {
     // set(merge) so the doc is created on first write and increments thereafter.
-    await setDoc(statsRef(orgId), fields, { merge: true })
+    await setDoc(statsRef(), fields, { merge: true })
   } catch (e) {
     // eslint-disable-next-line no-console
     console.warn('[Fire Marshal] stats update skipped:', e?.message || e)
   }
 }
 
-export function subscribeStats(orgId, cb) {
+export function subscribeStats(cb) {
   return onSnapshot(
-    statsRef(orgId),
+    statsRef(),
     (snap) => cb(snap.exists() ? snap.data() : null),
     // null, not [] — the dashboard reads this as one document and falls back to
     // counting the loaded page when it is absent.
@@ -193,11 +193,11 @@ export function subscribeStats(orgId, cb) {
 }
 
 /** Full recompute from a one-time read of all extinguishers (admin Refresh / backfill). */
-export async function recomputeStats(orgId) {
-  const snap = await getDocs(extCol(orgId))
+export async function recomputeStats() {
+  const snap = await getDocs(extCol())
   const list = snap.docs.map((d) => ({ id: d.id, ...d.data() }))
   const s = accumulate(list)
-  await setDoc(statsRef(orgId), { ...s, updatedAt: serverTimestamp() })
+  await setDoc(statsRef(), { ...s, updatedAt: serverTimestamp() })
   return s
 }
 
@@ -206,33 +206,14 @@ const extLabelOf = (ext) =>
 
 // ── Organizations & users ─────────────────────────────────────────────────────
 
-/**
- * Backfill the public orgIndex entry for an org if it's missing. Orgs created
- * before the orgIndex feature have no index doc, so they don't appear in the
- * signup dropdown. A signed-in member of the org self-heals it on load.
- * Idempotent + non-blocking: skips when the doc already exists, swallows errors
- * (the index is a convenience for signup, never critical to the app).
- */
-export async function ensureOrgIndex(org) {
-  if (!org?.id || !org?.name) return
-  try {
-    const ref = orgIndexRef(org.name)
-    const snap = await getDoc(ref)
-    if (snap.exists()) return
-    await setDoc(ref, { orgId: org.id, name: org.name })
-  } catch (e) {
-    // eslint-disable-next-line no-console
-    console.warn('[Fire Marshal] orgIndex backfill skipped:', e?.message || e)
-  }
-}
 
-// Delegated to the shared ref-counted org-users listener (one per org app-wide).
+// Delegated to the shared ref-counted users listener (one app-wide).
 export { subscribeOrgUsers } from '../../../shared/org/orgData'
 
 /** Live org document. */
-export function subscribeOrg(orgId, cb) {
+export function subscribeOrg(cb) {
   return onSnapshot(
-    orgRef(orgId),
+    orgRef(),
     (snap) => cb(snap.exists() ? { id: snap.id, ...snap.data() } : null),
     onReadError('the organization', cb, null),
   )
@@ -240,9 +221,8 @@ export function subscribeOrg(orgId, cb) {
 
 // ── QR mirror ──────────────────────────────────────────────────────────────────
 // Minimal public-readable copy of an extinguisher, keyed by qrToken.
-function mirrorPayload(orgId, orgName, id, ext) {
+function mirrorPayload(orgName, id, ext) {
   return {
-    orgId,
     orgName: orgName || '',
     extId: id,
     token: ext.qrToken,
@@ -271,8 +251,8 @@ function mirrorPayload(orgId, orgName, id, ext) {
 // ── Extinguishers ──────────────────────────────────────────────────────────────
 
 /** Add a single extinguisher + its public QR mirror. Returns {id, qrToken}. */
-export async function addExtinguisher(orgId, orgName, data, actor) {
-  const ref = doc(extCol(orgId))
+export async function addExtinguisher(orgName, data, actor) {
+  const ref = doc(extCol())
   // Adopt a code the site has already printed, exactly as the CSV import does.
   // The add form offers a QR Link field for the same reason imports accept one:
   // stock frequently arrives with labels already stuck on, and minting a fresh
@@ -304,10 +284,10 @@ export async function addExtinguisher(orgId, orgName, data, actor) {
   }
   const batch = writeBatch(db)
   batch.set(ref, ext)
-  batch.set(qrRef(qrToken), mirrorPayload(orgId, orgName, ref.id, ext))
+  batch.set(qrRef(qrToken), mirrorPayload(orgName, ref.id, ext))
   await batch.commit()
-  await bumpStats(orgId, statsDeltaFor(null, ext))
-  await logAudit(orgId, actor, AUDIT.EXT_CREATE, {
+  await bumpStats(statsDeltaFor(null, ext))
+  await logAudit(actor, AUDIT.EXT_CREATE, {
     targetId: ref.id,
     targetLabel: extLabelOf(ext),
     summary: `${ext.type} ${ext.capacity} @ ${ext.centerName}`,
@@ -325,7 +305,7 @@ export async function addExtinguisher(orgId, orgName, data, actor) {
  *
  * Returns the number of assets given a code.
  */
-export async function backfillExtinguisherQr(orgId, orgName, extinguishers, actor) {
+export async function backfillExtinguisherQr(orgName, extinguishers, actor) {
   const missing = extinguishers.filter((e) => !e.qrToken && !e.deletedAt)
   if (!missing.length) return 0
   // Each asset is 2 writes, so chunk well inside the 500-op batch limit.
@@ -333,12 +313,12 @@ export async function backfillExtinguisherQr(orgId, orgName, extinguishers, acto
     const batch = writeBatch(db)
     for (const asset of missing.slice(i, i + 200)) {
       const qrToken = generateQrToken()
-      batch.update(extRef(orgId, asset.id), { qrToken, updatedAt: serverTimestamp() })
-      batch.set(qrRef(qrToken), mirrorPayload(orgId, orgName, asset.id, { ...asset, qrToken }))
+      batch.update(extRef(asset.id), { qrToken, updatedAt: serverTimestamp() })
+      batch.set(qrRef(qrToken), mirrorPayload(orgName, asset.id, { ...asset, qrToken }))
     }
     await batch.commit()
   }
-  await logAudit(orgId, actor, AUDIT.EXT_UPDATE, {
+  await logAudit(actor, AUDIT.EXT_UPDATE, {
     summary: `Generated QR codes for ${missing.length} extinguisher(s) that had none`,
   })
   return missing.length
@@ -354,7 +334,7 @@ export async function backfillExtinguisherQr(orgId, orgName, extinguishers, acto
  *
  * `plan` comes from planSiteLinks(); nothing here decides what matches.
  */
-export async function linkExtinguishersToSites(orgId, orgName, plan, actor) {
+export async function linkExtinguishersToSites(orgName, plan, actor) {
   const items = plan.linked
   if (!items.length) return { linked: 0, entityChanges: 0 }
 
@@ -370,18 +350,18 @@ export async function linkExtinguishersToSites(orgId, orgName, plan, actor) {
       const siteName = site.name || ''
       const entity = site.entity || ''
       const merged = { ...ext, siteId: site.id, siteName, entity }
-      batch.update(extRef(orgId, ext.id), {
+      batch.update(extRef(ext.id), {
         siteId: site.id,
         siteName,
         entity,
         updatedAt: serverTimestamp(),
       })
-      if (ext.qrToken) batch.set(qrRef(ext.qrToken), mirrorPayload(orgId, orgName, ext.id, merged))
+      if (ext.qrToken) batch.set(qrRef(ext.qrToken), mirrorPayload(orgName, ext.id, merged))
     }
     await batch.commit()
   }
 
-  await logAudit(orgId, actor, AUDIT.EXT_UPDATE, {
+  await logAudit(actor, AUDIT.EXT_UPDATE, {
     summary: `Linked ${items.length} extinguisher(s) to sites; ${plan.entityChanges} entity value(s) corrected from the site registry`,
   })
   return { linked: items.length, entityChanges: plan.entityChanges }
@@ -411,7 +391,7 @@ const UPSERT_FIELDS = [
  *    preserving status, physicalDefects and the existing qrToken; mirror rewritten.
  * Returns { created, updated } counts.
  */
-export async function bulkUpsertExtinguishers(orgId, orgName, { creates = [], updates = [] }, actor) {
+export async function bulkUpsertExtinguishers(orgName, { creates = [], updates = [] }, actor) {
   let created = 0
   let updated = 0
 
@@ -420,7 +400,7 @@ export async function bulkUpsertExtinguishers(orgId, orgName, { creates = [], up
     const chunk = creates.slice(i, i + 200)
     const batch = writeBatch(db)
     for (const data of chunk) {
-      const ref = doc(extCol(orgId))
+      const ref = doc(extCol())
       // Reuse a QR code the site already has printed, when the upload supplied
       // one; otherwise mint a fresh token.
       const qrToken = data.qrToken || generateQrToken()
@@ -448,7 +428,7 @@ export async function bulkUpsertExtinguishers(orgId, orgName, { creates = [], up
         updatedAt: serverTimestamp(),
       }
       batch.set(ref, ext)
-      batch.set(qrRef(qrToken), mirrorPayload(orgId, orgName, ref.id, ext))
+      batch.set(qrRef(qrToken), mirrorPayload(orgName, ref.id, ext))
       created++
     }
     await batch.commit()
@@ -464,7 +444,7 @@ export async function bulkUpsertExtinguishers(orgId, orgName, { creates = [], up
         if (row[k] !== undefined) fields[k] = row[k] || ''
       }
       fields.updatedAt = serverTimestamp()
-      batch.update(extRef(orgId, row.id), fields)
+      batch.update(extRef(row.id), fields)
       if (row.qrToken) {
         // Mirror needs the full picture; carry preserved status/defects too.
         const merged = {
@@ -473,7 +453,7 @@ export async function bulkUpsertExtinguishers(orgId, orgName, { creates = [], up
           status: row.status,
           physicalDefects: row.physicalDefects || [],
         }
-        batch.set(qrRef(row.qrToken), mirrorPayload(orgId, orgName, row.id, merged))
+        batch.set(qrRef(row.qrToken), mirrorPayload(orgName, row.id, merged))
       }
       updated++
     }
@@ -483,8 +463,8 @@ export async function bulkUpsertExtinguishers(orgId, orgName, { creates = [], up
   // Updates can shift type/entity/region buckets (and creates add rows); a full
   // recompute is the simplest correct way to reconcile both in one pass. Stats
   // are a convenience overlay — never let a stats write block the import.
-  await recomputeStats(orgId).catch((e) => console.warn('[Fire Marshal] stats recompute skipped:', e?.message || e))
-  await logAudit(orgId, actor, AUDIT.EXT_BULK_UPSERT, {
+  await recomputeStats().catch((e) => console.warn('[Fire Marshal] stats recompute skipped:', e?.message || e))
+  await logAudit(actor, AUDIT.EXT_BULK_UPSERT, {
     summary: `Bulk import: ${created} added, ${updated} updated`,
   })
   return { created, updated }
@@ -495,15 +475,15 @@ export async function bulkUpsertExtinguishers(orgId, orgName, { creates = [], up
  * `opts` = { actor, action, summary } drives the audit entry. Defaults to a
  * field-level diff under the generic "edit" action.
  */
-export async function updateExtinguisher(orgId, orgName, id, updates, opts = {}) {
-  const current = await getDoc(extRef(orgId, id))
+export async function updateExtinguisher(orgName, id, updates, opts = {}) {
+  const current = await getDoc(extRef(id))
   if (!current.exists()) throw new Error('Extinguisher not found')
   const before = current.data()
   const merged = { ...before, ...updates }
   const batch = writeBatch(db)
-  batch.update(extRef(orgId, id), { ...updates, updatedAt: serverTimestamp() })
+  batch.update(extRef(id), { ...updates, updatedAt: serverTimestamp() })
   if (merged.qrToken) {
-    batch.set(qrRef(merged.qrToken), mirrorPayload(orgId, orgName, id, merged))
+    batch.set(qrRef(merged.qrToken), mirrorPayload(orgName, id, merged))
   }
   // Closures ride in this commit. A status that lands without the closure
   // document would take the defect off the open list and leave the Closed
@@ -511,9 +491,9 @@ export async function updateExtinguisher(orgId, orgName, id, updates, opts = {})
   // had not actually had.
   if (opts.withBatch) opts.withBatch(batch)
   await batch.commit()
-  await bumpStats(orgId, statsDeltaFor(before, merged))
+  await bumpStats(statsDeltaFor(before, merged))
   if (!opts.silent) {
-    await logAudit(orgId, opts.actor, opts.action || AUDIT.EXT_UPDATE, {
+    await logAudit(opts.actor, opts.action || AUDIT.EXT_UPDATE, {
       targetId: id,
       targetLabel: extLabelOf(merged),
       summary: opts.summary || diffSummary(before, updates),
@@ -530,7 +510,7 @@ export async function updateExtinguisher(orgId, orgName, id, updates, opts = {})
 // A missing mirror is left missing. set-merge on a token that has no document
 // is a create, and a create of `{deletedAt}` alone fails the mirror shape
 // rule and takes the whole batch with it.
-async function retireAssets(orgId, items, refOf, actor) {
+async function retireAssets(items, refOf, actor) {
   const list = (items || []).filter((it) => it && it.id)
   for (let i = 0; i < list.length; i += 200) {
     const chunk = list.slice(i, i + 200)
@@ -541,7 +521,7 @@ async function retireAssets(orgId, items, refOf, actor) {
     }))
     const batch = writeBatch(db)
     chunk.forEach((it, n) => {
-      batch.update(refOf(orgId, it.id), {
+      batch.update(refOf(it.id), {
         deletedAt: serverTimestamp(),
         deletedBy: actor?.name || '',
         deletedByUid: actor?.uid || '',
@@ -555,20 +535,20 @@ async function retireAssets(orgId, items, refOf, actor) {
 // Live units that already hold this code or this token. Deleted rows are
 // ignored: they are the ones being restored. The query is case-sensitive,
 // which matches the value stored on the document.
-async function liveHolding(colOf, orgId, field, value, exceptId) {
+async function liveHolding(colOf, field, value, exceptId) {
   const v = String(value || '').trim()
   if (!v) return []
-  const snap = await getDocs(query(colOf(orgId), where(field, '==', v), limit(8)))
+  const snap = await getDocs(query(colOf(), where(field, '==', v), limit(8)))
   return snap.docs
     .filter((d) => d.id !== exceptId && !d.data().deletedAt)
     .map((d) => ({ id: d.id, ...d.data() }))
 }
 
-async function reviveAssets(orgId, orgName, kind, ids, actor, { refOf, colOf, mirror, audit, labelOf }) {
+async function reviveAssets(orgName, kind, ids, actor, { refOf, colOf, mirror, audit, labelOf }) {
   const spec = EQUIPMENT_KINDS[kind]
   const rows = []
   for (const id of ids || []) {
-    const snap = await getDoc(refOf(orgId, id))
+    const snap = await getDoc(refOf(id))
     if (!snap.exists()) throw new Error('That record is no longer there.')
     const data = { id, ...snap.data() }
     if (!data.deletedAt) throw new Error('That record is already active.')
@@ -577,8 +557,8 @@ async function reviveAssets(orgId, orgName, kind, ids, actor, { refOf, colOf, mi
   if (!rows.length) return
   const live = []
   for (const row of rows) {
-    live.push(...await liveHolding(colOf, orgId, spec.codeField, row[spec.codeField], row.id))
-    live.push(...await liveHolding(colOf, orgId, 'qrToken', row.qrToken, row.id))
+    live.push(...await liveHolding(colOf, spec.codeField, row[spec.codeField], row.id))
+    live.push(...await liveHolding(colOf, 'qrToken', row.qrToken, row.id))
   }
   const blocked = restoreBlockMessage(rows, live, kind)
   if (blocked) throw new Error(blocked)
@@ -586,19 +566,19 @@ async function reviveAssets(orgId, orgName, kind, ids, actor, { refOf, colOf, mi
     const chunk = rows.slice(i, i + 200)
     const batch = writeBatch(db)
     for (const data of chunk) {
-      batch.update(refOf(orgId, data.id), {
+      batch.update(refOf(data.id), {
         deletedAt: null,
         deletedBy: null,
         deletedByUid: null,
         updatedAt: serverTimestamp(),
       })
       if (data.qrToken) {
-        batch.set(qrRef(data.qrToken), mirror(orgId, orgName, data.id, { ...data, deletedAt: null }))
+        batch.set(qrRef(data.qrToken), mirror(orgName, data.id, { ...data, deletedAt: null }))
       }
     }
     await batch.commit()
   }
-  await logAudit(orgId, actor, audit, {
+  await logAudit(actor, audit, {
     summary: rows.length === 1 ? `${labelOf(rows[0])} restored` : `${rows.length} restored`,
     targetId: rows.length === 1 ? rows[0].id : '',
     targetLabel: rows.length === 1 ? labelOf(rows[0]) : '',
@@ -607,17 +587,17 @@ async function reviveAssets(orgId, orgName, kind, ids, actor, { refOf, colOf, mi
 }
 
 /** Bulk soft-delete extinguishers by [{id, qrToken}]. The QR mirror stays. */
-export async function bulkDeleteExtinguishers(orgId, items, actor) {
-  await retireAssets(orgId, items, extRef, actor)
-  await recomputeStats(orgId).catch((e) => console.warn('[Fire Marshal] stats recompute skipped:', e?.message || e))
-  await logAudit(orgId, actor, AUDIT.EXT_BULK_DELETE, {
+export async function bulkDeleteExtinguishers(items, actor) {
+  await retireAssets(items, extRef, actor)
+  await recomputeStats().catch((e) => console.warn('[Fire Marshal] stats recompute skipped:', e?.message || e))
+  await logAudit(actor, AUDIT.EXT_BULK_DELETE, {
     summary: `${items.length} extinguisher(s) moved to Recently deleted`,
   })
 }
 
 /** Restore one or several. Same document, same QR token, history untouched. */
-export async function restoreExtinguishers(orgId, orgName, ids, actor) {
-  const rows = await reviveAssets(orgId, orgName, 'extinguisher', ids, actor, {
+export async function restoreExtinguishers(orgName, ids, actor) {
+  const rows = await reviveAssets(orgName, 'extinguisher', ids, actor, {
     refOf: extRef,
     colOf: extCol,
     mirror: mirrorPayload,
@@ -625,22 +605,22 @@ export async function restoreExtinguishers(orgId, orgName, ids, actor) {
     labelOf: extLabelOf,
   })
   for (const data of rows || []) {
-    await bumpStats(orgId, statsDeltaFor(null, { ...data, deletedAt: null }))
+    await bumpStats(statsDeltaFor(null, { ...data, deletedAt: null }))
   }
 }
 
 /** Restore a soft-deleted extinguisher: clear deletedAt and republish the QR mirror. */
-export async function restoreExtinguisher(orgId, orgName, id, actor) {
-  return restoreExtinguishers(orgId, orgName, [id], actor)
+export async function restoreExtinguisher(orgName, id, actor) {
+  return restoreExtinguishers(orgName, [id], actor)
 }
 
 /** Permanently delete a soft-deleted extinguisher (admin only — enforced by rules). */
-export async function purgeExtinguisher(orgId, id, qrToken, actor, label) {
+export async function purgeExtinguisher(id, qrToken, actor, label) {
   const batch = writeBatch(db)
-  batch.delete(extRef(orgId, id))
+  batch.delete(extRef(id))
   if (qrToken) batch.delete(qrRef(qrToken))
   await batch.commit()
-  await logAudit(orgId, actor, AUDIT.EXT_PURGE, { targetId: id, targetLabel: label || '' })
+  await logAudit(actor, AUDIT.EXT_PURGE, { targetId: id, targetLabel: label || '' })
 }
 
 // Max records loaded into the live in-memory set. The dashboard and all lists
@@ -655,8 +635,8 @@ export async function purgeExtinguisher(orgId, id, qrToken, actor, label) {
 // incompleteReadNotice.
 export const EXT_LOAD_CAP = COLLECTION_READ_CAP
 
-export function subscribeExtinguishers(orgId, cb, max = EXT_LOAD_CAP) {
-  const q = query(extCol(orgId), orderBy('createdAt', 'desc'), limit(max))
+export function subscribeExtinguishers(cb, max = EXT_LOAD_CAP) {
+  const q = query(extCol(), orderBy('createdAt', 'desc'), limit(max))
   return onSnapshot(
     q,
     (snap) => cb(snap.docs.map((d) => ({ id: d.id, ...d.data() }))),
@@ -673,13 +653,13 @@ export function subscribeExtinguishers(orgId, cb, max = EXT_LOAD_CAP) {
  * Returns the number of docs fixed. Runs only for docs where the field is
  * strictly `undefined` (absent) — never touches explicitly soft-deleted docs.
  */
-export async function backfillDeletedAt(orgId, list = []) {
+export async function backfillDeletedAt(list = []) {
   const missing = list.filter((e) => e && e.id && e.deletedAt === undefined)
   if (!missing.length) return 0
   for (let i = 0; i < missing.length; i += 400) {
     const chunk = missing.slice(i, i + 400)
     const batch = writeBatch(db)
-    for (const e of chunk) batch.update(extRef(orgId, e.id), { deletedAt: null })
+    for (const e of chunk) batch.update(extRef(e.id), { deletedAt: null })
     await batch.commit()
   }
   return missing.length
@@ -687,8 +667,8 @@ export async function backfillDeletedAt(orgId, list = []) {
 
 export const PAGE_SIZE = 50
 
-export async function getExtinguisher(orgId, id) {
-  const snap = await getDoc(extRef(orgId, id))
+export async function getExtinguisher(id) {
+  const snap = await getDoc(extRef(id))
   return snap.exists() ? { id, ...snap.data() } : null
 }
 
@@ -700,14 +680,14 @@ export async function getExtinguisher(orgId, id) {
  * Submit a report (defect or status change). Works for authenticated portal
  * users AND public QR visitors. Always lands as `pending`.
  */
-export async function createReport(orgId, report) {
+export async function createReport(report) {
   // One open report per defect per unit. The lock document and the report are
   // written together, so a duplicate cannot slip through between the check and
   // the write, and the QR page — which may not read reports — is covered by the
   // same rule as the portal.
   if (report.kind === 'defect' && report.defectType) {
     const batch = writeBatch(db)
-    batch.set(defectLockRef(orgId, report.extId, report.defectType), {
+    batch.set(defectLockRef(report.extId, report.defectType), {
       extId: report.extId,
       defectType: report.defectType,
       createdAt: serverTimestamp(),
@@ -717,7 +697,7 @@ export async function createReport(orgId, report) {
       // locks and silently suppressing everyone else's defect reports.
       token: report.token || '',
     })
-    batch.set(doc(reportCol(orgId)), reportPayload(report))
+    batch.set(doc(reportCol()), reportPayload(report))
     try {
       await batch.commit()
     } catch (e) {
@@ -742,7 +722,7 @@ export async function createReport(orgId, report) {
       const label = DEFECT_BY_KEY[report.defectType]?.label || 'That defect'
       let locked = null
       try {
-        locked = (await getDoc(defectLockRef(orgId, report.extId, report.defectType))).exists()
+        locked = (await getDoc(defectLockRef(report.extId, report.defectType))).exists()
       } catch {
         locked = null // not permitted to look — anonymous scan
       }
@@ -758,12 +738,12 @@ export async function createReport(orgId, report) {
       }
       throw new Error(duplicateDefectMessage(label))
     }
-    await logReportCreated(orgId, report)
+    await logReportCreated(report)
     return
   }
 
-  await addDoc(reportCol(orgId), reportPayload(report))
-  await logReportCreated(orgId, report)
+  await addDoc(reportCol(), reportPayload(report))
+  await logReportCreated(report)
 }
 
 function reportPayload(report) {
@@ -788,9 +768,9 @@ function reportPayload(report) {
   }
 }
 
-function logReportCreated(orgId, report) {
+function logReportCreated(report) {
   const what = report.kind === 'defect' ? `defect (${report.defectType})` : `status → ${report.newStatus}`
-  return logAudit(orgId, { uid: report.reportedBy, name: report.reportedByName }, AUDIT.REPORT_CREATE, {
+  return logAudit({ uid: report.reportedBy, name: report.reportedByName }, AUDIT.REPORT_CREATE, {
     target: 'report',
     targetLabel: report.extLabel || report.extId,
     summary: `Reported ${what}${report.reporterRole ? ` (by ${report.reporterRole})` : ''}`,
@@ -798,8 +778,8 @@ function logReportCreated(orgId, report) {
   })
 }
 
-export function subscribeReports(orgId, cb) {
-  const q = query(reportCol(orgId), orderBy('reportedAt', 'desc'), limit(COLLECTION_READ_CAP))
+export function subscribeReports(cb) {
+  const q = query(reportCol(), orderBy('reportedAt', 'desc'), limit(COLLECTION_READ_CAP))
   return onSnapshot(
     q,
     (snap) => cb(snap.docs.map((d) => ({ id: d.id, ...d.data() }))),
@@ -813,7 +793,7 @@ export function subscribeReports(orgId, cb) {
  *  - physical defect              → add defect (status unchanged)
  *  - status_change                → set the requested status
  */
-export async function approveReport(orgId, orgName, report, reviewerName, actor) {
+export async function approveReport(orgName, report, reviewerName, actor) {
   // ── Why this is a transaction and not two awaits ────────────────────────────
   //
   // It used to getExtinguisher(), build a Set of physicalDefects and write the
@@ -833,8 +813,8 @@ export async function approveReport(orgId, orgName, report, reviewerName, actor)
   // The REPORT is read here too, so approving the same one twice is refused
   // rather than double-counted into meta/stats — the defect set is idempotent
   // but the counters are not.
-  const extReference = extRef(orgId, report.extId)
-  const reportReference = reportRef(orgId, report.id)
+  const extReference = extRef(report.extId)
+  const reportReference = reportRef(report.id)
   let before = null
   let merged = null
 
@@ -856,7 +836,7 @@ export async function approveReport(orgId, orgName, report, reviewerName, actor)
     // extinguisher tells whoever scans the label the wrong thing about a unit
     // they are standing in front of.
     if (merged.qrToken) {
-      tx.set(qrRef(merged.qrToken), mirrorPayload(orgId, orgName, report.extId, merged))
+      tx.set(qrRef(merged.qrToken), mirrorPayload(orgName, report.extId, merged))
     }
     tx.update(reportReference, {
       approvalStatus: 'approved',
@@ -869,9 +849,9 @@ export async function approveReport(orgId, orgName, report, reviewerName, actor)
   // Outside the transaction deliberately: bumpStats is a counter increment that
   // swallows its own failures, and a stats write that could abort the approval
   // would make the dashboard more important than the safety record.
-  await bumpStats(orgId, statsDeltaFor(before, merged))
+  await bumpStats(statsDeltaFor(before, merged))
   const what = report.kind === 'defect' ? `defect (${report.defectType})` : `status → ${report.newStatus}`
-  await logAudit(orgId, reviewer, AUDIT.REPORT_APPROVE, {
+  await logAudit(reviewer, AUDIT.REPORT_APPROVE, {
     target: 'report',
     targetId: report.extId,
     targetLabel: report.extLabel || report.extId,
@@ -887,27 +867,27 @@ export async function approveReport(orgId, orgName, report, reviewerName, actor)
  * not fail the close it follows: the worst case is a stale lock that blocks one
  * re-report, which is far better than a refill that half-applied.
  */
-export async function releaseDefectLocks(orgId, extId, defectTypes = []) {
+export async function releaseDefectLocks(extId, defectTypes = []) {
   if (!extId || defectTypes.length === 0) return
   try {
     const batch = writeBatch(db)
-    for (const key of defectTypes) batch.delete(defectLockRef(orgId, extId, key))
+    for (const key of defectTypes) batch.delete(defectLockRef(extId, key))
     await batch.commit()
   } catch { /* a stale lock is recoverable; a failed close is not */ }
 }
 
-export async function rejectReport(orgId, report, reviewerName, actor) {
-  await updateDoc(reportRef(orgId, report.id), {
+export async function rejectReport(report, reviewerName, actor) {
+  await updateDoc(reportRef(report.id), {
     approvalStatus: 'rejected',
     reviewedBy: reviewerName || '',
     reviewedAt: serverTimestamp(),
   })
   // Rejected means it was never a real defect, so it becomes reportable again.
   if (report.kind === 'defect' && report.defectType) {
-    await releaseDefectLocks(orgId, report.extId, [report.defectType])
+    await releaseDefectLocks(report.extId, [report.defectType])
   }
   const what = report.kind === 'defect' ? `defect (${report.defectType})` : `status → ${report.newStatus}`
-  await logAudit(orgId, actor || { name: reviewerName }, AUDIT.REPORT_REJECT, {
+  await logAudit(actor || { name: reviewerName }, AUDIT.REPORT_REJECT, {
     target: 'report',
     targetId: report.extId,
     targetLabel: report.extLabel || report.extId,
@@ -915,14 +895,14 @@ export async function rejectReport(orgId, report, reviewerName, actor) {
   })
 }
 
-function queueClosures(batch, orgId, docs) {
+function queueClosures(batch, docs) {
   for (const data of docs) {
-    batch.set(doc(closureCol(orgId)), { ...data, createdAt: serverTimestamp() })
+    batch.set(doc(closureCol()), { ...data, createdAt: serverTimestamp() })
   }
 }
 
-export function subscribeDefectClosures(orgId, cb) {
-  const q = query(closureCol(orgId), orderBy('closedOn', 'desc'), limit(COLLECTION_READ_CAP))
+export function subscribeDefectClosures(cb) {
+  const q = query(closureCol(), orderBy('closedOn', 'desc'), limit(COLLECTION_READ_CAP))
   return onSnapshot(
     q,
     (snap) => cb(snap.docs.map((d) => ({ id: d.id, ...d.data() }))),
@@ -933,10 +913,10 @@ export function subscribeDefectClosures(orgId, cb) {
 // Evidence for a close. Same route as a quotation: cloud file when the bucket
 // is there, inline under the Firestore ceiling when it is not. Not sealed —
 // the picture is the repair, not a person.
-async function evidencePhoto(orgId, file) {
+async function evidencePhoto(file) {
   if (!file?.data) return null
   const name = file.name || 'evidence.jpg'
-  const up = await putFile(orgId, 'defect-evidence', file.data, name)
+  const up = await putFile('defect-evidence', file.data, name)
   if (up) {
     return cleanClosurePhoto({
       url: up.url,
@@ -968,15 +948,15 @@ function actionStamp(actorName, label) {
  * before an item can progress (received-by-vendor / resolve). Stored on the
  * extinguisher doc; cleared when the cycle completes.
  */
-export async function submitQuotation(orgId, orgName, id, { amount, vendor, ref, notes, fileName, fileType, fileData }, actorName) {
+export async function submitQuotation(orgName, id, { amount, vendor, ref, notes, fileName, fileType, fileData }, actorName) {
   // Resubmitting replaces the previous quotation; its cloud file would be
   // orphaned with nothing left remembering the path.
-  const prev = await getExtinguisher(orgId, id)
+  const prev = await getExtinguisher(id)
   if (prev?.quotation?.filePath) removeFile(prev.quotation.filePath)
 
   // The document itself goes to cloud storage when available; the extinguisher
   // doc then carries a URL instead of the base64 payload.
-  const up = fileData ? await putFile(orgId, 'quotations', fileData, fileName) : null
+  const up = fileData ? await putFile('quotations', fileData, fileName) : null
   // Base64 length * 3/4 is the decoded size, close enough to compare a limit.
   const inlineBytes = fileData ? Math.floor((String(fileData).split(',')[1] || '').length * 0.75) : 0
   if (!up && fileData && inlineBytes > MAX_INLINE_BYTES) {
@@ -995,7 +975,7 @@ export async function submitQuotation(orgId, orgName, id, { amount, vendor, ref,
     submittedAt: todayISO(),
     submittedBy: actorName || '',
   }
-  await updateExtinguisher(orgId, orgName, id, {
+  await updateExtinguisher(orgName, id, {
     quotation,
     ...actionStamp(actorName, 'Quotation submitted'),
   }, { actor: { name: actorName }, action: AUDIT.WF_QUOTATION_SUBMITTED, summary: `Quotation submitted (${quotation.amount}, ${quotation.vendor || 'vendor n/a'})` })
@@ -1012,13 +992,13 @@ export async function submitQuotation(orgId, orgName, id, { amount, vendor, ref,
  * failed test condemns the cylinder, and advancing the date would make a
  * condemned unit read as compliant for another cycle.
  */
-export async function submitHpt(orgId, orgName, id, { testedOn, result, nextDueOn, vendor, ref, notes, fileName, fileType, fileData }, actorName) {
+export async function submitHpt(orgName, id, { testedOn, result, nextDueOn, vendor, ref, notes, fileName, fileType, fileData }, actorName) {
   // Re-recording replaces the previous certificate; its cloud file would be
   // orphaned with nothing left remembering the path.
-  const prev = await getExtinguisher(orgId, id)
+  const prev = await getExtinguisher(id)
   if (prev?.hpt?.filePath) removeFile(prev.hpt.filePath)
 
-  const up = fileData ? await putFile(orgId, 'hpt-certificates', fileData, fileName) : null
+  const up = fileData ? await putFile('hpt-certificates', fileData, fileName) : null
   const inlineBytes = fileData ? Math.floor((String(fileData).split(',')[1] || '').length * 0.75) : 0
   if (!up && fileData && inlineBytes > MAX_INLINE_BYTES) {
     throw new Error(tooLargeForInline(fileName))
@@ -1060,7 +1040,7 @@ export async function submitHpt(orgId, orgName, id, { testedOn, result, nextDueO
           ),
         ]
       : []
-  await updateExtinguisher(orgId, orgName, id, {
+  await updateExtinguisher(orgName, id, {
     hpt,
     ...hptUpdate({ testedOn, result, nextDueOn }),
     ...actionStamp(actorName, summary),
@@ -1068,20 +1048,20 @@ export async function submitHpt(orgId, orgName, id, { testedOn, result, nextDueO
     actor: { name: actorName },
     action: AUDIT.WF_HPT_SUBMITTED,
     summary,
-    withBatch: (batch) => queueClosures(batch, orgId, hptClosure),
+    withBatch: (batch) => queueClosures(batch, hptClosure),
   })
   return hpt
 }
 
 /** Vendor received the extinguisher for refilling. */
-export async function markReceivedByVendor(orgId, orgName, id, actorName) {
+export async function markReceivedByVendor(orgName, id, actorName) {
   // The repository used to offer this beside Submit HPT. Refill Due does not,
   // and a cylinder that has not passed its test cannot be sent out for a
   // refill that would bring it back looking compliant.
-  const before = await getExtinguisher(orgId, id)
+  const before = await getExtinguisher(id)
   if (!before) throw new Error('Extinguisher not found')
   if (isHptOverdue(before)) throw new Error(HPT_BLOCKS_VENDOR)
-  await updateExtinguisher(orgId, orgName, id, {
+  await updateExtinguisher(orgName, id, {
     status: STATUS.IN_PROCESS_REFILLING,
     ...actionStamp(actorName, 'Sent to vendor'),
   }, { actor: { name: actorName }, action: AUDIT.WF_SENT_TO_VENDOR, summary: 'Marked received by vendor (In Process)' })
@@ -1094,29 +1074,28 @@ export async function markReceivedByVendor(orgId, orgName, id, actorName) {
  * are what the Defect Repository was showing, and a return that only flipped
  * the status would leave them open.
  */
-export async function markReceivedFromVendor(orgId, orgName, id, { receivedOn, dateOfNextRefill }, actorName) {
-  const before = await getExtinguisher(orgId, id)
+export async function markReceivedFromVendor(orgName, id, { receivedOn, dateOfNextRefill }, actorName) {
+  const before = await getExtinguisher(id)
   const result = receiveFromVendorUpdate(before, { receivedOn, dateOfNextRefill })
   if (result.error) throw new Error(result.error)
   const closures = receiveClosures(before, { receivedOn, closedBy: actorName })
   const closedLabels = closures.map((c) => c.defectLabel).join(', ')
   const summary = `Received back from vendor on ${receivedOn} (next refill ${dateOfNextRefill})${closedLabels ? `; closed ${closedLabels}` : ''}`
-  await updateExtinguisher(orgId, orgName, id, {
+  await updateExtinguisher(orgName, id, {
     ...result.updates,
     ...actionStamp(actorName, 'Received'),
   }, {
     actor: { name: actorName },
     action: AUDIT.WF_RECEIVED,
     summary,
-    withBatch: (batch) => queueClosures(batch, orgId, closures),
+    withBatch: (batch) => queueClosures(batch, closures),
   })
-  await releaseDefectLocks(orgId, id, result.clearedDefects)
+  await releaseDefectLocks(id, result.clearedDefects)
   if (before?.quotation?.filePath) removeFile(before.quotation.filePath)
 }
 
 /** Extinguisher refilled & returned: close it, set new due dates, clear defects. */
 export async function markRefilledAndClosed(
-  orgId,
   orgName,
   id,
   { dateOfNextRefill, dateOfNextHPT, certificate },
@@ -1124,7 +1103,7 @@ export async function markRefilledAndClosed(
 ) {
   const dateError = validateRefilledClosed({ dateOfNextRefill, dateOfNextHPT })
   if (dateError) throw new Error(dateError)
-  const before = await getExtinguisher(orgId, id)
+  const before = await getExtinguisher(id)
   const hptMoved = !hptDateUnchanged(before?.dateOfNextHPT, dateOfNextHPT)
   // A later hydrostatic date is a passed test. The register edit and the CSV
   // import may still correct a stored date — that is data entry. This button
@@ -1137,7 +1116,7 @@ export async function markRefilledAndClosed(
     if (before?.hpt?.filePath) removeFile(before.hpt.filePath)
     const fileData = certificate?.fileData || null
     const fileName = certificate?.fileName || ''
-    const up = fileData ? await putFile(orgId, 'hpt-certificates', fileData, fileName) : null
+    const up = fileData ? await putFile('hpt-certificates', fileData, fileName) : null
     const inlineBytes = fileData ? Math.floor((String(fileData).split(',')[1] || '').length * 0.75) : 0
     if (!up && fileData && inlineBytes > MAX_INLINE_BYTES) throw new Error(tooLargeForInline(fileName))
     hptFields = {
@@ -1173,7 +1152,7 @@ export async function markRefilledAndClosed(
       extinguisherClosureDoc(before, 'hpt_due', closure, { forDate: before.dateOfNextHPT || '' }),
     )
   }
-  await updateExtinguisher(orgId, orgName, id, {
+  await updateExtinguisher(orgName, id, {
     status: STATUS.ACTIVE,
     dateOfNextRefill,
     dateOfNextHPT,
@@ -1186,17 +1165,17 @@ export async function markRefilledAndClosed(
     actor: { name: actorName },
     action: AUDIT.WF_REFILLED_CLOSED,
     summary: `Refilled & closed (next refill ${dateOfNextRefill}, next HPT ${dateOfNextHPT})`,
-    withBatch: (batch) => queueClosures(batch, orgId, closures),
+    withBatch: (batch) => queueClosures(batch, closures),
   })
   // A refill clears every defect, so every one of them becomes reportable again.
-  await releaseDefectLocks(orgId, id, before?.physicalDefects || [])
+  await releaseDefectLocks(id, before?.physicalDefects || [])
   // The cleared quotation's cloud file goes with it.
   if (before?.quotation?.filePath) removeFile(before.quotation.filePath)
 }
 
 /** Resolve (clear) physical defects without a refill. */
-export async function resolveDefects(orgId, orgName, id, remainingDefects = [], actorName) {
-  const before = await getExtinguisher(orgId, id)
+export async function resolveDefects(orgName, id, remainingDefects = [], actorName) {
+  const before = await getExtinguisher(id)
   if (!before) throw new Error('Extinguisher not found')
   const kept = new Set(remainingDefects)
   const removed = (before?.physicalDefects || []).filter((k) => !kept.has(k))
@@ -1215,7 +1194,7 @@ export async function resolveDefects(orgId, orgName, id, remainingDefects = [], 
     source: CLOSURE_SOURCE.RESOLVE,
   })
   const closures = removed.map((defectType) => extinguisherClosureDoc(before, defectType, closure))
-  await updateExtinguisher(orgId, orgName, id, {
+  await updateExtinguisher(orgName, id, {
     physicalDefects: remainingDefects,
     quotation: null,
     ...actionStamp(actorName, 'Resolved defects'),
@@ -1223,10 +1202,10 @@ export async function resolveDefects(orgId, orgName, id, remainingDefects = [], 
     actor: { name: actorName },
     action: AUDIT.WF_RESOLVED_DEFECTS,
     summary: 'Physical defects resolved',
-    withBatch: (batch) => queueClosures(batch, orgId, closures),
+    withBatch: (batch) => queueClosures(batch, closures),
   })
   // Only the ones actually cleared — a defect left on the unit stays locked.
-  await releaseDefectLocks(orgId, id, removed)
+  await releaseDefectLocks(id, removed)
   if (before?.quotation?.filePath) removeFile(before.quotation.filePath)
 }
 
@@ -1243,10 +1222,10 @@ export async function resolveDefects(orgId, orgName, id, remainingDefects = [], 
  * writer can do, closes the refill defects through the same collection, and a
  * rule that reserved it for managers would refuse that return.
  */
-export async function closeDefect(orgId, orgName, descriptor, input, actor) {
+export async function closeDefect(orgName, descriptor, input, actor) {
   const error = validateClosure(input)
   if (error) throw new Error(error)
-  const photo = await evidencePhoto(orgId, input.file)
+  const photo = await evidencePhoto(input.file)
   const closure = closureFields({
     remarks: input.remarks,
     closedOn: input.closedOn,
@@ -1259,7 +1238,7 @@ export async function closeDefect(orgId, orgName, descriptor, input, actor) {
   const summary = `Closed ${label}: ${closure.remarks}`
 
   if (descriptor.kind === 'extinguisher') {
-    const ext = await getExtinguisher(orgId, descriptor.extId)
+    const ext = await getExtinguisher(descriptor.extId)
     if (!ext) throw new Error('Extinguisher not found')
     // Clearing a physical defect while the test is overdue is the same
     // "this unit is fine" outcome Resolve refuses. An HPT-due row and an
@@ -1276,14 +1255,14 @@ export async function closeDefect(orgId, orgName, descriptor, input, actor) {
     const docFields = extinguisherClosureDoc(ext, descriptor.defectType, closure, {
       forDate: descriptor.defectType === 'hpt_due' ? ext.dateOfNextHPT || '' : '',
     })
-    await updateExtinguisher(orgId, orgName, descriptor.extId, updates, {
+    await updateExtinguisher(orgName, descriptor.extId, updates, {
       actor,
       action: AUDIT.DEFECT_CLOSE,
       summary,
-      withBatch: (batch) => queueClosures(batch, orgId, [docFields]),
+      withBatch: (batch) => queueClosures(batch, [docFields]),
     })
     if (removed) {
-      await releaseDefectLocks(orgId, descriptor.extId, [descriptor.defectType])
+      await releaseDefectLocks(descriptor.extId, [descriptor.defectType])
       if (updates.quotation === null && ext.quotation?.filePath) removeFile(ext.quotation.filePath)
     }
     return
@@ -1291,15 +1270,15 @@ export async function closeDefect(orgId, orgName, descriptor, input, actor) {
 
   if (!descriptor.reportId) throw new Error('That defect report no longer exists.')
   const batch = writeBatch(db)
-  batch.update(reportRef(orgId, descriptor.reportId), {
+  batch.update(reportRef(descriptor.reportId), {
     approvalStatus: 'closed',
     closure,
     reviewedBy: actor?.name || '',
     reviewedAt: serverTimestamp(),
   })
-  queueClosures(batch, orgId, [assetClosureDoc(descriptor, closure)])
+  queueClosures(batch, [assetClosureDoc(descriptor, closure)])
   await batch.commit()
-  await logAudit(orgId, actor, AUDIT.DEFECT_CLOSE, {
+  await logAudit(actor, AUDIT.DEFECT_CLOSE, {
     target: descriptor.assetKind || 'report',
     targetId: descriptor.assetRefId || descriptor.reportId,
     targetLabel: descriptor.assetLabel || descriptor.serialNo || label,
@@ -1311,8 +1290,8 @@ export async function closeDefect(orgId, orgName, descriptor, input, actor) {
 // A lightweight inventory of fire/safety signage per centerName (site). No QR
 // mirror or stats — these are simple records read live and edited in place.
 
-export function subscribeSignages(orgId, cb) {
-  const q = query(signageCol(orgId), orderBy('createdAt', 'desc'), limit(COLLECTION_READ_CAP))
+export function subscribeSignages(cb) {
+  const q = query(signageCol(), orderBy('createdAt', 'desc'), limit(COLLECTION_READ_CAP))
   return onSnapshot(
     q,
     (snap) => cb(snap.docs.map((d) => ({ id: d.id, ...d.data() }))),
@@ -1373,7 +1352,7 @@ const cleanSignage = (data) => ({
  * `collection` and no sealing policy. When the bucket is unavailable putFile
  * returns null and the image is kept inline, under the 700 KB Firestore ceiling.
  */
-async function resolveSignagePhotos(orgId, data) {
+async function resolveSignagePhotos(data) {
   const photos = []
   const uploaded = []
   try {
@@ -1383,7 +1362,7 @@ async function resolveSignagePhotos(orgId, data) {
         if (kept) photos.push(kept)
         continue
       }
-      const up = await putFile(orgId, 'signage-photos', entry, 'signage.jpg')
+      const up = await putFile('signage-photos', entry, 'signage.jpg')
       if (up) {
         uploaded.push(up.path)
         photos.push(cleanSignagePhoto({ url: up.url, path: up.path, contentType: up.contentType, name: up.name, size: up.size }))
@@ -1408,12 +1387,12 @@ function assertDeployable(data, prev) {
   if (first) throw new Error(first)
 }
 
-export async function addSignage(orgId, data, actor) {
+export async function addSignage(data, actor) {
   assertDeployable(data, null)
-  const { photos, uploaded } = await resolveSignagePhotos(orgId, data)
+  const { photos, uploaded } = await resolveSignagePhotos(data)
   let ref
   try {
-    ref = await addDoc(signageCol(orgId), {
+    ref = await addDoc(signageCol(), {
       ...cleanSignage(data),
       photos,
       createdAt: serverTimestamp(),
@@ -1423,7 +1402,7 @@ export async function addSignage(orgId, data, actor) {
     for (const path of uploaded) removeFile(path)
     throw e
   }
-  await logAudit(orgId, actor, 'signage.create', {
+  await logAudit(actor, 'signage.create', {
     target: 'signage',
     targetId: ref.id,
     targetLabel: `${data.type} @ ${data.centerName}`,
@@ -1437,17 +1416,17 @@ export async function addSignage(orgId, data, actor) {
  *             is being SET to Deployed, and which photo files it leaves behind.
  *             Read from Firestore when the caller does not have it.
  */
-export async function updateSignage(orgId, id, updates, actor, prev) {
+export async function updateSignage(id, updates, actor, prev) {
   if (prev === undefined) {
-    const snap = await getDoc(signageRef(orgId, id))
+    const snap = await getDoc(signageRef(id))
     prev = snap.exists() ? { id, ...snap.data() } : null
   }
   assertDeployable(updates, prev)
-  const { photos, uploaded } = await resolveSignagePhotos(orgId, updates)
+  const { photos, uploaded } = await resolveSignagePhotos(updates)
   try {
     // `photos` is the field now; the legacy single `photo` is migrated by being
     // dropped in the same write (its pointer is already inside `photos`).
-    await updateDoc(signageRef(orgId, id), {
+    await updateDoc(signageRef(id), {
       ...cleanSignage(updates),
       photos,
       photo: deleteField(),
@@ -1463,7 +1442,7 @@ export async function updateSignage(orgId, id, updates, actor, prev) {
   for (const old of signagePhotos(prev)) {
     if (old?.path && !keep.has(old.path)) removeFile(old.path)
   }
-  await logAudit(orgId, actor, 'signage.update', {
+  await logAudit(actor, 'signage.update', {
     target: 'signage',
     targetId: id,
     targetLabel: `${updates.type} @ ${updates.centerName}`,
@@ -1472,10 +1451,10 @@ export async function updateSignage(orgId, id, updates, actor, prev) {
 }
 
 /** @param photoPaths storage path(s) of the record's photo file(s), removed with it */
-export async function deleteSignage(orgId, id, actor, label, photoPaths) {
-  await deleteDoc(signageRef(orgId, id))
+export async function deleteSignage(id, actor, label, photoPaths) {
+  await deleteDoc(signageRef(id))
   for (const path of [].concat(photoPaths || [])) if (path) removeFile(path)
-  await logAudit(orgId, actor, 'signage.delete', { target: 'signage', targetId: id, targetLabel: label || '' })
+  await logAudit(actor, 'signage.delete', { target: 'signage', targetId: id, targetLabel: label || '' })
 }
 
 // ── First aid box contents (org-scoped, site-wise) ────────────────────────────
@@ -1484,8 +1463,8 @@ export async function deleteSignage(orgId, id, actor, label, photoPaths) {
 // unlike an AED these are inventory records rather than scannable assets — no
 // QR mirror and no stats counter, read live and edited in place.
 
-export function subscribeFirstAid(orgId, cb) {
-  const q = query(firstAidCol(orgId), orderBy('createdAt', 'desc'), limit(COLLECTION_READ_CAP))
+export function subscribeFirstAid(cb) {
+  const q = query(firstAidCol(), orderBy('createdAt', 'desc'), limit(COLLECTION_READ_CAP))
   return onSnapshot(
     q,
     (snap) => cb(snap.docs.map((d) => ({ id: d.id, ...d.data() }))),
@@ -1517,13 +1496,13 @@ const cleanFirstAid = (data) => ({
   notes: (data.notes || '').trim(),
 })
 
-export async function addFirstAid(orgId, data, actor) {
-  const ref = await addDoc(firstAidCol(orgId), {
+export async function addFirstAid(data, actor) {
+  const ref = await addDoc(firstAidCol(), {
     ...cleanFirstAid(data),
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   })
-  await logAudit(orgId, actor, 'firstaid.create', {
+  await logAudit(actor, 'firstaid.create', {
     target: 'firstaid',
     targetId: ref.id,
     targetLabel: `${data.item} @ ${data.centerName}`,
@@ -1532,9 +1511,9 @@ export async function addFirstAid(orgId, data, actor) {
   return ref.id
 }
 
-export async function updateFirstAid(orgId, id, updates, actor) {
-  await updateDoc(firstAidRef(orgId, id), { ...cleanFirstAid(updates), updatedAt: serverTimestamp() })
-  await logAudit(orgId, actor, 'firstaid.update', {
+export async function updateFirstAid(id, updates, actor) {
+  await updateDoc(firstAidRef(id), { ...cleanFirstAid(updates), updatedAt: serverTimestamp() })
+  await logAudit(actor, 'firstaid.update', {
     target: 'firstaid',
     targetId: id,
     targetLabel: `${updates.item} @ ${updates.centerName}`,
@@ -1542,9 +1521,9 @@ export async function updateFirstAid(orgId, id, updates, actor) {
   })
 }
 
-export async function deleteFirstAid(orgId, id, actor, label) {
-  await deleteDoc(firstAidRef(orgId, id))
-  await logAudit(orgId, actor, 'firstaid.delete', { target: 'firstaid', targetId: id, targetLabel: label || '' })
+export async function deleteFirstAid(id, actor, label) {
+  await deleteDoc(firstAidRef(id))
+  await logAudit(actor, 'firstaid.delete', { target: 'firstaid', targetId: id, targetLabel: label || '' })
 }
 
 /**
@@ -1555,7 +1534,7 @@ export async function deleteFirstAid(orgId, id, actor, label) {
  * the fifth of them failed. `rows` are creates (no id) and updates (with one);
  * `removals` are the ids of items the checker unticked.
  */
-export async function saveFirstAidBox(orgId, rows, removals, actor, label) {
+export async function saveFirstAidBox(rows, removals, actor, label) {
   const writes = [
     ...rows.map((row) => ({ kind: row.id ? 'update' : 'create', row })),
     ...removals.map((id) => ({ kind: 'delete', id })),
@@ -1563,14 +1542,14 @@ export async function saveFirstAidBox(orgId, rows, removals, actor, label) {
   for (let i = 0; i < writes.length; i += BULK_CHUNK) {
     const batch = writeBatch(db)
     for (const w of writes.slice(i, i + BULK_CHUNK)) {
-      if (w.kind === 'delete') { batch.delete(firstAidRef(orgId, w.id)); continue }
+      if (w.kind === 'delete') { batch.delete(firstAidRef(w.id)); continue }
       const data = cleanFirstAid(w.row)
-      if (w.kind === 'update') batch.update(firstAidRef(orgId, w.row.id), { ...data, updatedAt: serverTimestamp() })
-      else batch.set(doc(firstAidCol(orgId)), { ...data, createdAt: serverTimestamp(), updatedAt: serverTimestamp() })
+      if (w.kind === 'update') batch.update(firstAidRef(w.row.id), { ...data, updatedAt: serverTimestamp() })
+      else batch.set(doc(firstAidCol()), { ...data, createdAt: serverTimestamp(), updatedAt: serverTimestamp() })
     }
     await batch.commit()
   }
-  await logAudit(orgId, actor, 'firstaid.update', {
+  await logAudit(actor, 'firstaid.update', {
     target: 'firstaid',
     targetLabel: label || '',
     summary: `First aid box checked — ${rows.length} item(s) recorded${removals.length ? `, ${removals.length} removed` : ''}`,
@@ -1580,9 +1559,9 @@ export async function saveFirstAidBox(orgId, rows, removals, actor, label) {
 
 // ── Mock drills / emergency response records (org-scoped, site-wise) ───────────
 
-export function subscribeMockDrills(orgId, cb) {
-  const q = query(drillCol(orgId), orderBy('createdAt', 'desc'), limit(COLLECTION_READ_CAP))
-  const opened = openSnapshots(orgId, SEALED_DRILLS, cb)
+export function subscribeMockDrills(cb) {
+  const q = query(drillCol(), orderBy('createdAt', 'desc'), limit(COLLECTION_READ_CAP))
+  const opened = openSnapshots(SEALED_DRILLS, cb)
   return onSnapshot(
     q,
     (snap) => opened(snap.docs.map((d) => ({ id: d.id, ...d.data() }))),
@@ -1595,7 +1574,7 @@ export function subscribeMockDrills(orgId, cb) {
  * `data.photos` (array of base64 data URLs) is split off into a subcollection so
  * the main doc — and the live list — stay small.
  */
-export async function addMockDrill(orgId, data, actor) {
+export async function addMockDrill(data, actor) {
   const { photos = [], ...rest } = data
   const valid = (Array.isArray(photos) ? photos : []).filter((p) => typeof p === 'string' && p.startsWith('data:'))
 
@@ -1612,31 +1591,31 @@ export async function addMockDrill(orgId, data, actor) {
   // photos are written into the subcollection of an id reserved up front —
   // Firestore does not require the parent to exist first — and the drill
   // document is written LAST, from the number that survived.
-  const ref = doc(drillCol(orgId))
+  const ref = doc(drillCol())
 
   // Parallel, and each photo owns its own failure. Sequentially, one unreadable
   // capture ended the loop and abandoned every photo behind it; the person who
   // ran the drill loses the rest of their evidence to the one that failed.
   const stored = await Promise.all(valid.map(async (dataUrl) => {
     try {
-      const up = await putFile(orgId, 'drill-evidence', dataUrl, 'evidence.jpg', { collection: SEALED_DRILL_PHOTOS })
+      const up = await putFile('drill-evidence', dataUrl, 'evidence.jpg', { collection: SEALED_DRILL_PHOTOS })
       // The pointer AND the bytes are sealed — policy.js sets `files: true` for
       // mockDrills/photos, and putFile honours it. This comment used to say the
       // bucket object was left in the clear because sealing it would hand an
       // <img> a URL pointing at ciphertext; that stopped being true when the
       // decryption moved into shared/storage/resolveFiles.js, which is the seam
       // getMockDrillPhotos reads through.
-      await addDoc(drillPhotoCol(orgId, ref.id), up
+      await addDoc(drillPhotoCol(ref.id), up
         ? {
           url: up.url,
           path: up.path,
           createdAt: serverTimestamp(),
           ...(up.encIv ? { encScheme: up.encScheme, encKeyId: up.encKeyId, encIv: up.encIv, ...(up.encWrapped ? { encWrapped: up.encWrapped } : {}) } : {}),
         }
-        : await sealDoc(orgId, SEALED_DRILL_PHOTOS, { dataUrl, createdAt: serverTimestamp() }))
+        : await sealDoc(SEALED_DRILL_PHOTOS, { dataUrl, createdAt: serverTimestamp() }))
       return true
     } catch (e) {
-      reportError(e, { source: 'fire.addMockDrill.photo', orgId })
+      reportError(e, { source: 'fire.addMockDrill.photo' })
       return false
     }
   }))
@@ -1650,11 +1629,11 @@ export async function addMockDrill(orgId, data, actor) {
     createdAt: null, // placeholder; replaced by serverTimestamp below
   }))
   payload.createdAt = serverTimestamp()
-  payload.docId = await reserveDocId(orgId, 'drills')
+  payload.docId = await reserveDocId('drills')
   // Photos are still the data URLs the recorder holds. The stored document
   // does not keep them — they go to the subcollection above — but the print
   // embeds them, and this is the moment the mail's copy is made.
-  const reportPdfPath = await mailedDrillPdf(orgId, { ...payload, photos: valid })
+  const reportPdfPath = await mailedDrillPdf({ ...payload, photos: valid })
   if (reportPdfPath) payload.reportPdfPath = reportPdfPath
   // The person saving the drill is the assigner of every CAPA row on it.
   // Drill reports are written once; there is no later edit that would need
@@ -1670,8 +1649,8 @@ export async function addMockDrill(orgId, data, actor) {
   // data would be harmless but the ORDER matters the other way round — a
   // payload sealed first and then passed through JSON would still be sealed,
   // while an unsealed `undefined` reaching Firestore is a rejected write.
-  await setDoc(ref, await sealDoc(orgId, SEALED_DRILLS, payload))
-  await logAudit(orgId, actor, 'mockdrill.create', {
+  await setDoc(ref, await sealDoc(SEALED_DRILLS, payload))
+  await logAudit(actor, 'mockdrill.create', {
     module: 'drills',
     target: 'mockdrill',
     targetId: ref.id,
@@ -1689,45 +1668,45 @@ export async function addMockDrill(orgId, data, actor) {
  * the seam normalises cloud photos onto the same field, so every renderer and
  * the PDF keep reading `.dataUrl` whichever era the photo was saved in.
  */
-export async function getMockDrillPhotos(orgId, drillId) {
-  const snap = await getDocs(drillPhotoCol(orgId, drillId))
+export async function getMockDrillPhotos(drillId) {
+  const snap = await getDocs(drillPhotoCol(drillId))
   // Opened BEFORE the `.dataUrl || .url` normalisation: an inline photo's
   // dataUrl is sealed, and the fallback run first would see an envelope, find
   // it truthy, and hand every renderer a base64 string in place of an image.
-  const rows = await openDocs(orgId, SEALED_DRILL_PHOTOS, snap.docs.map((d) => ({ id: d.id, ...d.data() })))
+  const rows = await openDocs(SEALED_DRILL_PHOTOS, snap.docs.map((d) => ({ id: d.id, ...d.data() })))
   const normalised = rows.map((r) => ({ ...r, id: r.id, path: r.path || '', dataUrl: r.dataUrl || r.url || '' }))
   // A sealed object becomes a blob: URL, which pins its bytes until revoked.
   // Unlike the subscriptions, this is a one-shot read with no unsubscribe to
   // hang the cleanup on — so the revoke comes back with the rows and the caller
   // holds it. `revoke` is a no-op when nothing was encrypted, which is every
   // drill recorded before sealing was switched on.
-  const { rows: resolved, revoke } = await resolveSealedFiles(orgId, SEALED_DRILL_PHOTOS, normalised)
+  const { rows: resolved, revoke } = await resolveSealedFiles(SEALED_DRILL_PHOTOS, normalised)
   resolved.revoke = revoke
   return resolved
 }
 
-async function mailedDrillPdf(orgId, record) {
+async function mailedDrillPdf(record) {
   if (typeof document === 'undefined') return ''
   try {
     const { captureDrillReport } = await import('./drillReportPdf.js')
-    return await captureDrillReport(orgId, record)
+    return await captureDrillReport(record)
   } catch (e) {
-    reportError(e, { source: 'fire.mailedDrillPdf', orgId })
+    reportError(e, { source: 'fire.mailedDrillPdf' })
     return ''
   }
 }
 
-export async function deleteMockDrill(orgId, id, actor, label) {
+export async function deleteMockDrill(id, actor, label) {
   try {
-    const parent = await getDoc(drillRef(orgId, id))
-    discardMailedReport(orgId, parent.data()?.reportPdfPath)
+    const parent = await getDoc(drillRef(id))
+    discardMailedReport(parent.data()?.reportPdfPath)
   } catch (e) {
-    reportError(e, { source: 'fire.deleteMockDrill.pdf', orgId })
+    reportError(e, { source: 'fire.deleteMockDrill.pdf' })
   }
   // Remove evidence photos first (non-fatal if it fails). Cloud copies go too —
   // a photo doc is the only thing that remembers its storage path.
   try {
-    const snap = await getDocs(drillPhotoCol(orgId, id))
+    const snap = await getDocs(drillPhotoCol(id))
     for (const d of snap.docs) {
       if (d.data().path) removeFile(d.data().path)
     }
@@ -1741,13 +1720,13 @@ export async function deleteMockDrill(orgId, id, actor, label) {
   } catch (e) {
     console.warn('[Fire Marshal] drill photo cleanup skipped:', e?.message || e)
   }
-  await deleteDoc(drillRef(orgId, id))
-  await logAudit(orgId, actor, 'mockdrill.delete', { module: 'drills', target: 'mockdrill', targetId: id, targetLabel: label || '' })
+  await deleteDoc(drillRef(id))
+  await logAudit(actor, 'mockdrill.delete', { module: 'drills', target: 'mockdrill', targetId: id, targetLabel: label || '' })
 }
 
 // ── AED (Automated External Defibrillator) inventory (org-scoped) ──────────────
-export function subscribeAeds(orgId, cb) {
-  const q = query(aedCol(orgId), orderBy('createdAt', 'desc'), limit(COLLECTION_READ_CAP))
+export function subscribeAeds(cb) {
+  const q = query(aedCol(), orderBy('createdAt', 'desc'), limit(COLLECTION_READ_CAP))
   return onSnapshot(
     q,
     (snap) => cb(snap.docs.map((d) => ({ id: d.id, ...d.data() }))),
@@ -1776,9 +1755,9 @@ const cleanAed = (d) => ({
 })
 
 // Public-readable QR mirror for an AED (keyed by qrToken, under /qr/{token}).
-function aedMirror(orgId, orgName, id, a) {
+function aedMirror(orgName, id, a) {
   return {
-    assetKind: 'aed', orgId, orgName: orgName || '', assetRefId: id, token: a.qrToken,
+    assetKind: 'aed', orgName: orgName || '', assetRefId: id, token: a.qrToken,
     label: a.assetId || 'AED', brand: a.brand || '', model: a.model || '',
     centerName: a.centerName || '', region: a.region || '', entity: a.entity || '', location: a.location || '',
     status: a.status || 'ready', batteryExpiry: a.batteryExpiry || '', padExpiry: a.padExpiry || '',
@@ -1803,7 +1782,7 @@ function aedMirror(orgId, orgName, id, a) {
  *
  * `plan` comes from planSiteLinks(); nothing here decides what matches.
  */
-async function linkKindToSites(orgId, orgName, plan, actor, kind) {
+async function linkKindToSites(orgName, plan, actor, kind) {
   const items = plan.linked
   if (!items.length) return { linked: 0, entityChanges: 0, nameChanges: 0 }
 
@@ -1823,39 +1802,39 @@ async function linkKindToSites(orgId, orgName, plan, actor, kind) {
         updatedAt: serverTimestamp(),
       }
       if (!asset.sourceCenterName && asset.centerName) update.sourceCenterName = asset.centerName
-      batch.update(kind.ref(orgId, asset.id), update)
+      batch.update(kind.ref(asset.id), update)
       // Signage has no public QR page, so a kind may have no mirror at all.
       // The scanned label shows centerName and entity, so the public mirror has
       // to move in the same batch or a QR would keep showing the old site.
-      if (asset.qrToken && kind.mirror) batch.set(qrRef(asset.qrToken), kind.mirror(orgId, orgName, asset.id, { ...asset, ...update }))
+      if (asset.qrToken && kind.mirror) batch.set(qrRef(asset.qrToken), kind.mirror(orgName, asset.id, { ...asset, ...update }))
     }
     await batch.commit()
   }
 
-  await logAudit(orgId, actor, `${kind.name}.update`, {
+  await logAudit(actor, `${kind.name}.update`, {
     target: kind.name,
     summary: `Linked ${items.length} ${kind.label}(s) to sites; ${plan.nameChanges} renamed and ${plan.entityChanges} entity value(s) corrected from the site registry`,
   })
   return { linked: items.length, entityChanges: plan.entityChanges, nameChanges: plan.nameChanges }
 }
 
-export const linkAedsToSites = (orgId, orgName, plan, actor) =>
-  linkKindToSites(orgId, orgName, plan, actor, { name: 'aed', label: 'AED', ref: aedRef, mirror: aedMirror })
+export const linkAedsToSites = (orgName, plan, actor) =>
+  linkKindToSites(orgName, plan, actor, { name: 'aed', label: 'AED', ref: aedRef, mirror: aedMirror })
 
-export const linkFasToSites = (orgId, orgName, plan, actor) =>
-  linkKindToSites(orgId, orgName, plan, actor, { name: 'fas', label: 'FAS device', ref: fasRef, mirror: fasMirror })
+export const linkFasToSites = (orgName, plan, actor) =>
+  linkKindToSites(orgName, plan, actor, { name: 'fas', label: 'FAS device', ref: fasRef, mirror: fasMirror })
 
 // No mirror: signage is an inventory record, not a scannable asset.
-export const linkSignagesToSites = (orgId, orgName, plan, actor) =>
-  linkKindToSites(orgId, orgName, plan, actor, { name: 'signage', label: 'signage', ref: signageRef })
+export const linkSignagesToSites = (orgName, plan, actor) =>
+  linkKindToSites(orgName, plan, actor, { name: 'signage', label: 'signage', ref: signageRef })
 
-export const linkStretchersToSites = (orgId, orgName, plan, actor) =>
-  linkKindToSites(orgId, orgName, plan, actor, { name: 'stretcher', label: 'stretcher', ref: stretcherRef, mirror: stretcherMirror })
+export const linkStretchersToSites = (orgName, plan, actor) =>
+  linkKindToSites(orgName, plan, actor, { name: 'stretcher', label: 'stretcher', ref: stretcherRef, mirror: stretcherMirror })
 
 // No mirror, for the same reason as signage: a first aid row counts what is in
 // a box, and nothing scans it.
-export const linkFirstAidToSites = (orgId, orgName, plan, actor) =>
-  linkKindToSites(orgId, orgName, plan, actor, { name: 'firstaid', label: 'first aid record', ref: firstAidRef })
+export const linkFirstAidToSites = (orgName, plan, actor) =>
+  linkKindToSites(orgName, plan, actor, { name: 'firstaid', label: 'first aid record', ref: firstAidRef })
 
 /**
  * Link every register in one action, from the plans planAllSiteLinks produced.
@@ -1870,7 +1849,7 @@ export const linkFirstAidToSites = (orgId, orgName, plan, actor) =>
  * that saw one error for the whole action could not tell you which of the three
  * actually landed.
  */
-export async function linkAllEquipmentToSites(orgId, orgName, byKind, actor) {
+export async function linkAllEquipmentToSites(orgName, byKind, actor) {
   const runners = [
     ['ext', linkExtinguishersToSites],
     ['aed', linkAedsToSites],
@@ -1885,7 +1864,7 @@ export async function linkAllEquipmentToSites(orgId, orgName, byKind, actor) {
     const plan = byKind?.[key]
     if (!plan?.linked?.length) continue
     try {
-      const r = await run(orgId, orgName, plan, actor)
+      const r = await run(orgName, plan, actor)
       totals.linked += r.linked || 0
       totals.entityChanges += r.entityChanges || 0
       totals.nameChanges += r.nameChanges || 0
@@ -1896,85 +1875,85 @@ export async function linkAllEquipmentToSites(orgId, orgName, byKind, actor) {
   return { ...totals, failed }
 }
 
-export async function addAed(orgId, orgName, data, actor) {
+export async function addAed(orgName, data, actor) {
   // Records are created WITHOUT a QR — generating one is an admin-only action.
-  const ref = doc(aedCol(orgId))
+  const ref = doc(aedCol())
   const a = { ...cleanAed(data), createdAt: serverTimestamp(), updatedAt: serverTimestamp() }
   const batch = writeBatch(db)
   batch.set(ref, a)
   await batch.commit()
-  await logAudit(orgId, actor, 'aed.create', { target: 'aed', targetId: ref.id, targetLabel: `${data.assetId || 'AED'} @ ${data.centerName}`, summary: `AED ${data.assetId || ''} added @ ${data.centerName}` })
+  await logAudit(actor, 'aed.create', { target: 'aed', targetId: ref.id, targetLabel: `${data.assetId || 'AED'} @ ${data.centerName}`, summary: `AED ${data.assetId || ''} added @ ${data.centerName}` })
   return { id: ref.id }
 }
 
-export async function updateAed(orgId, orgName, id, updates, actor) {
+export async function updateAed(orgName, id, updates, actor) {
   // Never mints a QR here — only keeps an existing mirror in sync (see generateAedQr).
   const a = { ...cleanAed(updates), updatedAt: serverTimestamp() }
   const batch = writeBatch(db)
-  batch.update(aedRef(orgId, id), a)
-  if (updates.qrToken) batch.set(qrRef(updates.qrToken), aedMirror(orgId, orgName, id, { ...updates, ...a, qrToken: updates.qrToken }))
+  batch.update(aedRef(id), a)
+  if (updates.qrToken) batch.set(qrRef(updates.qrToken), aedMirror(orgName, id, { ...updates, ...a, qrToken: updates.qrToken }))
   await batch.commit()
-  await logAudit(orgId, actor, 'aed.update', { target: 'aed', targetId: id, targetLabel: `${updates.assetId || 'AED'} @ ${updates.centerName}`, summary: 'AED updated' })
+  await logAudit(actor, 'aed.update', { target: 'aed', targetId: id, targetLabel: `${updates.assetId || 'AED'} @ ${updates.centerName}`, summary: 'AED updated' })
   return updates.qrToken || null
 }
 
 /** Admin-only: mint (or re-use) a QR token for an AED and write its public mirror. */
-export async function generateAedQr(orgId, orgName, asset, actor) {
+export async function generateAedQr(orgName, asset, actor) {
   const qrToken = asset.qrToken || generateQrToken()
   const batch = writeBatch(db)
-  batch.update(aedRef(orgId, asset.id), { qrToken, updatedAt: serverTimestamp() })
-  batch.set(qrRef(qrToken), aedMirror(orgId, orgName, asset.id, { ...asset, qrToken }))
+  batch.update(aedRef(asset.id), { qrToken, updatedAt: serverTimestamp() })
+  batch.set(qrRef(qrToken), aedMirror(orgName, asset.id, { ...asset, qrToken }))
   await batch.commit()
-  await logAudit(orgId, actor, 'aed.qr_generate', { target: 'aed', targetId: asset.id, targetLabel: `${asset.assetId || 'AED'} @ ${asset.centerName}`, summary: 'QR code generated' })
+  await logAudit(actor, 'aed.qr_generate', { target: 'aed', targetId: asset.id, targetLabel: `${asset.assetId || 'AED'} @ ${asset.centerName}`, summary: 'QR code generated' })
   return qrToken
 }
 
 /** Log a service/inspection: stamps last inspection today, sets the next due, marks Ready. */
-export async function serviceAed(orgId, orgName, asset, nextInspection, actor) {
+export async function serviceAed(orgName, asset, nextInspection, actor) {
   const today = todayISO()
   const merged = { ...asset, lastInspection: today, nextInspection: nextInspection || '', status: 'ready' }
   const a = { ...cleanAed(merged), updatedAt: serverTimestamp() }
   const batch = writeBatch(db)
-  batch.update(aedRef(orgId, asset.id), a)
-  if (asset.qrToken) batch.set(qrRef(asset.qrToken), aedMirror(orgId, orgName, asset.id, { ...merged, qrToken: asset.qrToken }))
+  batch.update(aedRef(asset.id), a)
+  if (asset.qrToken) batch.set(qrRef(asset.qrToken), aedMirror(orgName, asset.id, { ...merged, qrToken: asset.qrToken }))
   await batch.commit()
-  await logAudit(orgId, actor, 'aed.service', { target: 'aed', targetId: asset.id, targetLabel: `${asset.assetId || 'AED'} @ ${asset.centerName}`, summary: `AED serviced — next inspection ${nextInspection || '—'}` })
+  await logAudit(actor, 'aed.service', { target: 'aed', targetId: asset.id, targetLabel: `${asset.assetId || 'AED'} @ ${asset.centerName}`, summary: `AED serviced — next inspection ${nextInspection || '—'}` })
 }
 
-export async function deleteAed(orgId, id, qrToken, actor, label) {
-  await retireAssets(orgId, [{ id, qrToken }], aedRef, actor)
-  await logAudit(orgId, actor, 'aed.delete', {
+export async function deleteAed(id, qrToken, actor, label) {
+  await retireAssets([{ id, qrToken }], aedRef, actor)
+  await logAudit(actor, 'aed.delete', {
     target: 'aed', targetId: id, targetLabel: label || '',
     summary: `${label || 'AED'} moved to Recently deleted`,
   })
 }
 
 /** Soft-delete AEDs by [{id, qrToken}]. The QR mirror stays until purge. */
-export async function bulkDeleteAeds(orgId, items, actor) {
-  await retireAssets(orgId, items, aedRef, actor)
-  await logAudit(orgId, actor, 'aed.bulk_delete', {
+export async function bulkDeleteAeds(items, actor) {
+  await retireAssets(items, aedRef, actor)
+  await logAudit(actor, 'aed.bulk_delete', {
     target: 'aed', summary: `${items.length} AED(s) moved to Recently deleted`,
   })
 }
 
 const aedLabelOf = (a) => `${a?.assetId || 'AED'} @ ${a?.centerName || ''}`
 
-export async function restoreAeds(orgId, orgName, ids, actor) {
-  return reviveAssets(orgId, orgName, 'aed', ids, actor, {
+export async function restoreAeds(orgName, ids, actor) {
+  return reviveAssets(orgName, 'aed', ids, actor, {
     refOf: aedRef, colOf: aedCol, mirror: aedMirror, audit: 'aed.restore', labelOf: aedLabelOf,
   })
 }
 
-export async function restoreAed(orgId, orgName, id, actor) {
-  return restoreAeds(orgId, orgName, [id], actor)
+export async function restoreAed(orgName, id, actor) {
+  return restoreAeds(orgName, [id], actor)
 }
 
-export async function purgeAed(orgId, id, qrToken, actor, label) {
+export async function purgeAed(id, qrToken, actor, label) {
   const batch = writeBatch(db)
-  batch.delete(aedRef(orgId, id))
+  batch.delete(aedRef(id))
   if (qrToken) batch.delete(qrRef(qrToken))
   await batch.commit()
-  await logAudit(orgId, actor, 'aed.purge', { target: 'aed', targetId: id, targetLabel: label || '' })
+  await logAudit(actor, 'aed.purge', { target: 'aed', targetId: id, targetLabel: label || '' })
 }
 
 // ── Stretchers (org-scoped) ───────────────────────────────────────────────────
@@ -1983,8 +1962,8 @@ export async function purgeAed(orgId, id, qrToken, actor, label) {
 // usable — is answered by a person standing in front of it. Hence the QR, the
 // public defect sheet and the inspection cycle, none of which a signage-style
 // site × type matrix could carry.
-export function subscribeStretchers(orgId, cb) {
-  const q = query(stretcherCol(orgId), orderBy('createdAt', 'desc'), limit(COLLECTION_READ_CAP))
+export function subscribeStretchers(cb) {
+  const q = query(stretcherCol(), orderBy('createdAt', 'desc'), limit(COLLECTION_READ_CAP))
   return onSnapshot(
     q,
     (snap) => cb(snap.docs.map((d) => ({ id: d.id, ...d.data() }))),
@@ -2011,9 +1990,9 @@ const cleanStretcher = (d) => ({
 })
 
 // Public-readable QR mirror for a stretcher (keyed by qrToken, under /qr/{token}).
-function stretcherMirror(orgId, orgName, id, a) {
+function stretcherMirror(orgName, id, a) {
   return {
-    assetKind: 'stretcher', orgId, orgName: orgName || '', assetRefId: id, token: a.qrToken,
+    assetKind: 'stretcher', orgName: orgName || '', assetRefId: id, token: a.qrToken,
     label: a.assetId || 'Stretcher', stretcherType: a.type || '', brand: a.brand || '', model: a.model || '',
     centerName: a.centerName || '', region: a.region || '', entity: a.entity || '', location: a.location || '',
     status: a.status || 'ready',
@@ -2021,93 +2000,93 @@ function stretcherMirror(orgId, orgName, id, a) {
   }
 }
 
-export async function addStretcher(orgId, orgName, data, actor) {
+export async function addStretcher(orgName, data, actor) {
   // Records are created WITHOUT a QR — generating one is an admin-only action.
-  const ref = doc(stretcherCol(orgId))
+  const ref = doc(stretcherCol())
   const a = { ...cleanStretcher(data), createdAt: serverTimestamp(), updatedAt: serverTimestamp() }
   const batch = writeBatch(db)
   batch.set(ref, a)
   await batch.commit()
-  await logAudit(orgId, actor, 'stretcher.create', { target: 'stretcher', targetId: ref.id, targetLabel: `${data.assetId || 'Stretcher'} @ ${data.centerName}`, summary: `Stretcher ${data.assetId || ''} added @ ${data.centerName}` })
+  await logAudit(actor, 'stretcher.create', { target: 'stretcher', targetId: ref.id, targetLabel: `${data.assetId || 'Stretcher'} @ ${data.centerName}`, summary: `Stretcher ${data.assetId || ''} added @ ${data.centerName}` })
   return { id: ref.id }
 }
 
-export async function updateStretcher(orgId, orgName, id, updates, actor) {
+export async function updateStretcher(orgName, id, updates, actor) {
   // Never mints a QR here — only keeps an existing mirror in sync (see generateStretcherQr).
   const a = { ...cleanStretcher(updates), updatedAt: serverTimestamp() }
   const batch = writeBatch(db)
-  batch.update(stretcherRef(orgId, id), a)
-  if (updates.qrToken) batch.set(qrRef(updates.qrToken), stretcherMirror(orgId, orgName, id, { ...updates, ...a, qrToken: updates.qrToken }))
+  batch.update(stretcherRef(id), a)
+  if (updates.qrToken) batch.set(qrRef(updates.qrToken), stretcherMirror(orgName, id, { ...updates, ...a, qrToken: updates.qrToken }))
   await batch.commit()
-  await logAudit(orgId, actor, 'stretcher.update', { target: 'stretcher', targetId: id, targetLabel: `${updates.assetId || 'Stretcher'} @ ${updates.centerName}`, summary: 'Stretcher updated' })
+  await logAudit(actor, 'stretcher.update', { target: 'stretcher', targetId: id, targetLabel: `${updates.assetId || 'Stretcher'} @ ${updates.centerName}`, summary: 'Stretcher updated' })
   return updates.qrToken || null
 }
 
 /** Admin-only: mint (or re-use) a QR token for a stretcher and write its public mirror. */
-export async function generateStretcherQr(orgId, orgName, asset, actor) {
+export async function generateStretcherQr(orgName, asset, actor) {
   const qrToken = asset.qrToken || generateQrToken()
   const batch = writeBatch(db)
-  batch.update(stretcherRef(orgId, asset.id), { qrToken, updatedAt: serverTimestamp() })
-  batch.set(qrRef(qrToken), stretcherMirror(orgId, orgName, asset.id, { ...asset, qrToken }))
+  batch.update(stretcherRef(asset.id), { qrToken, updatedAt: serverTimestamp() })
+  batch.set(qrRef(qrToken), stretcherMirror(orgName, asset.id, { ...asset, qrToken }))
   await batch.commit()
-  await logAudit(orgId, actor, 'stretcher.qr_generate', { target: 'stretcher', targetId: asset.id, targetLabel: `${asset.assetId || 'Stretcher'} @ ${asset.centerName}`, summary: 'QR code generated' })
+  await logAudit(actor, 'stretcher.qr_generate', { target: 'stretcher', targetId: asset.id, targetLabel: `${asset.assetId || 'Stretcher'} @ ${asset.centerName}`, summary: 'QR code generated' })
   return qrToken
 }
 
 /** Log an inspection: stamps last inspection today, sets the next due, marks Ready. */
-export async function serviceStretcher(orgId, orgName, asset, nextInspection, actor) {
+export async function serviceStretcher(orgName, asset, nextInspection, actor) {
   const today = todayISO()
   const merged = { ...asset, lastInspection: today, nextInspection: nextInspection || '', status: 'ready' }
   const a = { ...cleanStretcher(merged), updatedAt: serverTimestamp() }
   const batch = writeBatch(db)
-  batch.update(stretcherRef(orgId, asset.id), a)
-  if (asset.qrToken) batch.set(qrRef(asset.qrToken), stretcherMirror(orgId, orgName, asset.id, { ...merged, qrToken: asset.qrToken }))
+  batch.update(stretcherRef(asset.id), a)
+  if (asset.qrToken) batch.set(qrRef(asset.qrToken), stretcherMirror(orgName, asset.id, { ...merged, qrToken: asset.qrToken }))
   await batch.commit()
-  await logAudit(orgId, actor, 'stretcher.service', { target: 'stretcher', targetId: asset.id, targetLabel: `${asset.assetId || 'Stretcher'} @ ${asset.centerName}`, summary: `Stretcher inspected — next inspection ${nextInspection || '—'}` })
+  await logAudit(actor, 'stretcher.service', { target: 'stretcher', targetId: asset.id, targetLabel: `${asset.assetId || 'Stretcher'} @ ${asset.centerName}`, summary: `Stretcher inspected — next inspection ${nextInspection || '—'}` })
 }
 
-export async function deleteStretcher(orgId, id, qrToken, actor, label) {
+export async function deleteStretcher(id, qrToken, actor, label) {
   const batch = writeBatch(db)
-  batch.delete(stretcherRef(orgId, id))
+  batch.delete(stretcherRef(id))
   if (qrToken) batch.delete(qrRef(qrToken))
   await batch.commit()
-  await logAudit(orgId, actor, 'stretcher.delete', { target: 'stretcher', targetId: id, targetLabel: label || '' })
+  await logAudit(actor, 'stretcher.delete', { target: 'stretcher', targetId: id, targetLabel: label || '' })
 }
 
 /** Bulk-delete stretchers (+ remove their QR mirrors) by [{id, qrToken}]. */
-export async function bulkDeleteStretchers(orgId, items, actor) {
+export async function bulkDeleteStretchers(items, actor) {
   for (let i = 0; i < items.length; i += BULK_CHUNK) {
     const batch = writeBatch(db)
     for (const { id, qrToken } of items.slice(i, i + BULK_CHUNK)) {
-      batch.delete(stretcherRef(orgId, id))
+      batch.delete(stretcherRef(id))
       if (qrToken) batch.delete(qrRef(qrToken))
     }
     await batch.commit()
   }
-  await logAudit(orgId, actor, 'stretcher.bulk_delete', { target: 'stretcher', summary: `${items.length} stretcher(s) deleted` })
+  await logAudit(actor, 'stretcher.bulk_delete', { target: 'stretcher', summary: `${items.length} stretcher(s) deleted` })
 }
 
-export async function bulkAddStretchers(orgId, orgName, rows, actor) {
+export async function bulkAddStretchers(orgName, rows, actor) {
   let created = 0
   for (let i = 0; i < rows.length; i += BULK_CHUNK) {
     const batch = writeBatch(db)
     for (const row of rows.slice(i, i + BULK_CHUNK)) {
-      const ref = doc(stretcherCol(orgId))
+      const ref = doc(stretcherCol())
       const qrToken = generateQrToken()
       const a = { ...cleanStretcher(row), qrToken, createdAt: serverTimestamp(), updatedAt: serverTimestamp() }
       batch.set(ref, a)
-      batch.set(qrRef(qrToken), stretcherMirror(orgId, orgName, ref.id, a))
+      batch.set(qrRef(qrToken), stretcherMirror(orgName, ref.id, a))
       created++
     }
     await batch.commit()
   }
-  await logAudit(orgId, actor, 'stretcher.bulk_create', { target: 'stretcher', summary: `Bulk added ${created} stretcher(s)` })
+  await logAudit(actor, 'stretcher.bulk_create', { target: 'stretcher', summary: `Bulk added ${created} stretcher(s)` })
   return { created }
 }
 
 // ── FAS (Fire Alarm System) device inventory (org-scoped) ─────────────────────
-export function subscribeFas(orgId, cb) {
-  const q = query(fasCol(orgId), orderBy('createdAt', 'desc'), limit(COLLECTION_READ_CAP))
+export function subscribeFas(cb) {
+  const q = query(fasCol(), orderBy('createdAt', 'desc'), limit(COLLECTION_READ_CAP))
   return onSnapshot(
     q,
     (snap) => cb(snap.docs.map((d) => ({ id: d.id, ...d.data() }))),
@@ -2133,9 +2112,9 @@ const cleanFas = (d) => ({
   notes: (d.notes || '').trim(),
 })
 
-function fasMirror(orgId, orgName, id, a) {
+function fasMirror(orgName, id, a) {
   return {
-    assetKind: 'fas', orgId, orgName: orgName || '', assetRefId: id, token: a.qrToken,
+    assetKind: 'fas', orgName: orgName || '', assetRefId: id, token: a.qrToken,
     label: a.deviceId || a.deviceType || 'FAS', deviceType: a.deviceType || '', zone: a.zone || '',
     centerName: a.centerName || '', region: a.region || '', entity: a.entity || '', location: a.location || '',
     status: a.status || 'operational', lastService: a.lastService || '', nextService: a.nextService || '',
@@ -2145,13 +2124,13 @@ function fasMirror(orgId, orgName, id, a) {
   }
 }
 
-export async function addFas(orgId, orgName, data, actor) {
+export async function addFas(orgName, data, actor) {
   // A control panel is created WITH its QR. The single-add form used to store
   // the panel and leave the code for an admin to mint later, so a panel added
   // here had nothing for "Export QR codes" to print and a scan had no page.
   // Detectors still get none: the panel's code covers the system. A token
   // already on the row is kept.
-  const ref = doc(fasCol(orgId))
+  const ref = doc(fasCol())
   const clean = cleanFas(data)
   const qrToken = fasQrTokenForCreate(
     { ...clean, qrToken: data.qrToken, qrLink: data.qrLink },
@@ -2165,13 +2144,13 @@ export async function addFas(orgId, orgName, data, actor) {
   }
   const batch = writeBatch(db)
   batch.set(ref, a)
-  if (qrToken) batch.set(qrRef(qrToken), fasMirror(orgId, orgName, ref.id, a))
+  if (qrToken) batch.set(qrRef(qrToken), fasMirror(orgName, ref.id, a))
   await batch.commit()
-  await logAudit(orgId, actor, 'fas.create', { target: 'fas', targetId: ref.id, targetLabel: `${data.deviceId || data.deviceType} @ ${data.centerName}`, summary: `FAS ${data.deviceType} added @ ${data.centerName}` })
+  await logAudit(actor, 'fas.create', { target: 'fas', targetId: ref.id, targetLabel: `${data.deviceId || data.deviceType} @ ${data.centerName}`, summary: `FAS ${data.deviceType} added @ ${data.centerName}` })
   return { id: ref.id, qrToken: qrToken || null }
 }
 
-export async function updateFas(orgId, orgName, id, updates, actor) {
+export async function updateFas(orgName, id, updates, actor) {
   // An edit never replaces a QR code. It mints one only when this save turns
   // the row into a control panel that still has none — changing a detector
   // into a panel is a create path the add form is not the only door to.
@@ -2185,7 +2164,7 @@ export async function updateFas(orgId, orgName, id, updates, actor) {
   let qrToken = ''
   let minted = false
   await runTransaction(db, async (tx) => {
-    const ref = fasRef(orgId, id)
+    const ref = fasRef(id)
     const snap = await tx.get(ref)
     if (!snap.exists()) throw new Error('Fire-alarm device not found')
     const stored = snap.data() || {}
@@ -2195,30 +2174,30 @@ export async function updateFas(orgId, orgName, id, updates, actor) {
     const a = { ...clean, ...(qrToken ? { qrToken } : {}), updatedAt: serverTimestamp() }
     tx.update(ref, a)
     if (qrToken) {
-      tx.set(qrRef(qrToken), fasMirror(orgId, orgName, id, { ...stored, ...clean, qrToken }))
+      tx.set(qrRef(qrToken), fasMirror(orgName, id, { ...stored, ...clean, qrToken }))
     }
   })
-  await logAudit(orgId, actor, 'fas.update', { target: 'fas', targetId: id, targetLabel: `${updates.deviceId || updates.deviceType} @ ${updates.centerName}`, summary: minted ? 'FAS device updated — QR code generated' : 'FAS device updated' })
+  await logAudit(actor, 'fas.update', { target: 'fas', targetId: id, targetLabel: `${updates.deviceId || updates.deviceType} @ ${updates.centerName}`, summary: minted ? 'FAS device updated — QR code generated' : 'FAS device updated' })
   return qrToken || null
 }
 
 /** Mint a QR token for one FAS control panel, or reuse the token it already has. */
-export async function generateFasQr(orgId, orgName, asset, actor) {
+export async function generateFasQr(orgName, asset, actor) {
   // Reuse first, and re-read first. The asset on screen can be missing a
   // token that was saved after it loaded; minting from that copy replaces
   // the sticker. A token already on the document is the one that is printed.
   let qrToken = ''
   await runTransaction(db, async (tx) => {
-    const ref = fasRef(orgId, asset.id)
+    const ref = fasRef(asset.id)
     const snap = await tx.get(ref)
     if (!snap.exists()) throw new Error('Fire-alarm device not found')
     const stored = snap.data() || {}
     const existing = String(stored.qrToken || '').trim()
     qrToken = existing || generateQrToken()
     if (!existing) tx.update(ref, { qrToken, updatedAt: serverTimestamp() })
-    tx.set(qrRef(qrToken), fasMirror(orgId, orgName, asset.id, { ...stored, ...asset, qrToken }))
+    tx.set(qrRef(qrToken), fasMirror(orgName, asset.id, { ...stored, ...asset, qrToken }))
   })
-  await logAudit(orgId, actor, 'fas.qr_generate', { target: 'fas', targetId: asset.id, targetLabel: `${asset.deviceId || asset.deviceType} @ ${asset.centerName}`, summary: 'QR code generated' })
+  await logAudit(actor, 'fas.qr_generate', { target: 'fas', targetId: asset.id, targetLabel: `${asset.deviceId || asset.deviceType} @ ${asset.centerName}`, summary: 'QR code generated' })
   return qrToken
 }
 
@@ -2233,8 +2212,8 @@ export async function generateFasQr(orgId, orgName, asset, actor) {
  *
  * Returns how many panels were given a code.
  */
-export async function backfillFasPanelQr(orgId, orgName, actor) {
-  const snap = await getDocs(fasCol(orgId))
+export async function backfillFasPanelQr(orgName, actor) {
+  const snap = await getDocs(fasCol())
   const rows = snap.docs.map((d) => ({ id: d.id, ...d.data() }))
   const { assign, kept } = planFasPanelQrBackfill(rows)
   if (!assign.length) return { assigned: 0, kept: kept.length, scanned: rows.length }
@@ -2242,12 +2221,12 @@ export async function backfillFasPanelQr(orgId, orgName, actor) {
   let assigned = 0
   for (let i = 0; i < assign.length; i += 20) {
     const wrote = await Promise.all(
-      assign.slice(i, i + 20).map((row) => assignMissingFasPanelQr(orgId, orgName, row.id)),
+      assign.slice(i, i + 20).map((row) => assignMissingFasPanelQr(orgName, row.id)),
     )
     assigned += wrote.filter(Boolean).length
   }
   if (assigned) {
-    await logAudit(orgId, actor, 'fas.qr_backfill', {
+    await logAudit(actor, 'fas.qr_backfill', {
       target: 'fas',
       summary: `Generated QR codes for ${assigned} control panel(s) that had none`,
     })
@@ -2255,11 +2234,11 @@ export async function backfillFasPanelQr(orgId, orgName, actor) {
   return { assigned, kept: kept.length, scanned: rows.length }
 }
 
-async function assignMissingFasPanelQr(orgId, orgName, id) {
+async function assignMissingFasPanelQr(orgName, id) {
   let written = null
   await runTransaction(db, async (tx) => {
     written = null
-    const ref = fasRef(orgId, id)
+    const ref = fasRef(id)
     const snap = await tx.get(ref)
     if (!snap.exists()) return
     const data = snap.data() || {}
@@ -2270,71 +2249,71 @@ async function assignMissingFasPanelQr(orgId, orgName, id) {
     if (!isFasControlPanel(data)) return
     const qrToken = generateQrToken()
     tx.update(ref, { qrToken, updatedAt: serverTimestamp() })
-    tx.set(qrRef(qrToken), fasMirror(orgId, orgName, id, { ...data, qrToken }))
+    tx.set(qrRef(qrToken), fasMirror(orgName, id, { ...data, qrToken }))
     written = qrToken
   })
   return written
 }
 
 /** One FAS device, including a row the capped register listing did not load. */
-export async function getFas(orgId, id) {
-  if (!orgId || !id) return null
-  const snap = await getDoc(fasRef(orgId, id))
+export async function getFas(id) {
+  if ((!id)) return null
+  const snap = await getDoc(fasRef(id))
   return snap.exists() ? { id: snap.id, ...snap.data() } : null
 }
 
 /** Log a service: stamps last service today, sets the next due, marks Operational. */
-export async function serviceFas(orgId, orgName, asset, nextService, actor) {
+export async function serviceFas(orgName, asset, nextService, actor) {
   const today = todayISO()
   const merged = { ...asset, lastService: today, nextService: nextService || '', status: 'operational' }
   const a = { ...cleanFas(merged), updatedAt: serverTimestamp() }
   const batch = writeBatch(db)
-  batch.update(fasRef(orgId, asset.id), a)
-  if (asset.qrToken) batch.set(qrRef(asset.qrToken), fasMirror(orgId, orgName, asset.id, { ...merged, qrToken: asset.qrToken }))
+  batch.update(fasRef(asset.id), a)
+  if (asset.qrToken) batch.set(qrRef(asset.qrToken), fasMirror(orgName, asset.id, { ...merged, qrToken: asset.qrToken }))
   await batch.commit()
-  await logAudit(orgId, actor, 'fas.service', { target: 'fas', targetId: asset.id, targetLabel: `${asset.deviceId || asset.deviceType} @ ${asset.centerName}`, summary: `FAS serviced — next service ${nextService || '—'}` })
+  await logAudit(actor, 'fas.service', { target: 'fas', targetId: asset.id, targetLabel: `${asset.deviceId || asset.deviceType} @ ${asset.centerName}`, summary: `FAS serviced — next service ${nextService || '—'}` })
 }
 
-export async function deleteFas(orgId, id, qrToken, actor, label) {
-  await retireAssets(orgId, [{ id, qrToken }], fasRef, actor)
-  await logAudit(orgId, actor, 'fas.delete', {
+export async function deleteFas(id, qrToken, actor, label) {
+  await retireAssets([{ id, qrToken }], fasRef, actor)
+  await logAudit(actor, 'fas.delete', {
     target: 'fas', targetId: id, targetLabel: label || '',
     summary: `${label || 'FAS device'} moved to Recently deleted`,
   })
 }
 
 /** Soft-delete FAS devices by [{id, qrToken}]. The QR mirror stays until purge. */
-export async function bulkDeleteFas(orgId, items, actor) {
-  await retireAssets(orgId, items, fasRef, actor)
-  await logAudit(orgId, actor, 'fas.bulk_delete', {
+export async function bulkDeleteFas(items, actor) {
+  await retireAssets(items, fasRef, actor)
+  await logAudit(actor, 'fas.bulk_delete', {
     target: 'fas', summary: `${items.length} FAS device(s) moved to Recently deleted`,
   })
 }
 
 const fasLabelOf = (a) => `${a?.deviceId || a?.deviceType || 'FAS'} @ ${a?.centerName || ''}`
 
-export async function restoreFasMany(orgId, orgName, ids, actor) {
-  return reviveAssets(orgId, orgName, 'fas', ids, actor, {
+export async function restoreFasMany(orgName, ids, actor) {
+  return reviveAssets(orgName, 'fas', ids, actor, {
     refOf: fasRef, colOf: fasCol, mirror: fasMirror, audit: 'fas.restore', labelOf: fasLabelOf,
   })
 }
 
-export async function restoreFas(orgId, orgName, id, actor) {
-  return restoreFasMany(orgId, orgName, [id], actor)
+export async function restoreFas(orgName, id, actor) {
+  return restoreFasMany(orgName, [id], actor)
 }
 
-export async function purgeFas(orgId, id, qrToken, actor, label) {
+export async function purgeFas(id, qrToken, actor, label) {
   const batch = writeBatch(db)
-  batch.delete(fasRef(orgId, id))
+  batch.delete(fasRef(id))
   if (qrToken) batch.delete(qrRef(qrToken))
   await batch.commit()
-  await logAudit(orgId, actor, 'fas.purge', { target: 'fas', targetId: id, targetLabel: label || '' })
+  await logAudit(actor, 'fas.purge', { target: 'fas', targetId: id, targetLabel: label || '' })
 }
 
 // ── AED / FAS public defect reports (submitted from a QR scan) ─────────────────
 /** Create a pending asset-defect report (public QR scan). Lands in Approvals. */
-export async function createAssetReport(orgId, { assetKind, assetRefId, assetLabel, defect, token, reporterRole, note }) {
-  await addDoc(reportCol(orgId), {
+export async function createAssetReport({ assetKind, assetRefId, assetLabel, defect, token, reporterRole, note }) {
+  await addDoc(reportCol(), {
     kind: 'asset_defect',
     assetKind,
     assetRefId,
@@ -2372,21 +2351,21 @@ const ASSET_TARGETS = {
 }
 
 /** Approve (→ mark the asset Faulty/Out-of-service) or reject an asset-defect report. */
-export async function decideAssetReport(orgId, report, approve, reviewerName, actor) {
+export async function decideAssetReport(report, approve, reviewerName, actor) {
   const target = ASSET_TARGETS[report.assetKind]
   if (!target) throw new Error(`Unknown asset kind "${report.assetKind || ''}" — this report cannot be actioned`)
   const batch = writeBatch(db)
-  batch.update(reportRef(orgId, report.id), {
+  batch.update(reportRef(report.id), {
     approvalStatus: approve ? 'approved' : 'rejected',
     reviewedBy: reviewerName || '',
     reviewedAt: serverTimestamp(),
   })
   if (approve && report.assetRefId) {
-    batch.update(target.ref(orgId, report.assetRefId), { status: target.faultStatus, updatedAt: serverTimestamp() })
+    batch.update(target.ref(report.assetRefId), { status: target.faultStatus, updatedAt: serverTimestamp() })
     if (report.token) batch.update(qrRef(report.token), { status: target.faultStatus, updatedAt: serverTimestamp() })
   }
   await batch.commit()
-  await logAudit(orgId, actor, `${report.assetKind}.defect_${approve ? 'approved' : 'rejected'}`, {
+  await logAudit(actor, `${report.assetKind}.defect_${approve ? 'approved' : 'rejected'}`, {
     target: report.assetKind, targetId: report.assetRefId || '', targetLabel: report.assetLabel || '',
     summary: `${report.defect}${approve ? ` — marked ${target.faultLabel}` : ' — dismissed'}`,
   })
@@ -2414,29 +2393,29 @@ const BULK_CHUNK = 200
  * there and cannot drift again. That is a one-time edge in place of a collision
  * on every concurrent add.
  */
-export async function reserveAssetIds(orgId, kind, prefix, { count = 1, floor = 0 } = {}) {
-  const first = await reserveSeq(orgId, kind, { count, floor })
+export async function reserveAssetIds(kind, prefix, { count = 1, floor = 0 } = {}) {
+  const first = await reserveSeq(kind, { count, floor })
   return Array.from({ length: count }, (_, i) => formatAssetId(prefix, first + i))
 }
-export async function bulkAddAeds(orgId, orgName, rows, actor) {
+export async function bulkAddAeds(orgName, rows, actor) {
   let created = 0
   for (let i = 0; i < rows.length; i += BULK_CHUNK) {
     const batch = writeBatch(db)
     for (const row of rows.slice(i, i + BULK_CHUNK)) {
-      const ref = doc(aedCol(orgId))
+      const ref = doc(aedCol())
       const qrToken = generateQrToken()
       const a = { ...cleanAed(row), qrToken, createdAt: serverTimestamp(), updatedAt: serverTimestamp() }
       batch.set(ref, a)
-      batch.set(qrRef(qrToken), aedMirror(orgId, orgName, ref.id, a))
+      batch.set(qrRef(qrToken), aedMirror(orgName, ref.id, a))
       created++
     }
     await batch.commit()
   }
-  await logAudit(orgId, actor, 'aed.bulk_create', { target: 'aed', summary: `Bulk added ${created} AED(s)` })
+  await logAudit(actor, 'aed.bulk_create', { target: 'aed', summary: `Bulk added ${created} AED(s)` })
   return { created }
 }
 
-export async function bulkAddFas(orgId, orgName, rows, actor) {
+export async function bulkAddFas(orgName, rows, actor) {
   // Same rule as addFas: a control panel is created with a QR, and a token
   // the row already carries is the one that gets stored. Detectors, MCPs and
   // hooters are created without one — the panel's code covers the system.
@@ -2445,7 +2424,7 @@ export async function bulkAddFas(orgId, orgName, rows, actor) {
   for (let i = 0; i < rows.length; i += BULK_CHUNK) {
     const batch = writeBatch(db)
     for (const row of rows.slice(i, i + BULK_CHUNK)) {
-      const ref = doc(fasCol(orgId))
+      const ref = doc(fasCol())
       const clean = cleanFas(row)
       const qrToken = fasQrTokenForCreate(
         { ...clean, qrToken: row.qrToken, qrLink: row.qrLink },
@@ -2458,11 +2437,11 @@ export async function bulkAddFas(orgId, orgName, rows, actor) {
         updatedAt: serverTimestamp(),
       }
       batch.set(ref, a)
-      if (qrToken) batch.set(qrRef(qrToken), fasMirror(orgId, orgName, ref.id, a))
+      if (qrToken) batch.set(qrRef(qrToken), fasMirror(orgName, ref.id, a))
       created++
     }
     await batch.commit()
   }
-  await logAudit(orgId, actor, 'fas.bulk_create', { target: 'fas', summary: `Bulk added ${created} FAS device(s)` })
+  await logAudit(actor, 'fas.bulk_create', { target: 'fas', summary: `Bulk added ${created} FAS device(s)` })
   return { created }
 }

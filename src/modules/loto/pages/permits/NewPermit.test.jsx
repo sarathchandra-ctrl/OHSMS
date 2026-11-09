@@ -7,7 +7,7 @@ const h = vi.hoisted(() => ({ create: vi.fn(async () => 'LP-2026-0001'), role: '
 
 vi.mock('../../context/AuthContext', () => ({
   useAuth: () => ({
-    profile: { orgId: 'o1', id: 'u1', displayName: 'Req Uester' },
+    profile: { id: 'u1', displayName: 'Req Uester' },
     can: () => true,
     platformRole: h.role,
   }),

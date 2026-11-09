@@ -1,11 +1,9 @@
-// The dedicated environment as deployed (stack/app.mjs), on PGlite.
+// The organization's server as deployed (stack/app.mjs), on PGlite.
 //
-// The demo host kept everything in memory, so the first redeploy forgot the
-// request, the one-time token and the secrets a company had just submitted,
-// and the company could no longer sign in. These restart it and check what
-// came back, read the table to check what is NOT in it, and try the doors a
-// deployment must keep shut: the demo OIDC issuer, a wrong state key, and a
-// path out of the static directory.
+// These set it up through /setup, restart it and check what came back, read
+// the state table to check what is NOT in it, and try the doors a deployment
+// must keep shut: the demo OIDC issuer, a wrong state key, the removed
+// multi-company routes, and a path out of the static directory.
 import { PGlite } from '@electric-sql/pglite'
 import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -61,25 +59,32 @@ async function start(db, { stateKey, dir = '' } = {}) {
   return { ...app, origin, stop }
 }
 
+// First-run setup, as the installer does it in the browser: the organization,
+// its first administrator and the company SAML sign-in, in one form.
+async function setupSaml(origin, { samlIdpCert, samlEntryPoint }) {
+  return fetch(`${origin}/setup`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      code: OPERATOR,
+      orgName: request.orgName,
+      address: request.address,
+      contactName: request.contactName,
+      contactEmail: request.contactEmail,
+      method: 'saml',
+      samlEntryPoint,
+      samlIdpCert,
+    }).toString(),
+  })
+}
+
 async function fileAndHandOff(origin, secrets) {
-  const filed = await fetch(`${origin}/requests`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${OPERATOR}` },
-    body: JSON.stringify(request),
-  })
-  expect(filed.status).toBe(200)
-  // No mail configured: the token comes back to the operator, once.
-  const { token } = await filed.json()
-  const intake = await fetch(`${origin}/intake`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ requestId: request.id, email: request.contactEmail, token, secrets }),
-  })
-  return { token, intake }
+  const intake = await setupSaml(origin, secrets)
+  return { intake }
 }
 
 describe('dedicated environment across a restart', () => {
-  it('keeps the request, the consumed token and the adopted SAML sign-in', async () => {
+  it('keeps the connected SAML sign-in and stays set up', async () => {
     const db = new PGlite()
     const stateKey = randomBytes(32)
     const keys = makeIdpKeys('northwind-idp')
@@ -93,26 +98,18 @@ describe('dedicated environment across a restart', () => {
     expect(intake.status).toBe(200)
     await first.stop()
 
-    // A new process on the same database.
+    // A new process on the same database keeps the connected sign-in, and
+    // /setup stays closed: the organization exists.
     const second = await start(db, { stateKey })
-    expect(second.state.requests.get(request.id).status).toBe('live')
+    expect(second.state.auth).toMatchObject({ method: 'saml' })
     const signIn = await fetch(`${second.origin}/auth/start`, { redirect: 'manual' })
     expect(signIn.status).toBe(302)
     expect(signIn.headers.get('location')).toMatch(/^https:\/\/idp\.northwind\.test\/sso\?/)
-
-    // The token was spent before the restart and stays spent after it.
-    expect(second.state.intake.get(request.id)).toMatchObject({ used: true, hash: null })
-    const reuse = await fetch(`${second.origin}/intake`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        requestId: request.id,
-        email: request.contactEmail,
-        token,
-        secrets: { dataKeyMaster: MASTER },
-      }),
+    const again = await setupSaml(second.origin, {
+      samlIdpCert: 'x',
+      samlEntryPoint: 'https://attacker.test/sso',
     })
-    expect(reuse.status).toBe(403)
+    expect(again.status).toBe(409)
     await second.stop()
   })
 
@@ -128,8 +125,8 @@ describe('dedicated environment across a restart', () => {
     })
     await app.stop()
     const dump = JSON.stringify((await db.query('SELECT * FROM control_state')).rows)
-    expect(dump).toContain('Northwind Metals') // the non-secret request is there
-    for (const secret of [DB_URL, MASTER, keys.cert.split('\n')[1], 'idp.northwind.test/sso']) {
+    expect(dump).toContain('sealed') // the sign-in row is there, sealed
+    for (const secret of [keys.cert.split('\n')[1], 'idp.northwind.test/sso']) {
       expect(dump).not.toContain(secret)
     }
   })
@@ -137,7 +134,11 @@ describe('dedicated environment across a restart', () => {
   it('refuses to start with a different state key rather than forget the secrets', async () => {
     const db = new PGlite()
     const app = await start(db, { stateKey: randomBytes(32) })
-    await fileAndHandOff(app.origin, { databaseUrl: DB_URL, dataKeyMaster: MASTER })
+    const keys = makeIdpKeys('northwind-idp')
+    await fileAndHandOff(app.origin, {
+      samlIdpCert: keys.cert,
+      samlEntryPoint: 'https://idp.northwind.test/sso',
+    })
     await app.stop()
     await expect(start(db, { stateKey: randomBytes(32) })).rejects.toThrow()
   })
@@ -162,14 +163,16 @@ describe('doors a deployment keeps shut', () => {
     await app.stop()
   })
 
-  it('refuses /requests without the operator token', async () => {
+  it('has no multi-company provisioning routes', async () => {
     const app = await start(new PGlite(), { stateKey: randomBytes(32) })
-    const res = await fetch(`${app.origin}/requests`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer wrong' },
-      body: JSON.stringify(request),
-    })
-    expect(res.status).toBe(401)
+    for (const path of ['/requests', '/intake', '/intake/start', '/fulfill', '/handoff']) {
+      const res = await fetch(`${app.origin}${path}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${OPERATOR}` },
+        body: JSON.stringify(request),
+      })
+      expect(res.status, path).toBe(404)
+    }
     await app.stop()
   })
 })
@@ -277,7 +280,7 @@ describe('on a database where the app is not a superuser', () => {
       }).then((r) => r.json())
     const me = await read('users', request.contactEmail)
     expect(me.doc).toMatchObject({ role: 'admin', status: 'approved' })
-    expect((await read('organizations', me.doc.orgId)).doc).toMatchObject({
+    expect((await read('organization', 'profile')).doc).toMatchObject({
       name: 'Northwind Metals',
     })
     await app.stop()
@@ -371,7 +374,6 @@ describe('inviting people to a dedicated environment', () => {
     expect(me.doc).toMatchObject({
       role: 'manager',
       status: 'approved',
-      orgId: 'orgreqDedicated01',
     })
     // The invite is spent by the sign-in.
     expect((await env.rpc(env.founder, 'listInvites')).body.invites).toEqual([])
@@ -450,37 +452,6 @@ describe('inviting people to a dedicated environment', () => {
     await env.app.stop()
   })
 
-  it("will not move or withdraw another organization's pending invite", async () => {
-    const env = await liveEnvironment()
-    // A second tenant on the same database, with its own admin and a pending
-    // invite. One environment normally holds one company; the checks must
-    // hold anyway, because the org boundary is the whole of the isolation.
-    const W = { role: 'ohsms_worker', uid: '' }
-    const { createEngine, asWorker } = await import('../../../stack/engine.mjs')
-    const engine = createEngine(env.db)
-    await engine.commit(W, [
-      { type: 'set', path: 'organizations', id: 'orgOther', merge: false, data: { name: 'Other' } },
-    ])
-    await asWorker(
-      env.db,
-      `INSERT INTO invites (email, org_id, role, name) VALUES ('target@other.test', 'orgOther', 'member', 'T')`
-    )
-    const steal = await env.rpc(env.founder, 'inviteMember', {
-      email: 'target@other.test',
-      role: 'admin',
-    })
-    expect(steal.body).toEqual({ ok: false, reason: 'taken' })
-    const revoke = await env.rpc(env.founder, 'revokeInvite', { email: 'target@other.test' })
-    expect(revoke.body).toEqual({ ok: true, removed: false })
-    const still = await asWorker(
-      env.db,
-      `SELECT org_id, role FROM invites WHERE email = 'target@other.test'`
-    )
-    expect(still.rows).toEqual([{ org_id: 'orgOther', role: 'member' }])
-    expect((await env.rpc(env.founder, 'listInvites')).body.invites).toEqual([])
-    await env.app.stop()
-  })
-
   it('withdraws an invite so that person can no longer sign in', async () => {
     const env = await liveEnvironment()
     await env.rpc(env.founder, 'inviteMember', { email: 'temp@northwind.test', role: 'member' })
@@ -499,7 +470,7 @@ function configFrom(script) {
 }
 
 describe('the settings a dedicated host gives the app', () => {
-  it('follows the handoff: no sign-in before it, the adopted IdP after', async () => {
+  it('follows setup: no sign-in before it, the connected IdP after', async () => {
     const db = new PGlite()
     const keys = makeIdpKeys('northwind-idp')
     const app = await start(db, { stateKey: randomBytes(32) })
@@ -524,62 +495,14 @@ describe('the settings a dedicated host gives the app', () => {
     await app.stop()
   })
 
-  it("points uploads at the company's own presign endpoint when it brought a bucket", () => {
-    const requests = new Map([
-      [
-        'r1',
-        { status: 'live', bucketMode: 'bring', presignUrl: 'https://files.northwind.test/presign' },
-      ],
-    ])
-    const config = configFrom(
-      runtimeConfigScript({
-        origin: 'https://ehs.northwind.test',
-        auth: { method: 'oidc', requestId: 'r1' },
-        requests,
-      })
-    )
-    expect(config.S3_PRESIGN_ENDPOINT).toBe('https://files.northwind.test/presign')
-    expect(config.AUTH_METHOD).toBe('oidc')
-  })
-
-  it('takes the bucket from the request whose sign-in was adopted, not the first live one', () => {
-    const requests = new Map([
-      ['old', { status: 'live', bucketMode: 'bring', presignUrl: 'https://old.test/presign' }],
-      ['new', { status: 'live', bucketMode: 'provision', presignUrl: '' }],
-    ])
-    const config = configFrom(
-      runtimeConfigScript({
-        origin: 'https://ehs.northwind.test',
-        auth: { method: 'saml', requestId: 'new' },
-        requests,
-      })
-    )
-    expect(config.S3_PRESIGN_ENDPOINT).toBe('https://ehs.northwind.test/presign')
-  })
-
   it('cannot be made to close the script or carry markup', () => {
-    const requests = new Map([
-      [
-        'r1',
-        {
-          status: 'live',
-          bucketMode: 'bring',
-          presignUrl: 'https://x.test/</script><script>alert(1)//',
-        },
-      ],
-    ])
     const script = runtimeConfigScript({
       origin: 'https://ehs.test/</script><img src=x onerror=alert(1)>',
-      auth: { method: '</script>', requestId: 'r1' },
-      requests,
+      auth: { method: '</script>' },
     })
     expect(script).not.toMatch(/</)
     const config = configFrom(script)
     expect(config.AUTH_METHOD).toBe('none')
-    // A presign URL that is not a plain https address is not used.
-    expect(config.S3_PRESIGN_ENDPOINT).toBe(
-      'https://ehs.test/</script><img src=x onerror=alert(1)>/presign'
-    )
   })
 })
 
@@ -913,8 +836,7 @@ describe('following the company directory', () => {
     expect((await signIn(app.origin, keys, 'kiran@northwind.test')).status).toBe(403)
     const stillOpen = await read(
       oldSession,
-      'organizations',
-      (await read(founder, 'users', request.contactEmail)).doc.orgId
+      'organization', 'profile'
     )
     expect(stillOpen.doc ?? null).toBeNull()
 
@@ -1035,8 +957,7 @@ describe('following the company directory', () => {
   it('keeps the directory records and token out of the data API', async () => {
     const { app, founder, rpc, read } = await liveEnvironment()
     await rpc(founder, 'createScimToken')
-    const orgId = (await read(founder, 'users', request.contactEmail)).doc.orgId
-    const token = await read(founder, 'scimTokens', orgId)
+    const token = await read(founder, 'scimTokens')
     expect(token.doc ?? null).toBeNull()
     expect((await rpc(founder, 'createScimToken')).status).toBe(200)
     await app.stop()

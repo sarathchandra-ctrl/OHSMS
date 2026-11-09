@@ -19,7 +19,7 @@ import { attachmentShape, referenceHref, describeReference, ATTACHMENT_KINDS } f
  * upload ceiling, and the alternative to a reference is not a smaller file, it
  * is no record at all.
  */
-export default function AttachmentField({ kind, value = [], onChange, disabled = false, orgId, actor }) {
+export default function AttachmentField({ kind, value = [], onChange, disabled = false, actor }) {
   const cfg = ATTACHMENT_KINDS[kind]
   const inputRef = useRef(null)
   const [busy, setBusy] = useState(false)
@@ -45,7 +45,7 @@ export default function AttachmentField({ kind, value = [], onChange, disabled =
           )
           continue
         }
-        const stored = await putFile(orgId, `escalation-${kind}`, f, f.name)
+        const stored = await putFile(`escalation-${kind}`, f, f.name)
         if (!stored) {
           toast.error(`${f.name} could not be uploaded — file storage may not be enabled.`)
           continue

@@ -16,51 +16,51 @@ import { COLLECTION_READ_CAP } from '../../../shared/org/orgData'
 // Faithful to the original portal's Internal Audit data model:
 //   organizations/{orgId}/auditPlans     — schedules with an execution matrix
 //   organizations/{orgId}/auditFindings  — executed audits with findings + CAPA
-const plansCol = (orgId) => collection(db, 'organizations', orgId, 'auditPlans')
-const findingsCol = (orgId) =>
-  collection(db, 'organizations', orgId, 'auditFindings')
+const plansCol = () => collection(db, 'auditPlans')
+const findingsCol = () =>
+  collection(db, 'auditFindings')
 
 // Capped, like every other live register. An ISO 45001 programme accumulates
 // audit plans and findings for the life of the organization and nothing prunes
 // them, so neither of these has an upper bound of its own.
-export function subscribeAuditPlans(orgId, callback) {
+export function subscribeAuditPlans(callback) {
   return onSnapshot(
-    query(plansCol(orgId), limit(COLLECTION_READ_CAP)),
+    query(plansCol(), limit(COLLECTION_READ_CAP)),
     (snap) => callback(snap.docs.map((d) => ({ firebaseKey: d.id, ...d.data() }))),
     onReadError('audit plans', callback),
   )
 }
 
-export function subscribeAuditFindings(orgId, callback) {
+export function subscribeAuditFindings(callback) {
   return onSnapshot(
-    query(findingsCol(orgId), limit(COLLECTION_READ_CAP)),
+    query(findingsCol(), limit(COLLECTION_READ_CAP)),
     (snap) => callback(snap.docs.map((d) => ({ firebaseKey: d.id, ...d.data() }))),
     onReadError('audit findings', callback),
   )
 }
 
-export async function createAuditPlan(orgId, payload) {
-  const ref = await addDoc(plansCol(orgId), {
+export async function createAuditPlan(payload) {
+  const ref = await addDoc(plansCol(), {
     ...payload,
-    docId: await reserveDocId(orgId, 'audit'),
+    docId: await reserveDocId('audit'),
     createdAt: payload.createdAt || new Date().toISOString(),
     _serverCreatedAt: serverTimestamp(),
   })
   return ref.id
 }
 
-export async function createAuditFinding(orgId, payload) {
-  const ref = await addDoc(findingsCol(orgId), {
+export async function createAuditFinding(payload) {
+  const ref = await addDoc(findingsCol(), {
     ...payload,
-    docId: await reserveDocId(orgId, 'auditFindings'),
+    docId: await reserveDocId('auditFindings'),
     _serverCreatedAt: serverTimestamp(),
   })
   return ref.id
 }
 
-export function updateAuditFinding(orgId, firebaseKey, data) {
+export function updateAuditFinding(firebaseKey, data) {
   return updateDoc(
-    doc(db, 'organizations', orgId, 'auditFindings', firebaseKey),
+    doc(db, 'auditFindings', firebaseKey),
     data,
   )
 }

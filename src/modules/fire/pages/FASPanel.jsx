@@ -29,7 +29,7 @@ const Row = ({ label, value }) => (
  */
 export default function FASPanel() {
   const { id } = useParams()
-  const { orgId, orgName, profile, isAdmin } = useAuth()
+  const { orgName, profile, isAdmin } = useAuth()
   const { fas, loading } = useFleet()
   const listed = fas.find((a) => a.id === id) || null
   const [fetched, setFetched] = useState(undefined)
@@ -39,7 +39,7 @@ export default function FASPanel() {
 
   useEffect(() => {
     if (loading || listed) return undefined
-    if (!orgId || !id) {
+    if ((!id)) {
       setFetched(null)
       setForId(id)
       return undefined
@@ -47,11 +47,11 @@ export default function FASPanel() {
     let alive = true
     setFetched(undefined)
     setForId(id)
-    getFas(orgId, id)
+    getFas(id)
       .then((row) => { if (alive) setFetched(row) })
       .catch(() => { if (alive) setFetched(null) })
     return () => { alive = false }
-  }, [loading, listed, orgId, id])
+  }, [loading, listed, id])
 
   const loaded = listed || (forId === id ? fetched : undefined)
   const panel = loaded ? { ...loaded, qrToken: loaded.qrToken || minted } : loaded
@@ -60,7 +60,7 @@ export default function FASPanel() {
     if (!panel || busy) return
     setBusy(true)
     try {
-      const token = await generateFasQr(orgId, orgName, panel, { uid: profile?.uid, name: profile?.name })
+      const token = await generateFasQr(orgName, panel, { uid: profile?.uid, name: profile?.name })
       setMinted(token)
       toast.success('QR code generated')
     } catch (err) {

@@ -19,7 +19,7 @@ const FILTERS = [
 
 export default function Injuries() {
   const { injuries, canReadHealth } = useIncidents()
-  const { profile, orgId } = useAuth()
+  const { profile } = useAuth()
   const mayVerify = can(profile?.role, 'injury.verify')
   const mayEdit = can(profile?.role, 'incident.report') // reporter / investigator / admin
   const [filter, setFilter] = useState('all')
@@ -43,7 +43,7 @@ export default function Injuries() {
   const saveEdit = async () => {
     setSavingEdit(true)
     try {
-      await updateInjury(orgId, editing.id, form, { uid: profile?.uid, name: profile?.name })
+      await updateInjury(editing.id, form, { uid: profile?.uid, name: profile?.name })
       toast.success('Injury report updated')
       setEditing(null)
     } catch (e) {
@@ -65,7 +65,7 @@ export default function Injuries() {
   const verify = async (inj, next) => {
     setBusy(inj.id)
     try {
-      await setInjuryVerified(orgId, inj.id, next, { uid: profile?.uid, name: profile?.name }, `${inj.personName} · ${inj.incidentRefNo}`)
+      await setInjuryVerified(inj.id, next, { uid: profile?.uid, name: profile?.name }, `${inj.personName} · ${inj.incidentRefNo}`)
       toast.success(next ? 'Injury report verified' : 'Verification cleared')
     } catch (e) {
       toastCaught(e, 'Could not update')

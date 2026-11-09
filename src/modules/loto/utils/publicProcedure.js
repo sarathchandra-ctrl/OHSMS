@@ -67,7 +67,6 @@ export function publicProcedure(procedure = {}) {
   const points = Array.isArray(procedure.isolationPoints) ? procedure.isolationPoints : []
   const summary = procedure.lockSummary || {}
   return {
-    orgId: str(procedure.orgId),
     procedureCode: str(procedure.procedureCode),
     title: str(procedure.title),
     equipment: str(procedure.equipment),

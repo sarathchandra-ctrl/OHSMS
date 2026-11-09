@@ -24,7 +24,7 @@ import { safeWaChatLink } from './whatsappConnectApi.js'
  * The access token, the app secret and the verify token are not parameters
  * of those callables and are not rendered here.
  */
-export default function WhatsAppConnect({ orgId, actor }) {
+export default function WhatsAppConnect({ actor }) {
   const [status, setStatus] = useState(null)
   const [failed, setFailed] = useState(false)
   const [loading, setLoading] = useState(true)
@@ -47,7 +47,6 @@ export default function WhatsAppConnect({ orgId, actor }) {
   }
 
   useEffect(() => {
-    if (!orgId) return undefined
     let cancelled = false
     ;(async () => {
       try {
@@ -65,12 +64,11 @@ export default function WhatsAppConnect({ orgId, actor }) {
     return () => {
       cancelled = true
     }
-  }, [orgId])
+  }, [])
 
   useEffect(() => {
-    if (!orgId) return undefined
-    return subscribeOrgUsers(orgId, setMembers)
-  }, [orgId])
+    return subscribeOrgUsers(setMembers)
+  }, [])
 
   const employees = useMemo(
     () =>
@@ -83,7 +81,7 @@ export default function WhatsAppConnect({ orgId, actor }) {
   const byUid = useMemo(() => new Map(employees.map((m) => [m.uid, m])), [employees])
 
   const audit = (summary) =>
-    logAudit(orgId, actor, AUDIT.ORG_SETTINGS, {
+    logAudit(actor, AUDIT.ORG_SETTINGS, {
       module: 'core',
       target: 'whatsapp',
       targetLabel: 'WhatsApp',

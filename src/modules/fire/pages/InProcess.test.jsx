@@ -29,7 +29,7 @@ vi.mock('../context/FleetContext', () => ({
   }),
 }))
 vi.mock('../context/AuthContext', () => ({
-  useAuth: () => ({ orgId: 'o', orgName: 'Depot Org', profile: { name: 'Ada' } }),
+  useAuth: () => ({ orgName: 'Depot Org', profile: { name: 'Ada' } }),
 }))
 
 const { default: InProcess } = await import('./InProcess')

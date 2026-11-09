@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 
-const auth = { value: { orgId: 'org-1', orgName: 'Acme', profile: { uid: 'a', name: 'Ada' }, isAdmin: true } }
+const auth = { value: { orgName: 'Acme', profile: { uid: 'a', name: 'Ada' }, isAdmin: true } }
 const fleet = { value: { loading: false, fas: [] } }
 const getFas = vi.fn()
 const generateFasQr = vi.fn()
@@ -56,7 +56,7 @@ beforeEach(() => {
   generateFasQr.mockReset()
   exportQrLabelPdf.mockReset()
   exportQrLabelPdf.mockResolvedValue({ exported: 1, skipped: 0 })
-  auth.value = { orgId: 'org-1', orgName: 'Acme', profile: { uid: 'a', name: 'Ada' }, isAdmin: true }
+  auth.value = { orgName: 'Acme', profile: { uid: 'a', name: 'Ada' }, isAdmin: true }
   fleet.value = { loading: false, fas: [panel] }
 })
 

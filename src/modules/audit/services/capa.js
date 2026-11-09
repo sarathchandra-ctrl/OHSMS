@@ -4,10 +4,10 @@ import { db } from '../../../shared/db'
 
 // Reads only — see the note in audits.js. createCapa and updateCapa were part
 // of the superseded data model and had no callers.
-const col = (orgId) => collection(db, 'organizations', orgId, 'capas')
+const col = () => collection(db, 'capas')
 
-export function subscribeCapas(orgId, callback) {
-  const q = query(col(orgId), orderBy('createdAt', 'desc'), limit(1000))
+export function subscribeCapas(callback) {
+  const q = query(col(), orderBy('createdAt', 'desc'), limit(1000))
   return onSnapshot(
     q,
     (snap) => callback(snap.docs.map((d) => ({ id: d.id, ...d.data() }))),

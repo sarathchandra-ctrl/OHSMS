@@ -1,42 +1,33 @@
 import { describe, it, expect } from 'vitest'
-import { mayDeleteFile, ownedByOrg, DELETING_ROLES } from './fileDelete.js'
+import { mayDeleteFile, isAppFilePath, DELETING_ROLES } from './fileDelete.js'
 
-const manager = { orgId: 'orgA', role: 'manager', status: 'approved' }
-const P = 'orgs/orgA/incidents/evidence.jpg'
+const manager = { role: 'manager', status: 'approved' }
+const P = 'files/incidents/evidence.jpg'
 
-describe('the tenancy boundary on a client-supplied path', () => {
-  it('accepts a path inside the org prefix', () => {
-    expect(ownedByOrg('orgs/orgA/incidents/x.jpg', 'orgA')).toBe(true)
-  })
-
-  it('refuses another tenant prefix', () => {
-    expect(ownedByOrg('orgs/orgB/incidents/x.jpg', 'orgA')).toBe(false)
-  })
-
-  // The prefix check is a string comparison, so a neighbouring org whose id
-  // merely STARTS with this one must not slip through.
-  it('refuses an org id that is only a prefix of another', () => {
-    expect(ownedByOrg('orgs/orgAB/incidents/x.jpg', 'orgA')).toBe(false)
+describe('the boundary on a client-supplied path', () => {
+  it('accepts a path inside files/', () => {
+    expect(isAppFilePath('files/incidents/x.jpg')).toBe(true)
   })
 
   it('refuses traversal rather than normalising it', () => {
-    expect(ownedByOrg('orgs/orgA/../orgB/x.jpg', 'orgA')).toBe(false)
+    expect(isAppFilePath('files/../secret/x.jpg')).toBe(false)
+    expect(isAppFilePath('files/a\\..\\b.jpg')).toBe(false)
   })
 
-  it('refuses a path outside the orgs tree entirely', () => {
-    expect(ownedByOrg('secret.jpg', 'orgA')).toBe(false)
-    expect(ownedByOrg('orgsorgA/x.jpg', 'orgA')).toBe(false)
+  it('refuses a path outside the files tree entirely', () => {
+    expect(isAppFilePath('secret.jpg')).toBe(false)
+    expect(isAppFilePath('filesx/x.jpg')).toBe(false)
+    expect(isAppFilePath('orgs/orgA/x.jpg')).toBe(false)
   })
 
-  it('refuses when either side is missing', () => {
-    expect(ownedByOrg('', 'orgA')).toBe(false)
-    expect(ownedByOrg(P, '')).toBe(false)
-    expect(ownedByOrg(null, null)).toBe(false)
+  it('refuses when the path is missing', () => {
+    expect(isAppFilePath('')).toBe(false)
+    expect(isAppFilePath(null)).toBe(false)
   })
 })
 
 describe('who may delete a file', () => {
-  it('allows a manager and an admin of the owning org', () => {
+  it('allows a manager and an admin', () => {
     expect(mayDeleteFile(manager, P).ok).toBe(true)
     expect(mayDeleteFile({ ...manager, role: 'admin' }, P).ok).toBe(true)
   })
@@ -61,11 +52,6 @@ describe('who may delete a file', () => {
     expect(mayDeleteFile({ ...manager, status: 'pending' }, P).ok).toBe(false)
   })
 
-  it('refuses a manager who has been moved to another tenant', () => {
-    expect(mayDeleteFile({ ...manager, orgId: 'orgB' }, P))
-      .toEqual({ ok: false, reason: 'foreign-path' })
-  })
-
   it('refuses when the profile is gone entirely', () => {
     expect(mayDeleteFile(null, P)).toEqual({ ok: false, reason: 'no-profile' })
     expect(mayDeleteFile(undefined, P).ok).toBe(false)
@@ -84,10 +70,8 @@ describe('who may delete a file', () => {
     expect(mayDeleteFile({ ...manager, mustChangePassword: false }, P).ok).toBe(true)
   })
 
-  // Tenancy is checked against the LIVE org, so a manager of A cannot reach B's
-  // files even though their role is beyond reproach.
-  it('refuses a legitimate manager pointing at another org file', () => {
-    expect(mayDeleteFile(manager, 'orgs/orgB/incidents/evidence.jpg'))
+  it('refuses a legitimate manager pointing outside the stored files', () => {
+    expect(mayDeleteFile(manager, 'secrets/evidence.jpg'))
       .toEqual({ ok: false, reason: 'foreign-path' })
   })
 

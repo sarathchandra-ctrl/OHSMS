@@ -17,7 +17,7 @@ import { FIRST_AID_ITEM_NAMES, FIRST_AID_ITEM_BY_NAME, STRETCHER_STATUS } from '
 const fleet = { value: null }
 
 vi.mock('../context/AuthContext', () => ({
-  useAuth: () => ({ orgId: 'org-1', orgName: 'Acme', profile: { uid: 'u1', name: 'Ravi' }, isAdmin: true, isManager: true }),
+  useAuth: () => ({ orgName: 'Acme', profile: { uid: 'u1', name: 'Ravi' }, isAdmin: true, isManager: true }),
 }))
 vi.mock('../context/FleetContext', () => ({ useFleet: () => fleet.value }))
 // Named one by one rather than through a catch-all Proxy: a Proxy whose get

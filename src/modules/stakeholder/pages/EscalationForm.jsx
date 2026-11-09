@@ -37,7 +37,7 @@ const EMPTY_MEMBER = { memberId: '', name: '', contact: '', note: '' }
 export default function EscalationForm() {
   const { id } = useParams()
   const navigate = useNavigate()
-  const { orgId, actor, isManager } = useAuth()
+  const { actor, isManager } = useAuth()
   const { escalations, sites, loading } = useStakeholder()
 
   const [form, setForm] = useState(EMPTY)
@@ -68,8 +68,8 @@ export default function EscalationForm() {
     }
     setBusy(true)
     try {
-      if (id) await updateEscalation(orgId, id, form, actor)
-      else await addEscalation(orgId, form, actor)
+      if (id) await updateEscalation(id, form, actor)
+      else await addEscalation(form, actor)
       toast.success(id ? 'Saved' : 'Escalation logged')
       navigate('/stakeholder/escalations')
     } catch (e) {
@@ -87,7 +87,7 @@ export default function EscalationForm() {
     // eslint-disable-next-line no-alert
     if (!window.confirm(warn)) return
     try {
-      await deleteEscalation(orgId, id, form.title, actor)
+      await deleteEscalation(id, form.title, actor)
       toast.success('Deleted')
       navigate('/stakeholder/escalations')
     } catch (e) {
@@ -225,14 +225,14 @@ export default function EscalationForm() {
           <h2 className="text-sm font-bold text-ink-800">Evidence</h2>
           <AttachmentField
             kind="cctv"
-            orgId={orgId}
+           
             actor={actor}
             value={form.attachments?.cctv || []}
             onChange={(cctv) => patch({ attachments: { ...form.attachments, cctv } })}
           />
           <AttachmentField
             kind="ethics"
-            orgId={orgId}
+           
             actor={actor}
             value={form.attachments?.ethics || []}
             onChange={(ethics) => patch({ attachments: { ...form.attachments, ethics } })}

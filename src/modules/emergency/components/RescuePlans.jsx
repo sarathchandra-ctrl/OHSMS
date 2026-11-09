@@ -34,7 +34,7 @@ const statusMeta = (key) => PLAN_STATUS.find((s) => s.key === key) || PLAN_STATU
  */
 export default function RescuePlans({ site, plans, users, contacts = [], baseline = false }) {
   const roleLabels = useErpRoleLabels()
-  const { orgId, actor, isManager } = useAuth()
+  const { actor, isManager } = useAuth()
   const [editing, setEditing] = useState(null) // 'new' | plan | null
   const [form, setForm] = useState(EMPTY)
   const [equipInput, setEquipInput] = useState('')
@@ -74,7 +74,7 @@ export default function RescuePlans({ site, plans, users, contacts = [], baselin
     if (!b) return toast.error('That baseline no longer exists')
     setBusy(true)
     try {
-      await syncFromBaseline(orgId, plan, b, actor, { keepLocalEdits })
+      await syncFromBaseline(plan, b, actor, { keepLocalEdits })
       toast.success('Updated from baseline — review and approve before use')
       setSyncing(null)
     } catch (err) { toastCaught(err, 'Failed') } finally { setBusy(false) }
@@ -104,7 +104,7 @@ export default function RescuePlans({ site, plans, users, contacts = [], baselin
     try {
       for (const p of targets) {
         const b = baselineFor(p, baselineLibrary)
-        if (b) { await syncFromBaseline(orgId, p, b, actor, { keepLocalEdits: false }); n += 1 }
+        if (b) { await syncFromBaseline(p, b, actor, { keepLocalEdits: false }); n += 1 }
       }
       toast.success(`${n} plan(s) updated — each needs re-approval`)
     } catch (err) {
@@ -170,9 +170,9 @@ export default function RescuePlans({ site, plans, users, contacts = [], baselin
         customized: form.customized || (!baseline && !!form.baselineId && editing !== 'new'),
         ...(wasApproved ? { status: 'draft', approvedBy: '', approvedByName: '', approvedOn: '' } : null),
       }
-      if (editing === 'new') { await addRescuePlan(orgId, payload, actor); toast.success(baseline ? 'Baseline plan created' : 'Rescue plan created') }
+      if (editing === 'new') { await addRescuePlan(payload, actor); toast.success(baseline ? 'Baseline plan created' : 'Rescue plan created') }
       else {
-        await updateRescuePlan(orgId, editing.id, payload, actor)
+        await updateRescuePlan(editing.id, payload, actor)
         toast.success(wasApproved ? 'Updated — needs re-approval before use' : 'Rescue plan updated')
       }
       setEditing(null)
@@ -182,7 +182,7 @@ export default function RescuePlans({ site, plans, users, contacts = [], baselin
   const approve = async (p) => {
     if (!window.confirm(`Approve "${p.title}" for use at ${site.name}?\n\nIt becomes the site's live procedure for ${p.scenario} and prints on the site FERP.`)) return
     setBusy(true)
-    try { await approveRescuePlan(orgId, p, actor); toast.success('Approved for site use') }
+    try { await approveRescuePlan(p, actor); toast.success('Approved for site use') }
     catch (err) { toastCaught(err, 'Failed') } finally { setBusy(false) }
   }
 
@@ -191,7 +191,7 @@ export default function RescuePlans({ site, plans, users, contacts = [], baselin
     if (!picked.length) return toast.error('Pick at least one baseline plan')
     setBusy(true)
     try {
-      const res = await recallBaselines(orgId, site, picked, plans, actor, contacts)
+      const res = await recallBaselines(site, picked, plans, actor, contacts)
       toast.success(`${res.copied} plan(s) recalled to ${site.name}${res.skipped ? ` (${res.skipped} already covered)` : ''}`)
       setRecallOpen(false)
       setRecallPicked([])
@@ -200,7 +200,7 @@ export default function RescuePlans({ site, plans, users, contacts = [], baselin
 
   const remove = async (p) => {
     if (!window.confirm(`Delete the "${p.title}" rescue plan?`)) return
-    try { await deleteRescuePlan(orgId, p.id, actor, `${site.name} · ${p.title}`); toast.success('Plan deleted') }
+    try { await deleteRescuePlan(p.id, actor, `${site.name} · ${p.title}`); toast.success('Plan deleted') }
     catch (err) { toastCaught(err, 'Failed') }
   }
 

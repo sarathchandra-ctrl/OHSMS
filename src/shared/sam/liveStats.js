@@ -6,9 +6,9 @@ import { collection, query, where, getCountFromServer } from '../data/client.js'
 import { db } from '../db'
 
 const TTL_MS = 60_000
-const cache = new Map() // orgId → { at, stats }
+const cache = new Map() // 'org' → { at, stats }
 
-const orgCol = (orgId, name) => collection(db, 'organizations', orgId, name)
+const orgCol = (name) => collection(db, name)
 
 async function count(ref) {
   try {
@@ -20,36 +20,36 @@ async function count(ref) {
 }
 
 /** Counts across the modules Sam talks about. Missing keys = unavailable. */
-export async function getStats(orgId) {
-  const hit = cache.get(orgId)
+export async function getStats() {
+  const hit = cache.get('org')
   if (hit && Date.now() - hit.at < TTL_MS) return hit.stats
 
   const jobs = {
-    incidents: count(orgCol(orgId, 'incidents')),
-    illnesses: count(orgCol(orgId, 'illnesses')),
-    assessments: count(orgCol(orgId, 'assessments')),
-    auditFindings: count(orgCol(orgId, 'auditFindings')),
-    auditPlans: count(orgCol(orgId, 'auditPlans')),
-    inspectionRecords: count(orgCol(orgId, 'inspectionRecords')),
-    permits: count(orgCol(orgId, 'permits')),
-    consultations: count(orgCol(orgId, 'consultations')),
-    mockDrills: count(orgCol(orgId, 'mockDrills')),
-    extinguishers: count(orgCol(orgId, 'extinguishers')),
-    erpContacts: count(orgCol(orgId, 'erpContacts')),
-    erpRescuePlans: count(orgCol(orgId, 'erpRescuePlans')),
-    trainingCourses: count(orgCol(orgId, 'trainingCourses')),
-    trainingRecords: count(orgCol(orgId, 'trainingRecords')),
-    trainingAssignments: count(orgCol(orgId, 'trainingAssignments')),
-    documents: count(orgCol(orgId, 'documents')),
-    sites: count(orgCol(orgId, 'sites')),
-    users: count(query(collection(db, 'users'), where('orgId', '==', orgId))),
-    lotoProcedures: count(query(collection(db, 'procedures'), where('orgId', '==', orgId))),
+    incidents: count(orgCol('incidents')),
+    illnesses: count(orgCol('illnesses')),
+    assessments: count(orgCol('assessments')),
+    auditFindings: count(orgCol('auditFindings')),
+    auditPlans: count(orgCol('auditPlans')),
+    inspectionRecords: count(orgCol('inspectionRecords')),
+    permits: count(orgCol('permits')),
+    consultations: count(orgCol('consultations')),
+    mockDrills: count(orgCol('mockDrills')),
+    extinguishers: count(orgCol('extinguishers')),
+    erpContacts: count(orgCol('erpContacts')),
+    erpRescuePlans: count(orgCol('erpRescuePlans')),
+    trainingCourses: count(orgCol('trainingCourses')),
+    trainingRecords: count(orgCol('trainingRecords')),
+    trainingAssignments: count(orgCol('trainingAssignments')),
+    documents: count(orgCol('documents')),
+    sites: count(orgCol('sites')),
+    users: count(query(collection(db, 'users'))),
+    lotoProcedures: count(query(collection(db, 'procedures'))),
   }
 
   const entries = await Promise.all(
     Object.entries(jobs).map(async ([k, p]) => [k, await p]),
   )
   const stats = Object.fromEntries(entries.filter(([, v]) => typeof v === 'number'))
-  cache.set(orgId, { at: Date.now(), stats })
+  cache.set('org', { at: Date.now(), stats })
   return stats
 }

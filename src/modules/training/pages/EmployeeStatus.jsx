@@ -17,7 +17,6 @@ const CELL_TONE = { valid: 'green', expiring: 'amber', expired: 'red', none: 'gr
 const CELL_LABEL = { valid: 'Valid', expiring: 'Expiring soon', expired: 'Expired', none: 'Completed', missing: 'Not trained' }
 
 export default function EmployeeStatus() {
-  const { orgId } = useAuth()
   const { loading, courses, records, users, openAssignments } = useTraining()
   const [exporting, setExporting] = useState(false)
   const today = todayISO()
@@ -110,7 +109,7 @@ export default function EmployeeStatus() {
     setExporting(true)
     try {
       // Reports use the FULL history (the live views are capped for speed).
-      const [allRecords, allAssignments] = await Promise.all([fetchAllRecords(orgId), fetchAllAssignments(orgId)])
+      const [allRecords, allAssignments] = await Promise.all([fetchAllRecords(), fetchAllAssignments()])
       const report = buildStatusReport(users, courses, allRecords, allAssignments.filter((a) => a.status === 'assigned'), {
         from: exportMode === 'range' ? from : '',
         to,

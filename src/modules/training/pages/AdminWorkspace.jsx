@@ -23,7 +23,7 @@ function itemBadge(a, today) {
 }
 
 export default function AdminWorkspace() {
-  const { orgId, actor, isManager, org } = useAuth()
+  const { actor, isManager, org } = useAuth()
   const { loading, courses, users, assignments, openAssignments, siteInventory } = useTraining()
   const today = todayISO()
 
@@ -77,7 +77,6 @@ export default function AdminWorkspace() {
     setBusy(true)
     try {
       const res = await assignCourse(
-        orgId,
         { course, employees: targets, dueDate: form.dueDate, group: { mode, label: groupLabel } },
         actor,
         openAssignments,
@@ -155,7 +154,7 @@ export default function AdminWorkspace() {
     if (!window.confirm(`Cancel ${c.open} open assignment(s) for "${c.courseName}" (${c.groupLabel})?`)) return
     setBusyKey(c.key)
     try {
-      await cancelAssignmentsBulk(orgId, c.openIds, actor, `${c.courseName} — ${c.groupLabel}`)
+      await cancelAssignmentsBulk(c.openIds, actor, `${c.courseName} — ${c.groupLabel}`)
       toast.success(`${c.openIds.length} assignment(s) cancelled`)
     } catch (e) {
       toastCaught(e, 'Failed')
@@ -167,7 +166,7 @@ export default function AdminWorkspace() {
   const cancelOne = async (a) => {
     setBusyKey(a.id)
     try {
-      await cancelAssignment(orgId, a.id, actor, `${a.courseName} · ${a.employeeName}`)
+      await cancelAssignment(a.id, actor, `${a.courseName} · ${a.employeeName}`)
       toast.success('Assignment cancelled')
     } catch (e) {
       toastCaught(e, 'Failed')

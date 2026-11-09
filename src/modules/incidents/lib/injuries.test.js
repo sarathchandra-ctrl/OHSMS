@@ -36,7 +36,7 @@ vi.mock('./firestore', () => ({ logAudit: vi.fn(async () => {}) }))
 // the part that matters — a bucket is not what this suite is testing.
 vi.mock('../../../shared/storage', () => ({
   removeFile: vi.fn(async () => {}),
-  putFile: vi.fn(async (_orgId, kind) => ({
+  putFile: vi.fn(async (kind) => ({
     path: `orgs/acme/${kind}/ab12-letter.pdf`,
     url: 'https://example.test/bearer',
     size: 12,
@@ -51,7 +51,7 @@ vi.mock('../../../shared/storage', () => ({
   tooLargeForInline: (name) => `${name} is too large to store inline`,
 }))
 
-vi.mock('firebase/firestore', async (importOriginal) => {
+vi.mock('../../../shared/data/client.js', async (importOriginal) => {
   const actual = await importOriginal()
   const write = (ref, data, opts) => {
     fake.writes.push({ path: ref.path, data })
@@ -169,7 +169,7 @@ describe('what an incident document may carry about an injury', () => {
   })
 
   it('is applied by createIncident, whatever the caller passes', async () => {
-    const id = await createIncident(ORG, actor, { type: 'lost_time', injuryReports: [REPORT] })
+    const id = await createIncident(actor, { type: 'lost_time', injuryReports: [REPORT] })
     const stored = fake.store.get(`${INCIDENTS}/${id}`)
     expect(stored.injuryReports).toEqual([{ personId: 'EMP-104', personName: 'Priya Nair', firstAidDone: true }])
     // The whole document, not just that array: nothing clinical anywhere on it.
@@ -178,21 +178,21 @@ describe('what an incident document may carry about an injury', () => {
 
   it('is applied by updateIncident too — the wizard writes through it', async () => {
     fake.store.set(`${INCIDENTS}/inc1`, { type: 'lost_time', injuryReports: [] })
-    await updateIncident(ORG, 'inc1', { injuryReports: [REPORT] }, { actor, silent: true })
+    await updateIncident('inc1', { injuryReports: [REPORT] }, { actor, silent: true })
     expect(fake.store.get(`${INCIDENTS}/inc1`).injuryReports)
       .toEqual([{ personId: 'EMP-104', personName: 'Priya Nair', firstAidDone: true }])
   })
 
   it('leaves updates that mention no injury alone', async () => {
     fake.store.set(`${INCIDENTS}/inc1`, { type: 'lost_time', injuryReports: [{ personId: 'EMP-104' }] })
-    await updateIncident(ORG, 'inc1', { narrative: 'Reworded' }, { actor, silent: true })
+    await updateIncident('inc1', { narrative: 'Reworded' }, { actor, silent: true })
     expect(fake.store.get(`${INCIDENTS}/inc1`).injuryReports).toEqual([{ personId: 'EMP-104' }])
   })
 })
 
 describe('syncIncidentInjuries', () => {
   it('writes the clinical detail to /injuries and nothing to the incident', async () => {
-    await syncIncidentInjuries(ORG, incident(), [REPORT], actor)
+    await syncIncidentInjuries(incident(), [REPORT], actor)
 
     expect(fake.store.get(`${INJURIES}/inc1__EMP-104`)).toMatchObject({
       incidentId: 'inc1',
@@ -210,7 +210,7 @@ describe('syncIncidentInjuries', () => {
   it('records nothing for an entry with no personId', async () => {
     // The doc id is built from it. This is the case that made the portal's
     // injury capture exist only on the incident.
-    await syncIncidentInjuries(ORG, incident(), [{ name: 'Priya', injuryType: 'Burn' }], actor)
+    await syncIncidentInjuries(incident(), [{ name: 'Priya', injuryType: 'Burn' }], actor)
     expect(fake.writesUnder(INJURIES)).toEqual([])
   })
 })
@@ -227,7 +227,7 @@ describe('the mirror-back from an Injuries-page edit', () => {
       injuryReports: [{ personId: 'EMP-104', personName: 'Priya Nair', firstAidDone: false }],
     })
 
-    await updateInjury(ORG, 'inc1__EMP-104', {
+    await updateInjury('inc1__EMP-104', {
       firstAidDone: true, firstAidDetail: 'Dressing changed', medication: 'Ibuprofen', bodyParts: ['head'],
     }, actor)
 
@@ -252,7 +252,7 @@ describe('the mirror-back from an Injuries-page edit', () => {
       ],
     })
 
-    await updateInjury(ORG, 'inc1__EMP-104', { medication: 'Ibuprofen' }, actor)
+    await updateInjury('inc1__EMP-104', { medication: 'Ibuprofen' }, actor)
 
     expect(fake.store.get(`${INCIDENTS}/inc1`).injuryReports).toEqual([
       { personId: 'EMP-104', personName: 'Priya Nair', firstAidDone: true },
@@ -303,7 +303,7 @@ describe('deleting an injury report', () => {
 
   it('stamps deletedAt so the sweep can find it', async () => {
     seed()
-    await deleteInjury(ORG, ID, actor)
+    await deleteInjury(ID, actor)
     const after = fake.store.get(`${INJURIES}/${ID}`)
     expect(after.deletedAt).toBe('TS')
     expect(after.deletedBy).toBe('Alex Admin')
@@ -314,21 +314,21 @@ describe('deleting an injury report', () => {
   // whole purpose is deleting it.
   it('leaves deletedAt in the clear', async () => {
     seed()
-    await deleteInjury(ORG, ID, actor)
+    await deleteInjury(ID, actor)
     const written = fake.writesUnder(INJURIES).at(-1).data
     expect(written.deletedAt).toBe('TS')
     expect(typeof written.deletedAt).not.toBe('object')
   })
 
   it('does nothing at all for an id that is not there', async () => {
-    await deleteInjury(ORG, 'inc9__nobody', actor)
+    await deleteInjury('inc9__nobody', actor)
     expect(fake.writesUnder(INJURIES)).toHaveLength(0)
   })
 
   it('restores by clearing the clock, not by rewriting the record', async () => {
     seed()
-    await deleteInjury(ORG, ID, actor)
-    await restoreInjury(ORG, ID, actor)
+    await deleteInjury(ID, actor)
+    await restoreInjury(ID, actor)
     const after = fake.store.get(`${INJURIES}/${ID}`)
     expect(after.deletedAt).toBeNull()
     expect(after.deletedBy).toBeNull()
@@ -366,7 +366,7 @@ describe('filing a medical record', () => {
   })
 
   it('writes the pointer on the injury and uploads under medical-records', async () => {
-    const id = await addMedicalRecord(ORG, incident(), 'EMP-104', file)
+    const id = await addMedicalRecord(incident(), 'EMP-104', file)
     expect(id).toBeTruthy()
     expect(putFile).toHaveBeenCalledWith(
       ORG,
@@ -391,7 +391,7 @@ describe('filing a medical record', () => {
     fake.store.set(`${INJURIES}/inc1__EMP-104`, {
       incidentId: 'inc1', personId: 'EMP-104', deletedAt: 'TS', status: 'verified', medication: 'kept',
     })
-    await addMedicalRecord(ORG, incident(), 'EMP-104', file)
+    await addMedicalRecord(incident(), 'EMP-104', file)
     const injury = fake.store.get(`${INJURIES}/inc1__EMP-104`)
     expect(injury.deletedAt).toBe('TS')
     expect(injury.status).toBe('verified')
@@ -399,7 +399,7 @@ describe('filing a medical record', () => {
   })
 
   it('refuses to file a medical record as an incident photo', async () => {
-    await expect(addIncidentPhoto(ORG, 'inc1', { ...file, kind: 'medical_record' }))
+    await expect(addIncidentPhoto('inc1', { ...file, kind: 'medical_record' }))
       .rejects.toThrow(/injury report/)
     expect(putFile).not.toHaveBeenCalled()
     expect(fake.writes.some((w) => w.path.includes('/photos/'))).toBe(false)
@@ -419,7 +419,7 @@ describe('purging an injury report', () => {
   })
 
   it('destroys the clinical documents, their pointers and the record itself', async () => {
-    await purgeInjury(ORG, ID, actor, 'IRA-2026-9001')
+    await purgeInjury(ID, actor, 'IRA-2026-9001')
 
     expect(removeFile).toHaveBeenCalledTimes(2)
     expect(removeFile.mock.calls.map((c) => c[0]).sort()).toEqual([
@@ -435,7 +435,7 @@ describe('purging an injury report', () => {
   // it is data nobody can find and nobody can delete. The pointer going without
   // the object is the shape of a failed erasure request.
   it('never removes a pointer while leaving its object behind', async () => {
-    await purgeInjury(ORG, ID, actor, 'IRA-2026-9001')
+    await purgeInjury(ID, actor, 'IRA-2026-9001')
     const askedFor = removeFile.mock.calls.map((c) => c[0])
     for (const path of [
       `orgs/${ORG}/medical-records/ab12-gp-letter.pdf`,
@@ -448,7 +448,7 @@ describe('purging an injury report', () => {
   // there, it is a request against the org prefix root.
   it('asks the bucket for nothing when a record is inlined', async () => {
     fake.store.set(`${RECORDS}/r3`, { name: 'sealed', dataUrl: 'data:application/pdf;base64,AAAA' })
-    await purgeInjury(ORG, ID, actor, 'IRA-2026-9001')
+    await purgeInjury(ID, actor, 'IRA-2026-9001')
     expect(removeFile.mock.calls.map((c) => c[0])).not.toContain('')
     expect(removeFile).toHaveBeenCalledTimes(2)
     expect(fake.store.has(`${RECORDS}/r3`)).toBe(false)
@@ -457,7 +457,7 @@ describe('purging an injury report', () => {
   it('purges an injury that has no clinical documents at all', async () => {
     fake.store.delete(`${RECORDS}/r1`)
     fake.store.delete(`${RECORDS}/r2`)
-    await purgeInjury(ORG, ID, actor, 'IRA-2026-9001')
+    await purgeInjury(ID, actor, 'IRA-2026-9001')
     expect(removeFile).not.toHaveBeenCalled()
     expect(fake.store.has(`${INJURIES}/${ID}`)).toBe(false)
   })

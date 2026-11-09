@@ -14,6 +14,6 @@
 import { onSiteCreated } from '../../shared/org/siteHooks'
 import { provisionMerakisForNewSites } from './lib/firestore'
 
-onSiteCreated('cctv', async (orgId, sites, actor) => {
-  await provisionMerakisForNewSites(orgId, sites, actor)
+onSiteCreated('cctv', async (sites, actor) => {
+  await provisionMerakisForNewSites(sites, actor)
 })

@@ -41,7 +41,7 @@ function ShareBar({ pct }) {
 
 export default function StretcherDashboard() {
   const { stretchers, sites, pendingReports, incomplete, loading } = useFleet()
-  const { orgId, profile, isManager } = useAuth()
+  const { profile, isManager } = useAuth()
   const [busyId, setBusyId] = useState(null)
   const today = useMemo(() => new Date(), [])
   const s = useMemo(() => stretcherSummary(stretchers, today), [stretchers, today])
@@ -50,7 +50,7 @@ export default function StretcherDashboard() {
   const decideDefect = async (report, approve) => {
     setBusyId(report.id)
     try {
-      await decideAssetReport(orgId, report, approve, profile?.name, { uid: profile?.uid, name: profile?.name })
+      await decideAssetReport(report, approve, profile?.name, { uid: profile?.uid, name: profile?.name })
       toast.success(approve ? 'Defect confirmed — stretcher marked out of service' : 'Defect report dismissed')
     } catch (e) {
       toastCaught(e, 'Could not update the report')

@@ -18,8 +18,8 @@ import { db } from '../db'
 import { logAudit } from './orgData'
 import { AUDIT } from '../audit/audit'
 
-export const integrationRef = (orgId, name) =>
-  doc(db, 'organizations', orgId, 'integrations', name)
+export const integrationRef = (name) =>
+  doc(db, 'integrations', name)
 
 
 /**
@@ -33,9 +33,9 @@ export const integrationRef = (orgId, name) =>
  * credential written into the append-only trail is a credential that outlives
  * every rotation of it.
  */
-export async function saveIntegration(orgId, name, settings, actor) {
-  await setDoc(integrationRef(orgId, name), { ...settings, updatedAt: serverTimestamp() }, { merge: true })
-  await logAudit(orgId, actor, AUDIT.ORG_SETTINGS, {
+export async function saveIntegration(name, settings, actor) {
+  await setDoc(integrationRef(name), { ...settings, updatedAt: serverTimestamp() }, { merge: true })
+  await logAudit(actor, AUDIT.ORG_SETTINGS, {
     target: 'integration',
     targetId: name,
     targetLabel: name,

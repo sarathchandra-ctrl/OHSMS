@@ -12,7 +12,7 @@ const RaContext = createContext(null)
 
 /** One real-time listener for the org's risk assessments + org doc; pages read slices. */
 export function RaProvider({ children }) {
-  const { orgId, profile, isAdmin } = useAuth()
+  const { profile, isAdmin } = useAuth()
   const [assessments, setAssessments] = useState([])
   const [org, setOrg] = useState(null)
   const [activity, setActivity] = useState([])
@@ -21,7 +21,6 @@ export function RaProvider({ children }) {
   const [denied, setDenied] = useState(false)
 
   useEffect(() => {
-    if (!orgId) return
     setLoading(true)
     setDenied(false)
     // If a listener is denied/fails, stop loading so the UI is not a spinner.
@@ -40,23 +39,22 @@ export function RaProvider({ children }) {
       }
     }
     const u1 = subscribeAssessments(
-      orgId,
       (list) => {
         setAssessments(list)
         setLoading(false)
       },
       onErr
     )
-    const u2 = subscribeOrg(orgId, setOrg, onErr)
-    const u3 = subscribeActivity(orgId, setActivity, onErr)
-    const u4 = subscribeSites(orgId, setAllSites)
+    const u2 = subscribeOrg(setOrg, onErr)
+    const u3 = subscribeActivity(setActivity, onErr)
+    const u4 = subscribeSites(setAllSites)
     return () => {
       u1()
       u2()
       u3()
       u4()
     }
-  }, [orgId])
+  }, [])
 
   const siteInventory = useMemo(
     () => resolveAccessibleSites(profile, allSites, { isAdmin }),

@@ -62,10 +62,10 @@ const DIMENSION_COLUMNS = [
   ['Centre type', 'center_type / format'],
 ]
 
-export default function MetabaseSettings({ orgId, actor }) {
+export default function MetabaseSettings({ actor }) {
   return (
     <div className="max-w-2xl space-y-5">
-      <MetabaseConnect orgId={orgId} actor={actor} />
+      <MetabaseConnect actor={actor} />
 
       <Card>
         <h3 className="flex items-center gap-2 font-semibold text-ink-800">

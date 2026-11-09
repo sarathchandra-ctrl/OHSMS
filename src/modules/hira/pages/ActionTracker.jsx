@@ -34,7 +34,7 @@ const memberName = (members, id) => members?.find((m) => m.id === id)?.name || '
 
 export default function ActionTracker() {
   const { assessments, loading } = useRa()
-  const { orgId, user, profile } = useAuth()
+  const { user, profile } = useAuth()
   const [filter, setFilter] = useState('all')
   const [focus, setFocus] = useState('all')
   const [overdueOnly, setOverdueOnly] = useState(false)
@@ -86,13 +86,12 @@ export default function ActionTracker() {
   const patchControl = async (row, patch) => {
     try {
       await patchAdditionalControl(
-        orgId,
         row.assessmentId,
         { activityId: row.activityId, hazardId: row.hazardId, controlId: row.control.id },
         patch,
       )
       if (patch.status) {
-        logActivity(orgId, { uid: user?.uid, name: profile?.name }, {
+        logActivity({ uid: user?.uid, name: profile?.name }, {
           type: 'action',
           message: `set action “${row.control.description || row.control.hierarchy}” to ${patch.status} (${row.assessmentName})`,
           assessmentId: row.assessmentId,

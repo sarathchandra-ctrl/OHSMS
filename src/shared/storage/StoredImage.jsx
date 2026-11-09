@@ -26,8 +26,8 @@ import { useFileUrl } from './useFileUrl'
  * both is how an unreadable medical record and a deleted one came to look
  * identical.
  */
-export function StoredImage({ pointer, orgId, collection, fallback = null, alt = '', ...imgProps }) {
-  const { src, loading, restricted } = useFileUrl(pointer, { orgId, collection })
+export function StoredImage({ pointer, collection, fallback = null, alt = '', ...imgProps }) {
+  const { src, loading, restricted } = useFileUrl(pointer, { collection })
 
   if (restricted) {
     return (

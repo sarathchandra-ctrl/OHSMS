@@ -63,7 +63,7 @@ export const MEDICAL = 'medical'
  * — and one added to one list is the hole shipped. The rule for this exact
  * document id denies every client operation outright; see firestore.rules.
  */
-export const KEY_DOC_PATH = (orgId) => `organizations/${orgId}/meta/cryptoKeys`
+export const KEY_DOC_PATH = () => 'meta/cryptoKeys'
 
 /** Bumped only when the SHAPE of the stored document changes. */
 export const KEYSET_VERSION = 1
@@ -116,7 +116,7 @@ export function parseKeyId(keyId) {
  * master key, and the second tenant would be handed the first tenant's key —
  * which is a cross-tenant break performed by the escrow itself.
  */
-const wrapAad = (orgId, keyId) => utf8.encode(`ohsms:dek:${orgId}:${keyId}`)
+const wrapAad = (keyId) => utf8.encode(`ohsms:dek:org:${keyId}`)
 
 async function masterKey(masterSecret) {
   const bytes = fromB64u(masterSecret)
@@ -130,11 +130,11 @@ async function masterKey(masterSecret) {
 }
 
 /** `iv || ciphertext`, base64URL. One string, so the stored shape stays flat. */
-export async function wrapKey(masterSecret, orgId, keyId, plaintextBytes) {
+export async function wrapKey(masterSecret, keyId, plaintextBytes) {
   const key = await masterKey(masterSecret)
   const iv = globalThis.crypto.getRandomValues(new Uint8Array(IV_BYTES))
   const ct = new Uint8Array(await subtle().encrypt(
-    { name: 'AES-GCM', iv, additionalData: wrapAad(orgId, keyId) },
+    { name: 'AES-GCM', iv, additionalData: wrapAad(keyId) },
     key,
     plaintextBytes,
   ))
@@ -145,12 +145,12 @@ export async function wrapKey(masterSecret, orgId, keyId, plaintextBytes) {
 }
 
 /** The plaintext key bytes back. Throws if the blob was moved or altered. */
-export async function unwrapKey(masterSecret, orgId, keyId, wrapped) {
+export async function unwrapKey(masterSecret, keyId, wrapped) {
   const key = await masterKey(masterSecret)
   const all = fromB64u(wrapped)
   if (all.length <= IV_BYTES) throw new Error('Wrapped key is truncated.')
   const plain = await subtle().decrypt(
-    { name: 'AES-GCM', iv: all.subarray(0, IV_BYTES), additionalData: wrapAad(orgId, keyId) },
+    { name: 'AES-GCM', iv: all.subarray(0, IV_BYTES), additionalData: wrapAad(keyId) },
     key,
     all.subarray(IV_BYTES),
   )
@@ -168,7 +168,7 @@ export async function unwrapKey(masterSecret, orgId, keyId, wrapped) {
  * unwrapped is what lets an ordinary member be handed it without the callable
  * having to unwrap anything on their behalf.
  */
-export async function generateKeyset(masterSecret, orgId, version = 1) {
+export async function generateKeyset(masterSecret, version = 1) {
   const generalId = keyIdFor(GENERAL, version)
   const medicalId = keyIdFor(MEDICAL, version)
 
@@ -185,12 +185,12 @@ export async function generateKeyset(masterSecret, orgId, version = 1) {
     version: KEYSET_VERSION,
     general: {
       keyId: generalId,
-      wrappedKey: await wrapKey(masterSecret, orgId, generalId, generalKey),
+      wrappedKey: await wrapKey(masterSecret, generalId, generalKey),
     },
     medical: {
       keyId: medicalId,
       publicKey: toB64u(spki),
-      wrappedPrivateKey: await wrapKey(masterSecret, orgId, medicalId, pkcs8),
+      wrappedPrivateKey: await wrapKey(masterSecret, medicalId, pkcs8),
     },
   }
 }
@@ -241,14 +241,14 @@ export function grantsFor(profile) {
  * treats a missing key as "redact these fields", which is the auditor opening an
  * injury record and seeing the clinical columns omitted rather than an error.
  */
-export async function releaseKeyset(masterSecret, orgId, keyset, profile) {
+export async function releaseKeyset(masterSecret, keyset, profile) {
   const grants = grantsFor(profile)
   const out = {}
 
   if (grants.general && keyset?.general?.wrappedKey) {
     out.general = {
       keyId: keyset.general.keyId,
-      key: toB64u(await unwrapKey(masterSecret, orgId, keyset.general.keyId, keyset.general.wrappedKey)),
+      key: toB64u(await unwrapKey(masterSecret, keyset.general.keyId, keyset.general.wrappedKey)),
     }
   }
 
@@ -256,7 +256,7 @@ export async function releaseKeyset(masterSecret, orgId, keyset, profile) {
     out.medical = { keyId: keyset.medical.keyId, publicKey: keyset.medical.publicKey }
     if (grants.medicalPrivate && keyset.medical.wrappedPrivateKey) {
       out.medical.privateKey = toB64u(
-        await unwrapKey(masterSecret, orgId, keyset.medical.keyId, keyset.medical.wrappedPrivateKey),
+        await unwrapKey(masterSecret, keyset.medical.keyId, keyset.medical.wrappedPrivateKey),
       )
     }
   }

@@ -55,7 +55,7 @@ import { readableOnTint, solidBackground } from '../../../shared/lib/contrast'
 
 export default function Repository() {
   const { org, extinguishers, loading, capped, loadCap } = useFleet()
-  const { orgId, orgName, profile, isAdmin, isManager } = useAuth()
+  const { orgName, profile, isAdmin, isManager } = useAuth()
   const navigate = useNavigate()
   const today = useMemo(() => new Date(), [])
 
@@ -116,7 +116,7 @@ export default function Repository() {
   const sendToVendor = async (ext) => {
     setBusyId(ext.id)
     try {
-      await markReceivedByVendor(orgId, orgName, ext.id, profile?.name)
+      await markReceivedByVendor(orgName, ext.id, profile?.name)
       toast.success('Marked received by vendor — now In Process')
     } catch (e) {
       toastCaught(e)
@@ -128,7 +128,7 @@ export default function Repository() {
     setBusyId(ext.id)
     try {
       const remaining = (ext.physicalDefects || []).filter((k) => !PHYSICAL_DEFECT_KEYS.includes(k))
-      await resolveDefects(orgId, orgName, ext.id, remaining, profile?.name)
+      await resolveDefects(orgName, ext.id, remaining, profile?.name)
       toast.success('Physical defects resolved')
     } catch (e) {
       toastCaught(e)
@@ -193,7 +193,7 @@ export default function Repository() {
     if (!linkPlan?.linked.length) return
     setLinking(true)
     try {
-      const r = await linkExtinguishersToSites(orgId, orgName, linkPlan, {
+      const r = await linkExtinguishersToSites(orgName, linkPlan, {
         uid: profile?.uid,
         name: profile?.name,
       })
@@ -208,7 +208,7 @@ export default function Repository() {
 
   const doGenerateQr = async () => {
     try {
-      const n = await backfillExtinguisherQr(orgId, orgName, extinguishers, {
+      const n = await backfillExtinguisherQr(orgName, extinguishers, {
         uid: profile?.uid,
         name: profile?.name,
       })
@@ -236,7 +236,7 @@ export default function Repository() {
     setDeleting(true)
     try {
       const items = deletable.map((e) => ({ id: e.id, qrToken: e.qrToken }))
-      await bulkDeleteExtinguishers(orgId, items, { uid: profile?.uid, name: profile?.name })
+      await bulkDeleteExtinguishers(items, { uid: profile?.uid, name: profile?.name })
       const skipped = selectedItems.length - deletable.length
       toast.success(
         skipped
@@ -538,7 +538,7 @@ export default function Repository() {
         open={!!reportFor}
         onClose={() => setReportFor(null)}
         ext={reportFor}
-        orgId={orgId}
+       
         reporter={{ uid: profile?.uid, name: profile?.name }}
         source="portal"
       />
@@ -547,7 +547,7 @@ export default function Repository() {
         open={!!editFor}
         onClose={() => setEditFor(null)}
         ext={editFor}
-        orgId={orgId}
+       
         orgName={org?.name || orgName}
         actor={{ uid: profile?.uid, name: profile?.name }}
       />
@@ -556,7 +556,7 @@ export default function Repository() {
         open={!!quoteFor}
         onClose={() => setQuoteFor(null)}
         ext={quoteFor}
-        orgId={orgId}
+       
         orgName={org?.name || orgName}
         actor={{ uid: profile?.uid, name: profile?.name }}
       />
@@ -565,7 +565,7 @@ export default function Repository() {
         open={!!hptFor}
         onClose={() => setHptFor(null)}
         ext={hptFor}
-        orgId={orgId}
+       
         orgName={org?.name || orgName}
         actor={{ uid: profile?.uid, name: profile?.name }}
       />
@@ -574,7 +574,7 @@ export default function Repository() {
         open={!!receiveFor}
         onClose={() => setReceiveFor(null)}
         ext={receiveFor}
-        orgId={orgId}
+       
         orgName={org?.name || orgName}
         actorName={profile?.name}
       />

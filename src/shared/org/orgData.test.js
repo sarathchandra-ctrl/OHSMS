@@ -16,7 +16,7 @@ import {
 const captured = { listeners: {}, unsubs: [] }
 
 vi.mock('../firebase', () => ({ db: {}, default: {} }))
-vi.mock('firebase/firestore', () => ({
+vi.mock('../data/client.js', () => ({
   collection: (_db, ...path) => ({ path: path.join('/') }),
   doc: () => ({}),
   query: (col, ...cs) => ({ ...col, constraints: cs }),
@@ -53,7 +53,7 @@ async function harness(names) {
   captured.unsubs = []
   const { subscribeCollections } = await import('./orgData')
   const emit = vi.fn()
-  const stop = subscribeCollections('orgA', names, emit)
+  const stop = subscribeCollections(names, emit)
   return { emit, stop, listeners: captured.listeners, unsubs: captured.unsubs }
 }
 
@@ -296,7 +296,7 @@ describe('subscribeCollections', () => {
 
 describe('orgFromIndex', () => {
   it('reads a WEEHS organization as a joinable tenant', () => {
-    expect(orgFromIndex({ orgId: 'org-1', name: 'Acme' })).toEqual({
+    expect(orgFromIndex({ name: 'Acme' })).toEqual({
       id: 'org-1',
       name: 'Acme',
       stack: 'weehs',

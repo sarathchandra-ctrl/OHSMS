@@ -47,9 +47,8 @@ export default function CreateProcedure() {
   // what this user can access, so LOTO scope aligns with every other module.
   const [orgSites, setOrgSites] = useState([])
   useEffect(() => {
-    if (!profile?.orgId) return undefined
-    return subscribeOrgSites(profile.orgId, setOrgSites)
-  }, [profile?.orgId])
+    return subscribeOrgSites(setOrgSites)
+  }, [])
   const siteInventory = useMemo(
     () => resolveAccessibleSites(profile, orgSites, { isAdmin }),
     [profile, orgSites, isAdmin],
@@ -131,7 +130,6 @@ export default function CreateProcedure() {
       if (p.photo) photosMap[p.key] = p.photo
     })
     const payload = {
-      orgId: profile.orgId,
       orgName: org?.name || '',
       site: form.site.trim(),
       region: form.region || '',
@@ -258,7 +256,7 @@ export default function CreateProcedure() {
               point={p}
               index={idx}
               pointId={p.pointId}
-              orgId={profile.orgId}
+             
               procedureId={procedureId}
               onChange={(next) => updatePoint(idx, next)}
               onRemove={() => removePoint(idx)}

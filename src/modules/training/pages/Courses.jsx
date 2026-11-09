@@ -17,7 +17,7 @@ const EMPTY = { name: '', category: 'Induction', deliveryMode: 'module', validit
 const MAX_FILE_BYTES = MAX_INLINE_BYTES
 
 export default function Courses() {
-  const { orgId, actor, isManager } = useAuth()
+  const { actor, isManager } = useAuth()
   const { loading, courses, records } = useTraining()
   const [editing, setEditing] = useState(null) // 'new' | course | null
   const [form, setForm] = useState(EMPTY)
@@ -48,7 +48,7 @@ export default function Courses() {
     // Cloud first: the course list is subscribed by everyone, and inline
     // thumbnails ride along on every one of those reads. Inline stays as the
     // fallback, back under its old cap because it lives inside the document.
-    const up = await putFile(orgId, 'course-thumbnails', file)
+    const up = await putFile('course-thumbnails', file)
     if (up) return setForm((f) => ({ ...f, thumbnail: up.url, thumbnailPath: up.path }))
     if (file.size > MAX_INLINE_BYTES) return toast.error(tooLargeForInline(file.name))
     const dataUrl = await fileToDataUrl(file)
@@ -74,7 +74,7 @@ export default function Courses() {
     // Cloud storage first: no meaningful size ceiling (rules cap at 20MB) and
     // the course document stays small however much material it carries.
     if (picked.size <= MAX_UPLOAD_BYTES) {
-      const up = await putFile(orgId, 'training-content', picked)
+      const up = await putFile('training-content', picked)
       if (up) {
         setForm((f) => ({
           ...f,
@@ -111,8 +111,8 @@ export default function Courses() {
     if (!form.name.trim()) return toast.error('Course name is required')
     setBusy(true)
     try {
-      if (editing === 'new') { await createCourse(orgId, form, actor); toast.success('Course added') }
-      else { await updateCourse(orgId, editing.id, form, actor); toast.success('Course updated') }
+      if (editing === 'new') { await createCourse(form, actor); toast.success('Course added') }
+      else { await updateCourse(editing.id, form, actor); toast.success('Course updated') }
       setEditing(null)
     } catch (err) { toastCaught(err, 'Failed') } finally { setBusy(false) }
   }
@@ -120,7 +120,7 @@ export default function Courses() {
   const remove = async (c) => {
     const used = records.filter((r) => r.courseId === c.id).length
     if (!window.confirm(`Delete course "${c.name}"?${used ? ` ${used} training record(s) will keep their history.` : ''}`)) return
-    try { await deleteCourse(orgId, c.id, actor, c.name); toast.success('Course deleted') }
+    try { await deleteCourse(c.id, actor, c.name); toast.success('Course deleted') }
     catch (err) { toastCaught(err, 'Failed') }
   }
 

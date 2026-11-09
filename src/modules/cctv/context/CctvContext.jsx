@@ -27,7 +27,7 @@ const Ctx = createContext(null)
  * that disagrees between tabs.
  */
 export function CctvProvider({ children }) {
-  const { orgId, orgName } = useAuth()
+  const { orgName } = useAuth()
   const [cameras, setCameras] = useState([])
   const [dvrs, setDvrs] = useState([])
   const [merakis, setMerakis] = useState([])
@@ -37,7 +37,6 @@ export function CctvProvider({ children }) {
   const [denied, setDenied] = useState(false)
 
   useEffect(() => {
-    if (!orgId) return undefined
     setLoaded({ cameras: false, dvrs: false, merakis: false })
     setError(null)
     setDenied(false)
@@ -47,7 +46,7 @@ export function CctvProvider({ children }) {
     // a real fault is kept and the pages say so. Permission-denied is the
     // viewer not being allowed the estate — empty, and the shell shows AccessDenied.
     const bind = (subscribe, set, key) =>
-      subscribe(orgId, (rows, err) => {
+      subscribe((rows, err) => {
         if (err) {
           if (isPermissionDenied(err)) {
             set([])
@@ -65,10 +64,10 @@ export function CctvProvider({ children }) {
       bind(subscribeCameras, setCameras, 'cameras'),
       bind(subscribeDvrs, setDvrs, 'dvrs'),
       bind(subscribeMerakis, setMerakis, 'merakis'),
-      subscribeSites(orgId, (rows) => setSites(rows || [])),
+      subscribeSites((rows) => setSites(rows || [])),
     ]
     return () => unsubs.forEach((u) => u?.())
-  }, [orgId])
+  }, [])
 
   // Recomputed only when the inputs change — the cascade walks every device
   // three times and pages re-render on every keystroke in a filter box.
@@ -139,7 +138,6 @@ export function CctvProvider({ children }) {
 
   const value = useMemo(
     () => ({
-      orgId,
       orgName,
       cameras,
       dvrs,
@@ -183,7 +181,6 @@ export function CctvProvider({ children }) {
       siteOptions: sites.map((s) => ({ value: s.id, label: s.name || s.siteName || s.id })),
     }),
     [
-      orgId,
       orgName,
       cameras,
       dvrs,

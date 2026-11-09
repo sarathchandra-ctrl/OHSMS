@@ -15,17 +15,17 @@ import { computeExpiry, todayISO } from './status'
 import { reserveDocId } from '../../../shared/docId/reserve'
 import { removeFile } from '../../../shared/storage'
 
-const courseCol = (orgId) => collection(db, 'organizations', orgId, 'trainingCourses')
-const courseRef = (orgId, id) => doc(db, 'organizations', orgId, 'trainingCourses', id)
-const recordCol = (orgId) => collection(db, 'organizations', orgId, 'trainingRecords')
-const recordRef = (orgId, id) => doc(db, 'organizations', orgId, 'trainingRecords', id)
-const assignmentCol = (orgId) => collection(db, 'organizations', orgId, 'trainingAssignments')
-const assignmentRef = (orgId, id) => doc(db, 'organizations', orgId, 'trainingAssignments', id)
+const courseCol = () => collection(db, 'trainingCourses')
+const courseRef = (id) => doc(db, 'trainingCourses', id)
+const recordCol = () => collection(db, 'trainingRecords')
+const recordRef = (id) => doc(db, 'trainingRecords', id)
+const assignmentCol = () => collection(db, 'trainingAssignments')
+const assignmentRef = (id) => doc(db, 'trainingAssignments', id)
 // Classroom sittings of a course, and the employees asking for a place on one.
-const sessionCol = (orgId) => collection(db, 'organizations', orgId, 'trainingSessions')
-const sessionRef = (orgId, id) => doc(db, 'organizations', orgId, 'trainingSessions', id)
-const requestCol = (orgId) => collection(db, 'organizations', orgId, 'trainingRequests')
-const requestRef = (orgId, id) => doc(db, 'organizations', orgId, 'trainingRequests', id)
+const sessionCol = () => collection(db, 'trainingSessions')
+const sessionRef = (id) => doc(db, 'trainingSessions', id)
+const requestCol = () => collection(db, 'trainingRequests')
+const requestRef = (id) => doc(db, 'trainingRequests', id)
 
 export const COURSE_CATEGORIES = [
   'Induction', 'Fire Safety', 'First Aid', 'Work at Height', 'Electrical Safety',
@@ -34,8 +34,8 @@ export const COURSE_CATEGORIES = [
 ]
 
 // ── Subscriptions ─────────────────────────────────────────────────────────────
-export function subscribeCourses(orgId, cb) {
-  const q = query(courseCol(orgId), orderBy('name'))
+export function subscribeCourses(cb) {
+  const q = query(courseCol(), orderBy('name'))
   return onSnapshot(q, (s) => cb(s.docs.map((d) => ({ id: d.id, ...d.data() }))), () => cb([]))
 }
 // Live streams are bounded (most-recent first) so app start stays fast at
@@ -43,8 +43,8 @@ export function subscribeCourses(orgId, cb) {
 export const RECORDS_LIVE_CAP = 2500
 export const ASSIGNMENTS_LIVE_CAP = 5000
 
-export function subscribeRecords(orgId, cb) {
-  const q = query(recordCol(orgId), orderBy('completedOn', 'desc'), limit(RECORDS_LIVE_CAP))
+export function subscribeRecords(cb) {
+  const q = query(recordCol(), orderBy('completedOn', 'desc'), limit(RECORDS_LIVE_CAP))
   return onSnapshot(q, (s) => cb(s.docs.map((d) => ({ id: d.id, ...d.data() }))), () => cb([]))
 }
 /**
@@ -55,25 +55,25 @@ export function subscribeRecords(orgId, cb) {
  * used to render as "nothing outstanding" while the listener had actually
  * been refused. Home uses this form and stays in loading unless status is 'ok'.
  */
-export function subscribeAssignmentsRead(orgId, cb) {
-  const q = query(assignmentCol(orgId), orderBy('createdAt', 'desc'), limit(ASSIGNMENTS_LIVE_CAP))
+export function subscribeAssignmentsRead(cb) {
+  const q = query(assignmentCol(), orderBy('createdAt', 'desc'), limit(ASSIGNMENTS_LIVE_CAP))
   return onSnapshot(
     q,
     (s) => cb({ rows: s.docs.map((d) => ({ id: d.id, ...d.data() })), status: 'ok' }),
     (err) => cb({ rows: [], status: isPermissionDenied(err) ? 'denied' : 'failed' })
   )
 }
-export function subscribeAssignments(orgId, cb) {
-  return subscribeAssignmentsRead(orgId, ({ rows }) => cb(rows))
+export function subscribeAssignments(cb) {
+  return subscribeAssignmentsRead(({ rows }) => cb(rows))
 }
 
 /** One-time full fetches for reports (CSV) — not subject to the live caps. */
-export async function fetchAllRecords(orgId) {
-  const s = await getDocs(query(recordCol(orgId), orderBy('completedOn', 'desc')))
+export async function fetchAllRecords() {
+  const s = await getDocs(query(recordCol(), orderBy('completedOn', 'desc')))
   return s.docs.map((d) => ({ id: d.id, ...d.data() }))
 }
-export async function fetchAllAssignments(orgId) {
-  const s = await getDocs(assignmentCol(orgId))
+export async function fetchAllAssignments() {
+  const s = await getDocs(assignmentCol())
   return s.docs.map((d) => ({ id: d.id, ...d.data() }))
 }
 
@@ -108,42 +108,42 @@ const cleanCourse = (data) => ({
   thumbnailPath: data.thumbnailPath || '',
 })
 
-export async function createCourse(orgId, data, actor) {
-  const ref = await addDoc(courseCol(orgId), {
+export async function createCourse(data, actor) {
+  const ref = await addDoc(courseCol(), {
     ...cleanCourse(data),
-    docId: await reserveDocId(orgId, 'training'),
+    docId: await reserveDocId('training'),
     createdAt: serverTimestamp(),
     createdBy: actor?.uid || null,
     createdByName: actor?.name || '',
   })
-  await logAudit(orgId, actor, 'training.course_create', {
+  await logAudit(actor, 'training.course_create', {
     module: 'training', target: 'course', targetId: ref.id, targetLabel: data.name,
     summary: `Created course "${data.name}"`,
   })
   return ref.id
 }
 
-export async function updateCourse(orgId, id, data, actor) {
-  await updateDoc(courseRef(orgId, id), { ...cleanCourse(data), updatedAt: serverTimestamp() })
-  await logAudit(orgId, actor, 'training.course_update', {
+export async function updateCourse(id, data, actor) {
+  await updateDoc(courseRef(id), { ...cleanCourse(data), updatedAt: serverTimestamp() })
+  await logAudit(actor, 'training.course_update', {
     module: 'training', target: 'course', targetId: id, targetLabel: data.name,
     summary: `Updated course "${data.name}"`,
   })
 }
 
-export async function deleteCourse(orgId, id, actor, label) {
+export async function deleteCourse(id, actor, label) {
   // Content files live in cloud storage; deleting only the document would
   // strand them. Best-effort and before the delete, because afterwards nothing
   // remembers the paths. A failure here costs storage, not correctness.
   try {
-    const snap = await getDoc(courseRef(orgId, id))
+    const snap = await getDoc(courseRef(id))
     for (const c of snap.data()?.content || []) {
       if (c.path) removeFile(c.path)
     }
     if (snap.data()?.thumbnailPath) removeFile(snap.data().thumbnailPath)
   } catch { /* orphans tolerated */ }
-  await deleteDoc(courseRef(orgId, id))
-  await logAudit(orgId, actor, 'training.course_delete', {
+  await deleteDoc(courseRef(id))
+  await logAudit(actor, 'training.course_delete', {
     module: 'training', target: 'course', targetId: id, targetLabel: label,
     summary: `Deleted course "${label}"`,
   })
@@ -153,7 +153,7 @@ export async function deleteCourse(orgId, id, actor, label) {
 // One training session for N employees → N records (individual certification
 // lifecycles), written in a single batch. Any matching OPEN assignments (same
 // course + employee, passed in from the live context) are completed too.
-export async function logTraining(orgId, { course, employees, trainerName, completedOn, scope, notes }, actor, openAssignments = []) {
+export async function logTraining({ course, employees, trainerName, completedOn, scope, notes }, actor, openAssignments = []) {
   const expiresOn = computeExpiry(completedOn, course.validityMonths)
   const uids = new Set(employees.map((e) => e.uid))
   const matching = openAssignments.filter(
@@ -173,9 +173,9 @@ export async function logTraining(orgId, { course, employees, trainerName, compl
   // atomic with the other regardless.
   const writes = [
     ...matching.map((a) => (batch) =>
-      batch.update(assignmentRef(orgId, a.id), { status: 'completed', completedOn })),
+      batch.update(assignmentRef(a.id), { status: 'completed', completedOn })),
     ...employees.map((emp) => (batch) =>
-      batch.set(doc(recordCol(orgId)), {
+      batch.set(doc(recordCol()), {
         courseId: course.id,
         courseName: course.name,
         category: course.category || 'Other',
@@ -200,16 +200,16 @@ export async function logTraining(orgId, { course, employees, trainerName, compl
     for (const apply of writes.slice(i, i + 400)) apply(batch)
     await batch.commit()
   }
-  await logAudit(orgId, actor, 'training.record_create', {
+  await logAudit(actor, 'training.record_create', {
     module: 'training', target: 'record', targetLabel: course.name,
     summary: `Logged "${course.name}" for ${employees.length} employee(s)`,
   })
   return employees.length
 }
 
-export async function deleteRecord(orgId, id, actor, label) {
-  await deleteDoc(recordRef(orgId, id))
-  await logAudit(orgId, actor, 'training.record_delete', {
+export async function deleteRecord(id, actor, label) {
+  await deleteDoc(recordRef(id))
+  await logAudit(actor, 'training.record_delete', {
     module: 'training', target: 'record', targetId: id, targetLabel: label,
     summary: `Deleted training record${label ? ` "${label}"` : ''}`,
   })
@@ -223,7 +223,7 @@ export async function deleteRecord(orgId, id, actor, label) {
  * ({ mode, label }) stamps every doc so the Admin Workspace can show the batch
  * as one campaign (e.g. "Department: Safety"). Returns { assigned, skipped }.
  */
-export async function assignCourse(orgId, { course, employees, dueDate, group }, actor, openAssignments = []) {
+export async function assignCourse({ course, employees, dueDate, group }, actor, openAssignments = []) {
   const alreadyOpen = new Set(
     openAssignments
       .filter((a) => a.status === 'assigned' && a.courseId === course.id)
@@ -237,7 +237,7 @@ export async function assignCourse(orgId, { course, employees, dueDate, group },
     for (let i = 0; i < targets.length; i += 400) {
       const batch = writeBatch(db)
       for (const emp of targets.slice(i, i + 400)) {
-        batch.set(doc(assignmentCol(orgId)), {
+        batch.set(doc(assignmentCol()), {
           courseId: course.id,
           courseName: course.name,
           category: course.category || 'Other',
@@ -255,7 +255,7 @@ export async function assignCourse(orgId, { course, employees, dueDate, group },
       }
       await batch.commit()
     }
-    await logAudit(orgId, actor, 'training.assign', {
+    await logAudit(actor, 'training.assign', {
       module: 'training', target: 'assignment', targetLabel: course.name,
       summary: `Assigned "${course.name}" to ${targets.length} employee(s)${group?.label ? ` (${group.label})` : ''}${dueDate ? `, due ${dueDate}` : ''}`,
     })
@@ -264,21 +264,21 @@ export async function assignCourse(orgId, { course, employees, dueDate, group },
 }
 
 /** Cancel many open assignments at once (whole campaign), chunked. */
-export async function cancelAssignmentsBulk(orgId, ids, actor, label) {
+export async function cancelAssignmentsBulk(ids, actor, label) {
   for (let i = 0; i < ids.length; i += 400) {
     const batch = writeBatch(db)
-    for (const id of ids.slice(i, i + 400)) batch.update(assignmentRef(orgId, id), { status: 'cancelled' })
+    for (const id of ids.slice(i, i + 400)) batch.update(assignmentRef(id), { status: 'cancelled' })
     await batch.commit()
   }
-  await logAudit(orgId, actor, 'training.assign_cancel', {
+  await logAudit(actor, 'training.assign_cancel', {
     module: 'training', target: 'assignment', targetLabel: label || '',
     summary: `Cancelled ${ids.length} open assignment(s)${label ? ` — ${label}` : ''}`,
   })
 }
 
-export async function cancelAssignment(orgId, id, actor, label) {
-  await updateDoc(assignmentRef(orgId, id), { status: 'cancelled' })
-  await logAudit(orgId, actor, 'training.assign_cancel', {
+export async function cancelAssignment(id, actor, label) {
+  await updateDoc(assignmentRef(id), { status: 'cancelled' })
+  await logAudit(actor, 'training.assign_cancel', {
     module: 'training', target: 'assignment', targetId: id, targetLabel: label,
     summary: `Cancelled assignment${label ? ` "${label}"` : ''}`,
   })
@@ -289,11 +289,11 @@ export async function cancelAssignment(orgId, id, actor, label) {
  * (flagged loggedBy 'self') and closes the employee's open assignment(s) for
  * the course, atomically.
  */
-export async function selfCompleteTraining(orgId, { course, profile, assignmentIds = [] }, actor) {
+export async function selfCompleteTraining({ course, profile, assignmentIds = [] }, actor) {
   const completedOn = todayISO()
   const expiresOn = computeExpiry(completedOn, course.validityMonths)
   const batch = writeBatch(db)
-  const rref = doc(recordCol(orgId))
+  const rref = doc(recordCol())
   batch.set(rref, {
     courseId: course.id,
     courseName: course.name,
@@ -312,10 +312,10 @@ export async function selfCompleteTraining(orgId, { course, profile, assignmentI
     createdByName: profile.name || '',
   })
   for (const id of assignmentIds) {
-    batch.update(assignmentRef(orgId, id), { status: 'completed', completedOn, recordId: rref.id })
+    batch.update(assignmentRef(id), { status: 'completed', completedOn, recordId: rref.id })
   }
   await batch.commit()
-  await logAudit(orgId, actor, 'training.self_complete', {
+  await logAudit(actor, 'training.self_complete', {
     module: 'training', target: 'record', targetId: rref.id, targetLabel: course.name,
     summary: `Self-completed "${course.name}"`,
   })
@@ -343,33 +343,33 @@ const cleanSession = (d) => ({
   notes: (d.notes || '').trim(),
 })
 
-export function subscribeSessions(orgId, cb) {
+export function subscribeSessions(cb) {
   return onSnapshot(
-    query(sessionCol(orgId), orderBy('validFrom', 'desc')),
+    query(sessionCol(), orderBy('validFrom', 'desc')),
     (snap) => cb(snap.docs.map((d) => ({ id: d.id, ...d.data() }))),
     () => cb([]),
   )
 }
 
-export async function createSession(orgId, data, actor) {
+export async function createSession(data, actor) {
   const s = cleanSession(data)
-  const ref = await addDoc(sessionCol(orgId), {
+  const ref = await addDoc(sessionCol(), {
     ...s,
-    docId: await reserveDocId(orgId, 'trainingSessions'),
+    docId: await reserveDocId('trainingSessions'),
     createdAt: serverTimestamp(),
     createdBy: actor?.uid || null,
   })
-  await logAudit(orgId, actor, 'training.session_create', {
+  await logAudit(actor, 'training.session_create', {
     module: 'training', target: 'session', targetId: ref.id, targetLabel: s.courseName,
     summary: `Scheduled "${s.courseName}" ${s.mode === 'online' ? 'online' : `at ${s.siteName || 'a site'}`} (${s.validFrom} → ${s.validTo})`,
   })
   return ref.id
 }
 
-export async function updateSession(orgId, id, data, actor) {
+export async function updateSession(id, data, actor) {
   const s = cleanSession(data)
-  await updateDoc(sessionRef(orgId, id), { ...s, updatedAt: serverTimestamp() })
-  await logAudit(orgId, actor, 'training.session_update', {
+  await updateDoc(sessionRef(id), { ...s, updatedAt: serverTimestamp() })
+  await logAudit(actor, 'training.session_update', {
     module: 'training', target: 'session', targetId: id, targetLabel: s.courseName,
     summary: `Updated session for "${s.courseName}"`,
   })
@@ -382,13 +382,13 @@ export async function updateSession(orgId, id, data, actor) {
  * no longer exists, so nobody could act on them and the employee would still
  * appear to be waiting.
  */
-export async function deleteSession(orgId, id, actor, label) {
-  const reqs = await getDocs(query(requestCol(orgId), where('sessionId', '==', id)))
+export async function deleteSession(id, actor, label) {
+  const reqs = await getDocs(query(requestCol(), where('sessionId', '==', id)))
   const batch = writeBatch(db)
-  batch.delete(sessionRef(orgId, id))
+  batch.delete(sessionRef(id))
   reqs.docs.forEach((d) => batch.delete(d.ref))
   await batch.commit()
-  await logAudit(orgId, actor, 'training.session_delete', {
+  await logAudit(actor, 'training.session_delete', {
     module: 'training', target: 'session', targetId: id, targetLabel: label || '',
     summary: `Deleted session${label ? ` for "${label}"` : ''}${reqs.size ? ` and ${reqs.size} request(s)` : ''}`,
   })
@@ -396,9 +396,9 @@ export async function deleteSession(orgId, id, actor, label) {
 
 // ── Requests for a place ──────────────────────────────────────────────────────
 
-export function subscribeRequests(orgId, cb) {
+export function subscribeRequests(cb) {
   return onSnapshot(
-    query(requestCol(orgId), orderBy('createdAt', 'desc')),
+    query(requestCol(), orderBy('createdAt', 'desc')),
     (snap) => cb(snap.docs.map((d) => ({ id: d.id, ...d.data() }))),
     () => cb([]),
   )
@@ -409,9 +409,9 @@ export function subscribeRequests(orgId, cb) {
  * the existing request rather than adding a second, so an admin's count is
  * people wanting the training and not clicks.
  */
-export async function requestSession(orgId, { session, profile }, actor) {
+export async function requestSession({ session, profile }, actor) {
   const existing = await getDocs(query(
-    requestCol(orgId),
+    requestCol(),
     where('sessionId', '==', session.id),
     where('employeeUid', '==', profile?.uid || ''),
   ))
@@ -419,7 +419,7 @@ export async function requestSession(orgId, { session, profile }, actor) {
     await updateDoc(existing.docs[0].ref, { status: 'pending', updatedAt: serverTimestamp() })
     return existing.docs[0].id
   }
-  const ref = await addDoc(requestCol(orgId), {
+  const ref = await addDoc(requestCol(), {
     sessionId: session.id,
     courseId: session.courseId || '',
     courseName: session.courseName || '',
@@ -430,26 +430,26 @@ export async function requestSession(orgId, { session, profile }, actor) {
     status: 'pending',
     createdAt: serverTimestamp(),
   })
-  await logAudit(orgId, actor, 'training.session_request', {
+  await logAudit(actor, 'training.session_request', {
     module: 'training', target: 'request', targetId: ref.id, targetLabel: session.courseName || '',
     summary: `${profile?.name || 'An employee'} requested a place on "${session.courseName}"`,
   })
   return ref.id
 }
 
-export async function withdrawRequest(orgId, id, actor, label) {
-  await deleteDoc(requestRef(orgId, id))
-  await logAudit(orgId, actor, 'training.session_request_withdraw', {
+export async function withdrawRequest(id, actor, label) {
+  await deleteDoc(requestRef(id))
+  await logAudit(actor, 'training.session_request_withdraw', {
     module: 'training', target: 'request', targetId: id, targetLabel: label || '',
     summary: `Withdrew request for "${label || 'a session'}"`,
   })
 }
 
-export async function decideRequest(orgId, request, status, actor) {
-  await updateDoc(requestRef(orgId, request.id), {
+export async function decideRequest(request, status, actor) {
+  await updateDoc(requestRef(request.id), {
     status, reviewedBy: actor?.name || '', reviewedAt: serverTimestamp(),
   })
-  await logAudit(orgId, actor, 'training.session_request_decide', {
+  await logAudit(actor, 'training.session_request_decide', {
     module: 'training', target: 'request', targetId: request.id, targetLabel: request.courseName || '',
     summary: `${status === 'approved' ? 'Approved' : 'Declined'} ${request.employeeName}'s request for "${request.courseName}"`,
   })

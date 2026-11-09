@@ -15,7 +15,7 @@ import { lockedDefects } from '../lib/defectLock'
  * Props: open, onClose, ext (with at least {extId/id, serialNo, type}),
  *        orgId, reporter {uid?, name}, source ('portal' | 'qr')
  */
-export default function ReportDefectModal({ open, onClose, ext, orgId, reporter, source = 'portal' }) {
+export default function ReportDefectModal({ open, onClose, ext, reporter, source = 'portal' }) {
   const [selected, setSelected] = useState(null)
   const [note, setNote] = useState('')
   const [role, setRole] = useState('')
@@ -39,7 +39,7 @@ export default function ReportDefectModal({ open, onClose, ext, orgId, reporter,
     if (isQr && !role) return toast.error('Select who is reporting')
     setBusy(true)
     try {
-      await createReport(orgId, {
+      await createReport({
         extId,
         extLabel: label,
         kind: 'defect',

@@ -44,7 +44,7 @@ const SECTIONS = [
 
 export default function SiteDetail() {
   const { siteId } = useParams()
-  const { orgId, actor, isManager } = useAuth()
+  const { actor, isManager } = useAuth()
   const roleLabels = useErpRoleLabels()
   const [contacts, setContacts] = useState(null)
   const [layouts, setLayouts] = useState({})
@@ -60,13 +60,12 @@ export default function SiteDetail() {
   const fileRef = useRef(null)
 
   useEffect(() => {
-    if (!orgId) return undefined
-    const u1 = subscribeContacts(orgId, setContacts)
-    const u2 = subscribeLayouts(orgId, setLayouts)
-    const u3 = subscribeRescuePlans(orgId, setPlans)
-    const u4 = subscribeOrgUsers(orgId, setUsers)
+    const u1 = subscribeContacts(setContacts)
+    const u2 = subscribeLayouts(setLayouts)
+    const u3 = subscribeRescuePlans(setPlans)
+    const u4 = subscribeOrgUsers(setUsers)
     return () => { u1(); u2(); u3(); u4() }
-  }, [orgId])
+  }, [])
 
   const siteInventory = useAccessibleSites()
   const site = useMemo(() => siteInventory.find((s) => s.id === siteId) || null, [siteInventory, siteId])
@@ -120,7 +119,7 @@ export default function SiteDetail() {
         })
       }
       const next = [...floors, ...added]
-      await saveFloors(orgId, site, next, actor, `Added ${added.length} floor plan(s) to ${site.name}`)
+      await saveFloors(site, next, actor, `Added ${added.length} floor plan(s) to ${site.name}`)
       toast.success(`${added.length} floor plan(s) added`)
     } catch (err) {
       toastCaught(err, 'Upload failed')
@@ -133,7 +132,7 @@ export default function SiteDetail() {
     const label = window.prompt('Floor name', floor.label)
     if (label == null || !label.trim()) return
     try {
-      await saveFloors(orgId, site, floors.map((f) => (f.id === floor.id ? { ...f, label: label.trim() } : f)), actor,
+      await saveFloors(site, floors.map((f) => (f.id === floor.id ? { ...f, label: label.trim() } : f)), actor,
         `Renamed a floor plan for ${site.name}`)
     } catch (err) { toastCaught(err, 'Failed') }
   }
@@ -143,7 +142,7 @@ export default function SiteDetail() {
     if (j < 0 || j >= floors.length) return
     const next = [...floors]
     ;[next[i], next[j]] = [next[j], next[i]]
-    try { await saveFloors(orgId, site, next, actor, `Reordered floor plans for ${site.name}`) }
+    try { await saveFloors(site, next, actor, `Reordered floor plans for ${site.name}`) }
     catch (err) { toastCaught(err, 'Failed') }
   }
 
@@ -151,8 +150,8 @@ export default function SiteDetail() {
     if (!window.confirm(`Remove the "${floor.label}" floor plan?`)) return
     const next = floors.filter((f) => f.id !== floor.id)
     try {
-      if (next.length) await saveFloors(orgId, site, next, actor, `Removed a floor plan from ${site.name}`)
-      else await deleteLayout(orgId, site, actor)
+      if (next.length) await saveFloors(site, next, actor, `Removed a floor plan from ${site.name}`)
+      else await deleteLayout(site, actor)
       toast.success('Floor plan removed')
     } catch (err) { toastCaught(err, 'Failed') }
   }

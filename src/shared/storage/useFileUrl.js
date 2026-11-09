@@ -80,7 +80,7 @@ export function displayFileSrc(resolved, stored) {
  * things to put in front of somebody, and conflating them is how a missing
  * medical record and an unreadable one came to look identical.
  */
-export function useFileUrl(pointer, { orgId, collection } = {}) {
+export function useFileUrl(pointer, { collection } = {}) {
   // The identity of a pointer, for the dependency array. An object literal
   // rebuilt on every render would re-fetch on every render — and each fetch
   // mints a blob URL, so that is a leak as well as a waste.
@@ -120,7 +120,7 @@ export function useFileUrl(pointer, { orgId, collection } = {}) {
       // `loading` here is what swapped a visible logo for an empty slot.
       if (!inline) setState((s) => ({ ...s, loading: true }))
 
-      fileUrl(typeof pointer === 'string' ? pointer : { ...pointer }, { orgId, collection })
+      fileUrl(typeof pointer === 'string' ? pointer : { ...pointer }, { collection })
         .then(({ url, revoke, restricted }) => {
           release = revoke || (() => {})
           // Resolved after the component went away, or after the pointer changed:
@@ -175,7 +175,7 @@ export function useFileUrl(pointer, { orgId, collection } = {}) {
     // depending on one would re-run this every render. path + stored are the
     // only parts that change what gets fetched.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [path, stored, orgId, collection])
+  }, [path, stored, collection])
 
   return state
 }

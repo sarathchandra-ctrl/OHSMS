@@ -11,14 +11,13 @@ import PageHeader, { HdrIcon } from '../../components/PageHeader'
 import Card from '../../components/ui/Card'
 import Button from '../../components/ui/Button'
 
-async function applyRow(kind, row, { orgId, user }) {
-  if (kind === 'locks') await addLock({ orgId, lockNo: row.lockNo, tagNo: row.tagNo, color: row.color, type: 'department' }, user)
-  else if (kind === 'groups') await addGroupNumber({ orgId, no: row.no, description: row.description })
-  else if (kind === 'technicians') await addTechnician({ orgId, ...row }, user)
+async function applyRow(kind, row, { user }) {
+  if (kind === 'locks') await addLock({ lockNo: row.lockNo, tagNo: row.tagNo, color: row.color, type: 'department' }, user)
+  else if (kind === 'groups') await addGroupNumber({ no: row.no, description: row.description })
+  else if (kind === 'technicians') await addTechnician({ ...row }, user)
   else {
     const id = newProcedureId()
     await createProcedure(id, {
-      orgId,
       equipment: row.equipment,
       site: row.site,
       isolationPoints: [{
@@ -61,7 +60,7 @@ export default function ImportData() {
     let added = 0
     for (const row of rows) {
       try {
-        await applyRow(kind, row, { orgId: profile.orgId, user: profile })
+        await applyRow(kind, row, { user: profile })
         added += 1
       } catch (err) {
         failed.push(err?.message || 'Could not import a row')

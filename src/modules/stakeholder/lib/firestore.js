@@ -25,16 +25,15 @@ export const COLLECTIONS = {
   legalIssues: 'legalIssues',
 }
 
-const col = (orgId, name) => collection(db, 'organizations', orgId, name)
-const ref = (orgId, name, id) => doc(db, 'organizations', orgId, name, id)
+const col = (name) => collection(db, name)
+const ref = (name, id) => doc(db, name, id)
 
 // Capped: these are read as a working list, and an org with years of history
 // should not pull all of it into the browser to show the current ones.
 const MAX = 500
 
-function subscribe(orgId, name, cb) {
-  if (!orgId) return () => {}
-  const q = query(col(orgId, name), orderBy('createdAt', 'desc'), limit(MAX))
+function subscribe(name, cb) {
+  const q = query(col(name), orderBy('createdAt', 'desc'), limit(MAX))
   return onSnapshot(
     q,
     (snap) => cb(snap.docs.map((d) => ({ id: d.id, ...d.data() }))),
@@ -48,8 +47,8 @@ function subscribe(orgId, name, cb) {
   )
 }
 
-export const subscribeEscalations = (orgId, cb) => subscribe(orgId, COLLECTIONS.escalations, cb)
-export const subscribeLegalIssues = (orgId, cb) => subscribe(orgId, COLLECTIONS.legalIssues, cb)
+export const subscribeEscalations = (cb) => subscribe(COLLECTIONS.escalations, cb)
+export const subscribeLegalIssues = (cb) => subscribe(COLLECTIONS.legalIssues, cb)
 
 // ── Shapes ───────────────────────────────────────────────────────────────────
 // Firestore rejects `undefined` and a half-filled form produces plenty of it,
@@ -167,45 +166,45 @@ const LABELS = {
 
 // ── Writes ───────────────────────────────────────────────────────────────────
 
-async function create(orgId, name, data, actor) {
+async function create(name, data, actor) {
   const payload = SHAPES[name](data)
   if (!payload.title) throw new Error(`Give the ${LABELS[name]} a title`)
-  const created = await addDoc(col(orgId, name), {
+  const created = await addDoc(col(name), {
     ...payload,
-    docId: await reserveDocId(orgId, KINDS[name]),
+    docId: await reserveDocId(KINDS[name]),
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
     createdBy: actor?.uid || '',
     createdByName: actor?.name || '',
   })
-  await logAudit(orgId, actor, 'stakeholder.create', {
+  await logAudit(actor, 'stakeholder.create', {
     target: name, targetId: created.id, targetLabel: payload.title,
     summary: `Logged ${LABELS[name]}: ${payload.title}`,
   })
   return created.id
 }
 
-async function update(orgId, name, id, data, actor) {
+async function update(name, id, data, actor) {
   const payload = SHAPES[name](data)
-  await updateDoc(ref(orgId, name, id), { ...payload, updatedAt: serverTimestamp() })
-  await logAudit(orgId, actor, 'stakeholder.update', {
+  await updateDoc(ref(name, id), { ...payload, updatedAt: serverTimestamp() })
+  await logAudit(actor, 'stakeholder.update', {
     target: name, targetId: id, targetLabel: payload.title,
     summary: `Updated ${LABELS[name]}: ${payload.title}`,
   })
 }
 
-async function remove(orgId, name, id, label, actor) {
-  await deleteDoc(ref(orgId, name, id))
-  await logAudit(orgId, actor, 'stakeholder.delete', {
+async function remove(name, id, label, actor) {
+  await deleteDoc(ref(name, id))
+  await logAudit(actor, 'stakeholder.delete', {
     target: name, targetId: id, targetLabel: label,
     summary: `Deleted ${LABELS[name]}: ${label}`,
   })
 }
 
-export const addEscalation = (orgId, d, actor) => create(orgId, COLLECTIONS.escalations, d, actor)
-export const updateEscalation = (orgId, id, d, actor) => update(orgId, COLLECTIONS.escalations, id, d, actor)
-export const deleteEscalation = (orgId, id, label, actor) => remove(orgId, COLLECTIONS.escalations, id, label, actor)
+export const addEscalation = (d, actor) => create(COLLECTIONS.escalations, d, actor)
+export const updateEscalation = (id, d, actor) => update(COLLECTIONS.escalations, id, d, actor)
+export const deleteEscalation = (id, label, actor) => remove(COLLECTIONS.escalations, id, label, actor)
 
-export const addLegalIssue = (orgId, d, actor) => create(orgId, COLLECTIONS.legalIssues, d, actor)
-export const updateLegalIssue = (orgId, id, d, actor) => update(orgId, COLLECTIONS.legalIssues, id, d, actor)
-export const deleteLegalIssue = (orgId, id, label, actor) => remove(orgId, COLLECTIONS.legalIssues, id, label, actor)
+export const addLegalIssue = (d, actor) => create(COLLECTIONS.legalIssues, d, actor)
+export const updateLegalIssue = (id, d, actor) => update(COLLECTIONS.legalIssues, id, d, actor)
+export const deleteLegalIssue = (id, label, actor) => remove(COLLECTIONS.legalIssues, id, label, actor)

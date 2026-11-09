@@ -52,7 +52,6 @@ describe('OrgTheme', () => {
   it('paints and persists colours sampled from the inline thumb when the stored theme is still the kit', async () => {
     useAuth.mockReturnValue({
       org: ORG,
-      orgId: 'a',
       isAdmin: true,
       actor: { uid: 'u1', name: 'Ada' },
     })
@@ -83,7 +82,6 @@ describe('OrgTheme', () => {
         ...ORG,
         theme: { accent: '#4a90d9', canvas: '#faf3ea', canvasSource: 'logo' },
       },
-      orgId: 'a',
       isAdmin: true,
       actor: { uid: 'u1', name: 'Ada' },
     })
@@ -105,7 +103,6 @@ describe('OrgTheme', () => {
   it('paints a sampled theme for a member without writing the org document', async () => {
     useAuth.mockReturnValue({
       org: ORG,
-      orgId: 'a',
       isAdmin: false,
       actor: { uid: 'u2', name: 'Bea' },
     })
@@ -128,7 +125,6 @@ describe('OrgTheme', () => {
     })
     useAuth.mockReturnValue({
       org: ORG,
-      orgId: 'a',
       isAdmin: false,
       actor: { uid: 'u2', name: 'Bea' },
     })

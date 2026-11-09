@@ -3,7 +3,7 @@ import { createServer } from 'node:http'
 import { PGlite } from '@electric-sql/pglite'
 import { describe, expect, it, vi } from 'vitest'
 import { applySchema, createEngine } from '../../../stack/engine.mjs'
-import { fulfillRequest } from '../../../stack/fulfill.mjs'
+import { initializeOrganization } from '../../../stack/setup.mjs'
 import { establishIdentity } from '../../../stack/identity.mjs'
 import { signSession, verifySession } from '../../../stack/session.mjs'
 import { decidePresign } from '../../../stack/presign.mjs'
@@ -41,46 +41,32 @@ const request = {
   presignUrl: '',
 }
 
-describe('own-stack fulfillment', () => {
-  it('provisions a dedicated database and does not put secrets on the request', async () => {
+// The organization and its first administrator, as /setup creates them.
+const provision = (engine, db) =>
+  initializeOrganization({
+    engine,
+    db,
+    orgName: request.orgName,
+    address: request.address,
+    adminEmail: request.contactEmail,
+    adminName: request.contactName,
+  })
+
+describe('a set-up organization', () => {
+  it('signs its first administrator in and keeps its records from strangers', async () => {
     const db = new PGlite()
     const engine = createEngine(db)
-    const written = []
-    const sent = []
-    const databaseUrl = 'postgres://browser.example/northwind'
-    const master = 'master-secret-value-not-for-the-request'
-    const result = await fulfillRequest({
-      request,
-      secrets: { databaseUrl, dataKeyMaster: master, oidcClientSecret: 'client-secret-value' },
+    const sessionSecret = 's'.repeat(40)
+    const result = await initializeOrganization({
       engine,
       db,
-      admin: {
-        update: async (id, patch) => {
-          written.push({ id, patch })
-        },
-      },
-      mail: async (message) => {
-        sent.push(message)
-        return { sent: true }
-      },
-      dedicatedUrl: 'https://northwind.example',
-      gatewayUrl: 'https://northwind.example',
+      orgName: request.orgName,
+      address: request.address,
+      adminEmail: request.contactEmail,
+      adminName: request.contactName,
     })
     expect(result.ok).toBe(true)
-    expect(result.publicEnv.VITE_DATA_DRIVER).toBe('postgres')
-    expect(result.publicEnv.VITE_AUTH_METHOD).toBe('oidc')
-    expect(result.publicEnv.VITE_AUTH_TOTP).toBe('off')
-    const published = JSON.stringify(result.publicEnv) + JSON.stringify(written)
-    expect(published).not.toContain(databaseUrl)
-    expect(published).not.toContain(master)
-    expect(published).not.toContain('client-secret-value')
-    expect(written[0].patch).toEqual({
-      status: 'live',
-      dedicatedUrl: 'https://northwind.example',
-      secretsReceived: true,
-    })
-    expect(sent[0].to).toBe('asha@northwind.test')
-    expect(sent[0].text).toContain('https://northwind.example')
+    result.sessionSecret = sessionSecret
 
     const session = await establishIdentity(engine, db, {
       sub: 'asha-subject',
@@ -93,24 +79,23 @@ describe('own-stack fulfillment', () => {
     expect(verifySession(result.sessionSecret, token)).not.toHaveProperty('role')
 
     const founder = createPostgresAdapter(engine, { role: 'ohsms_browser', uid: 'asha-subject' })
-    const org = await founder.get('organizations', result.orgId)
+    const org = await founder.get('organization', 'profile')
     expect(org.name).toBe('Northwind Metals')
-    await founder.set(`organizations/${result.orgId}/incidents`, 'i1', {
+    await founder.set(`incidents`, 'i1', {
       title: 'Cut',
-      orgId: result.orgId,
     })
 
     const stranger = createPostgresAdapter(engine, { role: 'ohsms_browser', uid: 'someone-else' })
-    expect(await stranger.get(`organizations/${result.orgId}/incidents`, 'i1')).toBeNull()
+    expect(await stranger.get(`incidents`, 'i1')).toBeNull()
 
     const profile = await engine.get({ role: 'ohsms_worker', uid: '' }, 'users', 'asha-subject')
     expect(
-      decidePresign({ op: 'delete', path: `orgs/${result.orgId}/photos/a.jpg`, profile }).ok
+      decidePresign({ op: 'delete', path: `files/photos/a.jpg`, profile }).ok
     ).toBe(true)
     expect(
       decidePresign({
         op: 'delete',
-        path: `orgs/${result.orgId}/photos/a.jpg`,
+        path: `files/photos/a.jpg`,
         profile: { ...profile, role: 'auditor' },
       }).ok
     ).toBe(false)
@@ -118,28 +103,8 @@ describe('own-stack fulfillment', () => {
       stamped: true,
       role: 'admin',
     })
-    const retention = await runRetention(engine, { orgId: result.orgId })
+    const retention = await runRetention(engine, {})
     expect(retention.livePurged).toBe(0)
-  })
-
-  it('refuses an engine that has no adapter instead of marking it live', async () => {
-    const db = new PGlite()
-    await applySchema(db)
-    const engine = createEngine(db)
-    const written = []
-    const result = await fulfillRequest({
-      request: { ...request, id: 'reqOther1', engine: 'mysql', mode: 'bring' },
-      secrets: { databaseUrl: 'mysql://db.example/app' },
-      engine,
-      db,
-      admin: { update: async (id, patch) => written.push(patch) },
-      dedicatedUrl: 'https://example.test',
-      gatewayUrl: 'https://example.test',
-    })
-    expect(result.ok).toBe(false)
-    expect(result.reason).toBe('engine')
-    expect(written[0].status).toBe('failed')
-    expect(JSON.stringify(written)).not.toContain('mysql://')
   })
 })
 
@@ -155,7 +120,6 @@ describe('password gate on the worker path', () => {
         id: 'u1',
         merge: false,
         data: {
-          orgId: 'o',
           role: 'member',
           status: 'approved',
           email: 'a@b.test',
@@ -188,7 +152,6 @@ describe('dedicated host', () => {
   it('serves a signed-in read over HTTP and refuses a forged role claim', async () => {
     const db = new PGlite()
     const engine = createEngine(db)
-    const requests = new Map()
     const secret = 'session-secret-for-the-test'
     const server = createOwnStackServer({
       engine,
@@ -196,48 +159,12 @@ describe('dedicated host', () => {
       sessionSecret: secret,
       origin: 'http://127.0.0.1',
       auth: { method: 'oidc', issuer: '', clientId: 'ohsms' },
-      requests,
       controlToken: 'operator-token',
     })
     await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve))
     const { port } = server.address()
     const origin = `http://127.0.0.1:${port}`
-    requests.set('reqHost1', { ...request, id: 'reqHost1', authIssuer: `${origin}/oidc` })
-    const started = await fetch(`${origin}/intake/start`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: 'Bearer operator-token',
-      },
-      body: JSON.stringify({ requestId: 'reqHost1' }),
-    })
-    const { token } = await started.json()
-    const intake = await fetch(`${origin}/intake`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        requestId: 'reqHost1',
-        email: 'ops@northwind.test',
-        token,
-        secrets: { databaseUrl: 'postgres://db.example/northwind', dataKeyMaster: 'master-value' },
-      }),
-    })
-    expect(intake.status).toBe(200)
-    const echoed = await intake.json()
-    expect(echoed.ok).toBe(true)
-    expect(JSON.stringify(echoed)).not.toContain('master-value')
-    expect(JSON.stringify(echoed)).not.toContain('postgres://')
-    expect(requests.get('reqHost1').status).toBe('live')
-    expect(JSON.stringify(requests.get('reqHost1'))).not.toContain('master-value')
-
-    const again = await fetch(`${origin}/fulfill`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer operator-token' },
-      body: JSON.stringify({ requestId: 'reqHost1' }),
-    })
-    expect(again.status).toBe(400)
-    expect((await again.json()).reason).toBe('already-live')
-    const body = echoed
+    expect((await provision(engine, db)).ok).toBe(true)
 
     const who = await establishIdentity(engine, db, {
       sub: 'asha-subject',
@@ -249,14 +176,14 @@ describe('dedicated host', () => {
     const denied = await fetch(`${origin}/data`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${forged}` },
-      body: JSON.stringify({ op: 'get', path: 'organizations', id: body.orgId }),
+      body: JSON.stringify({ op: 'get', path: 'organization', id: 'profile' }),
     })
     expect(denied.status).toBe(200)
     expect((await denied.json()).doc).toBeNull()
     const allowed = await fetch(`${origin}/data`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${sessionToken}` },
-      body: JSON.stringify({ op: 'get', path: 'organizations', id: body.orgId }),
+      body: JSON.stringify({ op: 'get', path: 'organization', id: 'profile' }),
     })
     expect(allowed.status).toBe(200)
     expect((await allowed.json()).doc.name).toBe('Northwind Metals')
@@ -333,7 +260,6 @@ describe('company SAML on the dedicated host', () => {
   } = {}) {
     const db = new PGlite()
     const engine = createEngine(db)
-    const requests = new Map()
     const secret = 'session-secret-for-the-saml-test'
     const keys = makeIdpKeys('northwind-idp')
     const server = createOwnStackServer({
@@ -342,40 +268,25 @@ describe('company SAML on the dedicated host', () => {
       sessionSecret: secret,
       origin: 'http://127.0.0.1',
       auth: { method: 'oidc', issuer: '', clientId: '' },
-      requests,
       controlToken: 'operator-token',
     })
     await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve))
     const origin = `http://127.0.0.1:${server.address().port}`
-    requests.set('reqSaml1', {
-      ...request,
-      id: 'reqSaml1',
-      authMethod: 'saml',
-      authIssuer: 'https://idp.northwind.test/saml',
-      authClientId: 'ohsms-northwind',
-    })
-    const started = await fetch(`${origin}/intake/start`, {
+    const intake = await fetch(`${origin}/setup`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer operator-token' },
-      body: JSON.stringify({ requestId: 'reqSaml1' }),
-    })
-    const { token } = await started.json()
-    const intake = await fetch(`${origin}/intake`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        requestId: 'reqSaml1',
-        email: 'ops@northwind.test',
-        token,
-        secrets: {
-          dataKeyMaster: 'master-value',
-          samlIdpCert: certAs(keys.cert),
-          samlEntryPoint: entryPoint,
-        },
-      }),
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        code: 'operator-token',
+        orgName: request.orgName,
+        contactName: request.contactName,
+        contactEmail: request.contactEmail,
+        method: 'saml',
+        samlEntryPoint: entryPoint,
+        samlIdpCert: certAs(keys.cert),
+      }).toString(),
     })
     if (expect200) expect(intake.status).toBe(200)
-    return { server, origin, keys, secret, intake, requests }
+    return { server, origin, keys, secret, intake }
   }
 
   async function start(origin) {
@@ -418,7 +329,8 @@ describe('company SAML on the dedicated host', () => {
     const { server, origin, keys, secret } = await samlHost()
     const { location, authn, cookie } = await start(origin)
     expect(location.origin + location.pathname).toBe('https://idp.northwind.test/sso')
-    expect(authn.issuer).toBe('ohsms-northwind')
+    // The SP entity id /setup gives the IdP is this server's address.
+    expect(authn.issuer).toBe('http://127.0.0.1')
 
     const res = await post(origin, answer(keys, authn), cookie)
     expect(res.status).toBe(302)
@@ -428,7 +340,7 @@ describe('company SAML on the dedicated host', () => {
     server.close()
   })
 
-  it('accepts a certificate whose line breaks were lost in the handoff field', async () => {
+  it('accepts a certificate whose line breaks were lost in the setup form', async () => {
     const { server, origin, keys } = await samlHost({
       certAs: (pem) => pem.replace(/\r?\n/g, ''),
     })
@@ -438,13 +350,12 @@ describe('company SAML on the dedicated host', () => {
   })
 
   it('does not mark a SAML company live without the IdP entry point', async () => {
-    const { server, origin, intake, requests } = await samlHost({
+    const { server, origin, intake } = await samlHost({
       entryPoint: '  ',
       expect200: false,
     })
     expect(intake.status).toBe(400)
-    expect((await intake.json()).reason).toBe('saml')
-    expect(requests.get('reqSaml1').status).toBe('requested')
+    expect(await intake.text()).toContain('certificate')
     const start = await fetch(`${origin}/auth/start`, { redirect: 'manual' })
     expect(String(start.headers.get('location'))).not.toContain('idp.northwind.test')
     server.close()
@@ -532,36 +443,17 @@ describe('company OIDC on the dedicated host', () => {
 
     const db = new PGlite()
     const engine = createEngine(db)
-    const requests = new Map()
     const secret = 'session-secret-for-the-oidc-test'
     const server = createOwnStackServer({
       engine,
       db,
       sessionSecret: secret,
       origin,
-      auth: { method: 'oidc', issuer: '', clientId: 'ohsms' },
-      requests,
+      auth: { method: 'oidc', issuer: `${origin}/oidc`, clientId: request.authClientId },
       controlToken: 'operator-token',
     })
     await new Promise((resolve) => server.listen(port, '127.0.0.1', resolve))
-    requests.set('reqOidc1', { ...request, id: 'reqOidc1', authIssuer: `${origin}/oidc` })
-    const started = await fetch(`${origin}/intake/start`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer operator-token' },
-      body: JSON.stringify({ requestId: 'reqOidc1' }),
-    })
-    const { token } = await started.json()
-    const intake = await fetch(`${origin}/intake`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        requestId: 'reqOidc1',
-        email: 'ops@northwind.test',
-        token,
-        secrets: { databaseUrl: 'postgres://db.example/northwind', dataKeyMaster: 'master-value' },
-      }),
-    })
-    expect(intake.status).toBe(200)
+    expect((await provision(engine, db)).ok).toBe(true)
     return { server, origin, secret }
   }
 
@@ -694,40 +586,22 @@ async function hostOnProvider(provider) {
   await new Promise((resolve) => probe.close(resolve))
   const origin = `http://127.0.0.1:${port}`
   const db = new PGlite()
-  const requests = new Map()
+  const engine = createEngine(db)
   const server = createOwnStackServer({
-    engine: createEngine(db),
+    engine,
     db,
     sessionSecret: 'session-secret-for-the-discovery-test',
     origin,
-    requests,
+    auth: {
+      method: 'oidc',
+      issuer: provider.issuer,
+      clientId: 'weehs-okta',
+      clientSecret: 'okta-secret',
+    },
     controlToken: 'operator-token',
   })
   await new Promise((resolve) => server.listen(port, '127.0.0.1', resolve))
-  requests.set('reqDisc1', {
-    ...request,
-    id: 'reqDisc1',
-    authMethod: 'oidc',
-    authIssuer: provider.issuer,
-    authClientId: 'weehs-okta',
-  })
-  const started = await fetch(`${origin}/intake/start`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer operator-token' },
-    body: JSON.stringify({ requestId: 'reqDisc1' }),
-  })
-  const { token } = await started.json()
-  const intake = await fetch(`${origin}/intake`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      requestId: 'reqDisc1',
-      email: 'ops@northwind.test',
-      token,
-      secrets: { dataKeyMaster: 'master-value-for-discovery', oidcClientSecret: 'okta-secret' },
-    }),
-  })
-  expect(intake.status).toBe(200)
+  expect((await provision(engine, db)).ok).toBe(true)
   return { server, origin }
 }
 
@@ -904,8 +778,6 @@ describe('Microsoft Entra, chosen at /setup', () => {
       db,
       sessionSecret: 'session-secret-for-the-entra-test',
       origin: 'https://ehs.northwind.test',
-      requests: new Map(),
-      intake: new Map(),
       controlToken: 'operator-token-for-the-entra-test',
       demoIssuer: false,
       onAuthChange: (auth) => saved.push(auth),

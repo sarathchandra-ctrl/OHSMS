@@ -152,17 +152,11 @@
 // rather than emulating it.
 //
 // Which implementation backs the seam comes from VITE_DATA_DRIVER (default
-// 'firestore'). Adding a backend = one adapter file implementing everything
-// above plus a line in DRIVERS. postgres (any Postgres-protocol server) is
-// registered. supabase (the Supabase client / Realtime flavor, not brought
-// Postgres) stays reserved until that adapter exists (resolveDriver.js,
-// docs/CUSTOM-STACK.md). Selecting a reserved name throws instead of falling
-// through to Firestore: that fallback is for a typo, and a name this
-// repository has published as a target is not a typo. ./README.md is the
-// contract note that sits next to the code; the deploy choice and the
-// remaining-work list are the doc.
+// 'postgres': this installation's server). 'memory' exists for tests and
+// demos. Adding a backend = one adapter file implementing everything above
+// plus a line in DRIVERS. ./README.md is the contract note that sits next to
+// the code.
 // ─────────────────────────────────────────────────────────────────────────────
-import firestore from './adapters/firestore'
 import memory from './adapters/memory'
 import postgres from './adapters/postgres'
 import { resolveDataDriver } from './resolveDriver'
@@ -173,13 +167,11 @@ import { runtimeEnv } from '../runtimeConfig'
 // without every caller changing shape. A path 3 SDK pays that cost on the
 // day it is registered — do not "fix" it with a dynamic import.
 const DRIVERS = {
-  firestore,
-  memory, // the second real driver (no emulator needed) — NOT a production store
-  postgres, // own-stack. The browser talks to VITE_DATA_GATEWAY; RLS enforces.
+  postgres, // this installation's server. The browser talks to the gateway; RLS enforces.
+  memory, // in-process, for tests and demos — NOT a production store
 }
 
-// Throws UnimplementedDataDriverError for supabase until that flavor's adapter
-// is actually in DRIVERS. postgres is registered. Unknown names still resolve
-// to firestore.
+// Throws UnimplementedDataDriverError for a reserved name. Anything else that
+// is not registered resolves to postgres.
 export const dataDriver = resolveDataDriver(runtimeEnv('DATA_DRIVER'), DRIVERS)
 export const dataProvider = DRIVERS[dataDriver]

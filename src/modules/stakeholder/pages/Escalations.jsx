@@ -17,7 +17,7 @@ import { attachmentSummary } from '../lib/attachments'
 
 
 export default function Escalations() {
-  const { orgId, actor, isManager } = useAuth()
+  const { actor, isManager } = useAuth()
   const navigate = useNavigate()
   const { escalations, repeats, loading } = useStakeholder()
   const [q, setQ] = useState('')
@@ -45,7 +45,7 @@ export default function Escalations() {
     // eslint-disable-next-line no-alert
     if (!window.confirm(warn)) return
     try {
-      await deleteEscalation(orgId, row.id, row.title, actor)
+      await deleteEscalation(row.id, row.title, actor)
       toast.success('Deleted')
     } catch (e) {
       toastCaught(e)

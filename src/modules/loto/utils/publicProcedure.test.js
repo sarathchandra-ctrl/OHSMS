@@ -14,7 +14,6 @@ const NAMES = {
 
 const procedure = {
   id: 'proc-1',
-  orgId: 'orgAcme',
   procedureCode: 'ACME-PLANT-2-PRESS',
   title: 'Hydraulic press isolation',
   equipment: 'Hydraulic Press #4',
@@ -76,7 +75,6 @@ describe('the public mirror of a procedure', () => {
   it('carries what someone standing at the machine needs', () => {
     const pub = publicProcedure(procedure)
     expect(pub).toMatchObject({
-      orgId: 'orgAcme',
       procedureCode: 'ACME-PLANT-2-PRESS',
       equipment: 'Hydraulic Press #4',
       site: 'Plant 2 — Bay C',

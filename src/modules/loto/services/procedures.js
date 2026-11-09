@@ -67,14 +67,14 @@ export function assertNotHeldByPermit(procedure) {
  * (the read seam hands pages plain URLs, and pages hand them straight back).
  * Anything unmatched stays inline — the pre-storage behaviour.
  */
-async function resolvePhotoMap(orgId, incoming = {}, prevRaw = {}) {
+async function resolvePhotoMap(incoming = {}, prevRaw = {}) {
   const out = {}
   for (const [key, v] of Object.entries(incoming)) {
     if (!v) continue
     if (typeof v === 'object' && (v.url || v.path)) { out[key] = { url: v.url || '', path: v.path || '' }; continue }
     const s = String(v)
     if (s.startsWith('data:')) {
-      const up = await putFile(orgId, 'loto-photos', s, key + '.jpg')
+      const up = await putFile('loto-photos', s, key + '.jpg')
       out[key] = up ? { url: up.url, path: up.path } : s
       continue
     }
@@ -113,7 +113,7 @@ function sanitizePoints(points = []) {
 
 /** Create a brand-new procedure (status: draft) + its photos doc. */
 export async function createProcedure(id, data, user, photos = {}) {
-  const resolvedPhotos = await resolvePhotoMap(data.orgId, photos, {})
+  const resolvedPhotos = await resolvePhotoMap(photos, {})
   const points = sanitizePoints(data.isolationPoints || [])
   const body = {
     ...data,
@@ -133,7 +133,6 @@ export async function createProcedure(id, data, user, photos = {}) {
   batch.set(doc(db, COL, id), body)
   batch.set(publicRef(id), publicBody(body))
   batch.set(doc(db, PHOTOS, id), {
-    orgId: data.orgId,
     photos: resolvedPhotos,
     updatedAt: serverTimestamp(),
   })
@@ -143,7 +142,7 @@ export async function createProcedure(id, data, user, photos = {}) {
 
 /** Save a revision: bumps revision, resets to draft, replaces photos. */
 export async function reviseProcedure(id, data, user, photos = {}) {
-  const resolvedPhotos = await resolvePhotoMap(data.orgId, photos, await rawPhotoMap(id))
+  const resolvedPhotos = await resolvePhotoMap(photos, await rawPhotoMap(id))
   const snap = await getDoc(doc(db, COL, id))
   const current = snap.data() || {}
   assertNotHeldByPermit(current)
@@ -183,7 +182,6 @@ export async function reviseProcedure(id, data, user, photos = {}) {
   // procedure that predates the mirror has none to update.
   batch.set(publicRef(id), publicBody({ ...current, ...body }))
   batch.set(doc(db, PHOTOS, id), {
-    orgId: data.orgId,
     photos: resolvedPhotos,
     updatedAt: serverTimestamp(),
   })
@@ -202,7 +200,7 @@ export async function deleteProcedure(procedure) {
   // can be released from nowhere in the app — the procedure is the only screen
   // that knows about it — so the padlock would be permanently unusable, which
   // is the same "stuck lock" failure the defect-lock sweep exists to undo.
-  releaseClaims(batch, procedure.orgId, lockNosHeldBy(procedure))
+  releaseClaims(batch, lockNosHeldBy(procedure))
   // Cloud photo files go with the photos doc — it is their only index.
   const raw = await rawPhotoMap(procedure.id)
   for (const v of Object.values(raw)) {
@@ -349,7 +347,7 @@ export async function setPointLock(procedureId, pointKey, locked, user, tech = n
     // it. Read before any write — a transaction refuses a read once it has
     // written, and every claim this call needs is known by now.
     const held = locked && useTech?.lockNo
-      ? await readClaims(tx, data.orgId, [useTech.lockNo])
+      ? await readClaims(tx, [useTech.lockNo])
       : []
     assertClaimsFree(held, procedureId)
 
@@ -418,7 +416,6 @@ export async function setPointLock(procedureId, pointKey, locked, user, tech = n
     // taking side that reserves a lock nothing is holding, on the releasing
     // side it leaves a lock the system will not hand out again.
     const claimContext = {
-      orgId: data.orgId,
       procedureId,
       procedureCode: data.procedureCode,
       equipment: data.equipment,
@@ -431,10 +428,9 @@ export async function setPointLock(procedureId, pointKey, locked, user, tech = n
       byName: user.displayName,
     }
     if (locked && useTech?.lockNo) takeClaims(tx, claimContext, [useTech.lockNo])
-    if (!locked && releasedLockNo) releaseClaims(tx, data.orgId, [releasedLockNo])
+    if (!locked && releasedLockNo) releaseClaims(tx, [releasedLockNo])
 
     tx.set(eventRef, {
-      orgId: data.orgId,
       procedureId,
       equipment: data.equipment || '',
       site: data.site || '',
@@ -484,7 +480,7 @@ export async function addGroupMember(procedureId, member, method, user, swaps = 
     // actually used is not settled until the member record is built below. A
     // superset costs one or two reads; getting the ordering wrong costs the
     // whole transaction.
-    const held = await readClaims(tx, data.orgId, [
+    const held = await readClaims(tx, [
       member.boxLock,
       ...Object.values(member.locks || {}),
       ...Object.values(swaps || {}),
@@ -586,10 +582,9 @@ export async function addGroupMember(procedureId, member, method, user, swaps = 
 
     tx.update(ref, update)
     tx.set(publicRef(procedureId), publicBody({ ...data, ...update }))
-    releaseClaims(tx, data.orgId, swappedOut.filter((no) => !taken.includes(String(no))))
+    releaseClaims(tx, swappedOut.filter((no) => !taken.includes(String(no))))
 
     const claimBase = {
-      orgId: data.orgId,
       procedureId,
       procedureCode: data.procedureCode,
       equipment: data.equipment,
@@ -608,7 +603,6 @@ export async function addGroupMember(procedureId, member, method, user, swaps = 
       taken.filter((no) => !Object.values(swaps || {}).map(String).includes(String(no))),
     )
     tx.set(eventRef, {
-      orgId: data.orgId,
       procedureId,
       equipment: data.equipment || '',
       site: data.site || '',
@@ -652,12 +646,11 @@ export async function removeGroupMember(procedureId, techId, user) {
     // The padlocks this technician takes home with them. Their point locks are
     // not touched: a hasp swap re-labelled those and they stay on the equipment
     // until the point itself is unlocked.
-    releaseClaims(tx, data.orgId, [
+    releaseClaims(tx, [
       removed?.boxLock,
       ...Object.values(removed?.locks || {}),
     ])
     tx.set(eventRef, {
-      orgId: data.orgId,
       procedureId,
       equipment: data.equipment || '',
       site: data.site || '',
@@ -687,10 +680,10 @@ export function subscribeProcedure(id, cb, onError) {
   )
 }
 
-export function subscribeOrgEvents(orgId, cb, onError) {
+export function subscribeOrgEvents(cb, onError) {
   // Append-only LOTO activity log. No server-side orderBy (no index); sort by
   // timestamp on the client, newest first.
-  const q = query(collection(db, EVENTS), where('orgId', '==', orgId), limit(COLLECTION_READ_CAP))
+  const q = query(collection(db, EVENTS), limit(COLLECTION_READ_CAP))
   return onSnapshot(
     q,
     (snap) => {
@@ -702,9 +695,9 @@ export function subscribeOrgEvents(orgId, cb, onError) {
   )
 }
 
-export function subscribeOrgProcedures(orgId, cb, onError) {
+export function subscribeOrgProcedures(cb, onError) {
   // No server-side orderBy (avoids a composite index); sort on the client.
-  const q = query(collection(db, COL), where('orgId', '==', orgId), limit(COLLECTION_READ_CAP))
+  const q = query(collection(db, COL), limit(COLLECTION_READ_CAP))
   return onSnapshot(
     q,
     (snap) => {
@@ -735,8 +728,8 @@ export function subscribeOrgProcedures(orgId, cb, onError) {
  * on /procedureQr means even an approved member cannot page it, which is the
  * property that stops a stranger walking off with every tenant's procedures.
  */
-export async function backfillProcedureMirrors(orgId, { dryRun = true, max = 2000 } = {}) {
-  const snap = await getDocs(query(collection(db, COL), where('orgId', '==', orgId), limit(max)))
+export async function backfillProcedureMirrors({ dryRun = true, max = 2000 } = {}) {
+  const snap = await getDocs(query(collection(db, COL), limit(max)))
   const procedures = snap.docs.map((d) => ({ id: d.id, ...d.data() }))
 
   let present = 0

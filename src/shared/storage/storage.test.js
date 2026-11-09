@@ -66,34 +66,34 @@ describe('storagePath', () => {
   const fixed = () => 'abcd1234'
 
   it('scopes by org first — that is what the storage rules match on', () => {
-    expect(storagePath('org1', 'training-content', 'a.pdf', fixed)).toBe(
+    expect(storagePath('training-content', 'a.pdf', fixed)).toBe(
       'orgs/org1/training-content/abcd1234-a.pdf'
     )
   })
 
   it('two identical filenames get different paths', () => {
-    const a = storagePath('o', 'k', 'photo.jpg')
-    const b = storagePath('o', 'k', 'photo.jpg')
+    const a = storagePath('k', 'photo.jpg')
+    const b = storagePath('k', 'photo.jpg')
     expect(a).not.toBe(b)
   })
 
   it('refuses to build an unscoped path', () => {
     // A file outside /orgs/{orgId}/ would be invisible to the tenancy rules.
-    expect(() => storagePath('', 'k', 'a')).toThrow()
-    expect(() => storagePath('o', '', 'a')).toThrow()
+    expect(() => storagePath('k', 'a')).toThrow()
+    expect(() => storagePath('', 'a')).toThrow()
   })
 
   it('sanitises every segment, not only the filename', () => {
     // The org segment is what the storage rules match tenancy on: an orgId
     // carrying a slash must not be able to escape its own folder.
-    const p = storagePath('org/../other', 'kind/../x', 'a.pdf', () => 'r')
+    const p = storagePath('kind/../x', 'a.pdf', () => 'r')
     expect(p).toBe('orgs/org____other/kind____x/r-a.pdf')
     expect(p.split('/').length).toBe(4)
   })
 
   it('refuses a segment that sanitises to nothing', () => {
-    expect(() => storagePath('///', 'k', 'a')).toThrow()
-    expect(() => storagePath('o', '???', 'a')).toThrow()
+    expect(() => storagePath('k', 'a')).toThrow()
+    expect(() => storagePath('???', 'a')).toThrow()
   })
 })
 
@@ -182,13 +182,13 @@ describe('a refused file does not fall back to inline storage', () => {
   it('throws RejectedFileError rather than returning null', async () => {
     // MZ — a Windows executable — declared as a PDF.
     const exe = new Blob([Uint8Array.from([0x4d, 0x5a, 0x90, 0x00])], { type: 'application/pdf' })
-    await expect(putFile('org1', 'permit-documents', exe, 'report.pdf'))
+    await expect(putFile('permit-documents', exe, 'report.pdf'))
       .rejects.toThrow(RejectedFileError)
   })
 
   it('gives the person a reason they can act on', async () => {
     const exe = new Blob([Uint8Array.from([0x4d, 0x5a, 0x90, 0x00])], { type: 'application/pdf' })
-    await expect(putFile('org1', 'permit-documents', exe, 'report.pdf'))
+    await expect(putFile('permit-documents', exe, 'report.pdf'))
       .rejects.toThrow(/Windows executable/)
   })
 
@@ -198,6 +198,6 @@ describe('a refused file does not fall back to inline storage', () => {
     const ok = new Blob([Uint8Array.from([0x25, 0x50, 0x44, 0x46])], { type: 'application/pdf' })
     // No emulator/bucket configured in this environment, so the adapter cannot
     // upload — the infrastructure path, which must stay non-fatal.
-    await expect(putFile('org1', 'permit-documents', ok, 'real.pdf')).resolves.toBeNull()
+    await expect(putFile('permit-documents', ok, 'real.pdf')).resolves.toBeNull()
   })
 })

@@ -118,7 +118,7 @@ function SessionPicker({ course, sessions, requests, sites, busyId, onRequest, o
 }
 
 export default function MyLearning() {
-  const { orgId, orgName, profile, actor } = useAuth()
+  const { orgName, profile, actor } = useAuth()
   const { loading, courses, myAssignments, myRecords } = useTraining()
   const [busyId, setBusyId] = useState(null)
   const [certRecord, setCertRecord] = useState(null)
@@ -129,10 +129,9 @@ export default function MyLearning() {
   const [sessions, setSessions] = useState([])
   const [requests, setRequests] = useState([])
   useEffect(() => {
-    if (!orgId) return undefined
-    const unsubs = [subscribeSessions(orgId, setSessions), subscribeRequests(orgId, setRequests)]
+    const unsubs = [subscribeSessions(setSessions), subscribeRequests(setRequests)]
     return () => unsubs.forEach((u) => u && u())
-  }, [orgId])
+  }, [])
 
   const myRequests = useMemo(
     () => requests.filter((r) => r.employeeUid === profile?.uid),
@@ -143,7 +142,7 @@ export default function MyLearning() {
   const request = async (session) => {
     setBusyId(`req-${session.id}`)
     try {
-      await requestSession(orgId, { session, profile }, actor)
+      await requestSession({ session, profile }, actor)
       toast.success('Requested — your trainer will confirm your place')
     } catch (e) {
       toastCaught(e, 'Could not send the request')
@@ -153,7 +152,7 @@ export default function MyLearning() {
   const withdraw = async (req) => {
     setBusyId(`req-${req.sessionId}`)
     try {
-      await withdrawRequest(orgId, req.id, actor, req.courseName)
+      await withdrawRequest(req.id, actor, req.courseName)
       toast.success('Request withdrawn')
     } catch (e) {
       toastCaught(e, 'Could not withdraw')
@@ -174,7 +173,7 @@ export default function MyLearning() {
     setBusyId(`course-${course.id}`)
     try {
       const ids = myAssignments.filter((a) => a.courseId === course.id).map((a) => a.id)
-      await selfCompleteTraining(orgId, { course, profile, assignmentIds: ids }, actor)
+      await selfCompleteTraining({ course, profile, assignmentIds: ids }, actor)
       toast.success(`"${course.name}" marked completed`)
     } catch (e) {
       toastCaught(e, 'Could not complete the training')
@@ -190,7 +189,7 @@ export default function MyLearning() {
     try {
       // Close every open assignment of mine for this course in the same batch.
       const ids = myAssignments.filter((a) => a.courseId === course.id).map((a) => a.id)
-      await selfCompleteTraining(orgId, { course, profile, assignmentIds: ids }, actor)
+      await selfCompleteTraining({ course, profile, assignmentIds: ids }, actor)
       toast.success(`"${course.name}" marked completed`)
     } catch (e) {
       toastCaught(e, 'Could not complete the training')

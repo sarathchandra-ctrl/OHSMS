@@ -41,18 +41,12 @@ async function liveProfile(engine, uid) {
 
 export async function stampIdentity(engine, uid) {
   const profile = await liveProfile(engine, uid)
-  if (
-    !profile ||
-    profile.status !== 'approved' ||
-    profile.mustChangePassword === true ||
-    !profile.orgId
-  ) {
+  if (!profile || profile.status !== 'approved' || profile.mustChangePassword === true) {
     return { stamped: false }
   }
   return {
     stamped: true,
     uid,
-    orgId: profile.orgId,
     role: profile.role,
     status: profile.status,
     mustChangePassword: false,
@@ -108,11 +102,10 @@ export async function releaseDataKeys(engine, { uid, master }) {
   const profile = await liveProfile(engine, uid)
   const grants = grantsFor(profile)
   if (!grants.general) return { ok: false, reason: 'denied' }
-  const orgId = profile.orgId
-  const path = `organizations/${orgId}/meta`
+  const path = 'meta'
   let keyset = await engine.get(WORKER, path, 'cryptoKeys')
   if (!keyset) {
-    const fresh = await generateKeyset(master, orgId, 1)
+    const fresh = await generateKeyset(master, 1)
     await engine.commit(WORKER, [
       {
         type: 'set',
@@ -126,19 +119,30 @@ export async function releaseDataKeys(engine, { uid, master }) {
   }
   const stored = { ...keyset }
   delete stored.id
-  const released = await releaseKeyset(master, orgId, stored, profile)
+  const released = await releaseKeyset(master, stored, profile)
   return { ok: true, keys: released }
 }
 
-export async function deleteOrgFile(engine, blobs, { uid, path }) {
+export async function deleteOrgFile(engine, blobStore, { uid, path }) {
   const profile = await liveProfile(engine, uid)
   const decision = mayDeleteFile(profile, path)
   if (!decision.ok) return decision
-  if (blobs) blobs.delete(path)
+  if (blobStore) await blobStore.remove(path)
   return { ok: true }
 }
 
-export async function runRetention(engine, { orgId, now = Date.now() }) {
+/** Maintenance jobs are an administrator's, read from the live profile. */
+export async function isLiveAdmin(engine, uid) {
+  const profile = await liveProfile(engine, uid)
+  return Boolean(
+    profile &&
+      profile.status === 'approved' &&
+      profile.role === 'admin' &&
+      profile.mustChangePassword !== true
+  )
+}
+
+export async function runRetention(engine, { now = Date.now() }) {
   const live = []
   for (const row of RECORD_CLASSES) {
     const plan = planLiveAgePurge([{ id: 'sample' }], row, { now })
@@ -147,11 +151,11 @@ export async function runRetention(engine, { orgId, now = Date.now() }) {
   if (live.some((row) => row.period === NEEDS_LEGAL_SIGN_OFF && row.purge !== 0)) {
     throw new Error('retention: a statutory class was queued for deletion')
   }
-  const docs = await engine.list(WORKER, `organizations/${orgId}/incidents`, {})
+  const docs = await engine.list(WORKER, 'incidents', {})
   const plan = planPurge(docs, { now })
   for (const item of plan.purge || []) {
     await engine.commit(WORKER, [
-      { type: 'remove', path: `organizations/${orgId}/incidents`, id: item.id },
+      { type: 'remove', path: 'incidents', id: item.id },
     ])
   }
   return { livePurged: 0, recyclePurged: (plan.purge || []).length }
@@ -170,8 +174,8 @@ export async function withdrawStaleMirrors(engine, { now = Date.now() } = {}) {
   return { withdrawn: plan.withdraw.length }
 }
 
-export async function sweepLoto(engine, { orgId, nowMs = Date.now() } = {}) {
-  const permits = await engine.list(WORKER, `organizations/${orgId}/lotoPermits`, {})
+export async function sweepLoto(engine, { nowMs = Date.now() } = {}) {
+  const permits = await engine.list(WORKER, 'lotoPermits', {})
   let flagged = 0
   for (const permit of permits) {
     const flags = planFlags(permit, nowMs)
@@ -179,7 +183,7 @@ export async function sweepLoto(engine, { orgId, nowMs = Date.now() } = {}) {
     await engine.commit(WORKER, [
       {
         type: 'update',
-        path: `organizations/${orgId}/lotoPermits`,
+        path: 'lotoPermits',
         id: permit.id,
         data: { flags },
       },

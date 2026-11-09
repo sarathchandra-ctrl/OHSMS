@@ -27,7 +27,7 @@ import { DEFECT_BY_KEY, REGION_COLORS } from '../lib/constants'
  */
 export default function PhysicalDefectLog({ mode = 'open' }) {
   const fleet = useFleet()
-  const { orgId, orgName, profile, isManager } = useAuth()
+  const { orgName, profile, isManager } = useAuth()
   const rows = mode === 'open' ? fleet.physicalOpen : fleet.physicalClosed
 
   const [filters, setFilters] = useState(emptyFilters())
@@ -48,7 +48,7 @@ export default function PhysicalDefectLog({ mode = 'open' }) {
     setBusyId(r.id)
     try {
       const remaining = (ext.physicalDefects || []).filter((d) => d !== r.defectType)
-      await resolveDefects(orgId, orgName, r.extId, remaining, profile?.name)
+      await resolveDefects(orgName, r.extId, remaining, profile?.name)
       toast.success(`Resolved: ${r.defectLabel}`)
     } catch (e) {
       toastCaught(e, 'Could not resolve the defect')

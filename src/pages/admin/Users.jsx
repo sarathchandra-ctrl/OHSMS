@@ -20,7 +20,7 @@ const STATUS_TONE = { approved: 'green', pending: 'amber', suspended: 'red' }
 const emptyScope = { sites: [], regions: [], entities: [] }
 
 export default function Users() {
-  const { orgId, orgName, actor, user, org } = useAuth()
+  const { orgName, actor, user, org } = useAuth()
   const [users, setUsers] = useState(null)
   const [sites, setSites] = useState([])
   const [manage, setManage] = useState(null) // user being managed | null
@@ -28,27 +28,26 @@ export default function Users() {
   const [busy, setBusy] = useState(false)
 
   useEffect(() => {
-    if (!orgId) return
     const unsubs = [
-      subscribeOrgUsers(orgId, (list) =>
+      subscribeOrgUsers((list) =>
         setUsers(
           list.sort((a, b) => (a.status === 'pending' ? -1 : 1) - (b.status === 'pending' ? -1 : 1))
         )
       ),
-      subscribeSites(orgId, setSites),
+      subscribeSites(setSites),
     ]
     return () => unsubs.forEach((u) => u && u())
-  }, [orgId])
+  }, [])
 
   const regions = useMemo(() => regionsOf(sites), [sites])
   const entities = useMemo(() => entitiesOf(sites), [sites])
   const siteOptions = useMemo(() => sites.map((s) => ({ value: s.id, label: s.name })), [sites])
 
-  const approve = async (u) => wrap(() => setUserStatus(u.uid, 'approved', orgId, actor, u.name), `${u.name} approved`)
-  const suspend = async (u) => wrap(() => setUserStatus(u.uid, 'suspended', orgId, actor, u.name), `${u.name} suspended`)
-  const changeRole = async (u, role) => wrap(() => setUserRole(u.uid, role, orgId, actor, u.name), `${u.name} → ${roleLabel(role)}`)
+  const approve = async (u) => wrap(() => setUserStatus(u.uid, 'approved', actor, u.name), `${u.name} approved`)
+  const suspend = async (u) => wrap(() => setUserStatus(u.uid, 'suspended', actor, u.name), `${u.name} suspended`)
+  const changeRole = async (u, role) => wrap(() => setUserRole(u.uid, role, actor, u.name), `${u.name} → ${roleLabel(role)}`)
   const grantRequest = async (u) =>
-    wrap(() => grantAccessRequest(u.uid, u.accessRequest, orgId, actor, u.name), `Access granted to ${u.name}`)
+    wrap(() => grantAccessRequest(u.uid, u.accessRequest, actor, u.name), `Access granted to ${u.name}`)
 
   async function wrap(fn, ok) {
     try { await fn(); toast.success(ok) } catch (e) { toastCaught(e, 'Failed') }
@@ -84,12 +83,12 @@ export default function Users() {
     try {
       const isSelf = manage.uid === user?.uid
       if (!isSelf && form.role !== manage.role) {
-        await setUserRole(manage.uid, form.role, orgId, actor, manage.name)
+        await setUserRole(manage.uid, form.role, actor, manage.name)
       }
       await setUserAccess(
         manage.uid,
         { department: form.department, access: { sites: form.sites, regions: form.regions, entities: form.entities } },
-        orgId, actor, manage.name
+        actor, manage.name
       )
       toast.success(`Access updated for ${manage.name}`)
       setManage(null)

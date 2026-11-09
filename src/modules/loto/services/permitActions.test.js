@@ -7,7 +7,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 // success writes the permit AND the procedure through the same `tx`.
 const h = vi.hoisted(() => ({ docs: new Map(), committed: [], txCount: 0, batches: [] }))
 
-vi.mock('firebase/firestore', () => ({
+vi.mock('../../../shared/data/client.js', () => ({
   collection: (_db, ...p) => ({ __col: p.join('/') }),
   deleteField: () => '__delete__',
   doc: (first, ...p) =>
@@ -58,7 +58,7 @@ const NOW = Date.now()
 const PERMIT = 'organizations/o1/lotoPermits/LP-2026-0001'
 
 const basePermit = (over = {}) => ({
-  orgId: 'o1', permitNo: 'LP-2026-0001', status: 'approved', requestedBy: 'u1',
+  permitNo: 'LP-2026-0001', status: 'approved', requestedBy: 'u1',
   windowEnd: NOW + 3_600_000, procedureId: 'p1', procedureRevision: 2,
   pointKeys: ['k1', 'k2'], pointCount: 2,
   isolationPoints: [{ key: 'k1', pointId: 'E-1' }, { key: 'k2', pointId: 'H-1' }],
@@ -69,7 +69,7 @@ const basePermit = (over = {}) => ({
   ...over,
 })
 const baseProc = (over = {}) => ({
-  orgId: 'o1', status: 'approved', revision: 2, procedureCode: 'PUMP', equipment: 'Pump A', site: 'S1',
+  status: 'approved', revision: 2, procedureCode: 'PUMP', equipment: 'Pump A', site: 'S1',
   isolationPoints: [
     { key: 'k1', energySource: 'electrical', lockState: { locked: false } },
     { key: 'k2', energySource: 'hydraulic', lockState: { locked: false } },
@@ -95,7 +95,7 @@ beforeEach(() => {
 describe('startIsolation — permit and procedure in ONE transaction', () => {
   it('flips the permit, locks every point, stamps the procedure, takes the claims and logs it, all in one commit', async () => {
     seed()
-    await A.startIsolation({ orgId: 'o1', permit: { id: 'LP-2026-0001' }, scans, user, ...ready })
+    await A.startIsolation({ permit: { id: 'LP-2026-0001' }, scans, user, ...ready })
     expect(h.txCount).toBe(1)
 
     expect(wrote(PERMIT)[0].data).toMatchObject({ status: 'active', startedAt: '__now' })
@@ -120,7 +120,7 @@ describe('startIsolation — permit and procedure in ONE transaction', () => {
 
   it('writes NOTHING when one tag has not been scanned', async () => {
     seed()
-    await expect(A.startIsolation({ orgId: 'o1', permit: { id: 'LP-2026-0001' }, scans: { k1: scans.k1 }, user, ...ready }))
+    await expect(A.startIsolation({ permit: { id: 'LP-2026-0001' }, scans: { k1: scans.k1 }, user, ...ready }))
       .rejects.toThrow(/Scan the tag on every isolation point/)
     expect(h.committed).toEqual([])
   })
@@ -128,7 +128,7 @@ describe('startIsolation — permit and procedure in ONE transaction', () => {
   it('writes NOTHING when a padlock is already on other equipment', async () => {
     seed()
     h.docs.set('lockClaims/o1__D-2', { procedureId: 'other', equipment: 'Press 4' })
-    await expect(A.startIsolation({ orgId: 'o1', permit: { id: 'LP-2026-0001' }, scans, user, ...ready }))
+    await expect(A.startIsolation({ permit: { id: 'LP-2026-0001' }, scans, user, ...ready }))
       .rejects.toThrow(/already applied on Press 4/)
     expect(h.committed).toEqual([])
   })
@@ -141,14 +141,14 @@ describe('startIsolation — permit and procedure in ONE transaction', () => {
     ['a point is already locked', () => seed(basePermit(), baseProc({ isolationPoints: [{ key: 'k1', lockState: { locked: true } }, { key: 'k2' }] })), /already locked/],
   ])('refuses and writes nothing when %s', async (_name, arrange, message) => {
     arrange()
-    await expect(A.startIsolation({ orgId: 'o1', permit: { id: 'LP-2026-0001' }, scans, user, ...ready })).rejects.toThrow(message)
+    await expect(A.startIsolation({ permit: { id: 'LP-2026-0001' }, scans, user, ...ready })).rejects.toThrow(message)
     expect(h.committed).toEqual([])
   })
 
   it('refuses to start when zero energy was not confirmed', async () => {
     seed()
     await expect(A.startIsolation({
-      orgId: 'o1', permit: { id: 'LP-2026-0001' }, scans, user,
+      permit: { id: 'LP-2026-0001' }, scans, user,
       tryout: { zeroEnergy: false }, lockPhoto: ready.lockPhoto,
     })).rejects.toThrow(/zero energy/)
     expect(h.committed).toEqual([])
@@ -156,7 +156,7 @@ describe('startIsolation — permit and procedure in ONE transaction', () => {
 
   it('starts a permit with nothing to isolate without touching any procedure', async () => {
     seed(basePermit({ pointKeys: [], pointCount: 0, procedureId: '', locks: [], isolationPoints: [] }), null)
-    await A.startIsolation({ orgId: 'o1', permit: { id: 'LP-2026-0001' }, scans: {}, user, ...ready })
+    await A.startIsolation({ permit: { id: 'LP-2026-0001' }, scans: {}, user, ...ready })
     expect(wrote(PERMIT)[0].data.status).toBe('active')
     expect(h.committed.some((w) => w.path.startsWith('procedures/'))).toBe(false)
   })
@@ -176,7 +176,7 @@ describe('returning and removing — every lock off, permit closed, ONE transact
 
   it('returns: unlocks all points, clears the marker, releases the claims, records checklist and per-lock confirmation', async () => {
     seed(basePermit({ status: 'active' }), heldProc())
-    await A.returnPermit({ orgId: 'o1', permit: { id: 'LP-2026-0001' }, user, ticked, confirmed: ['k1', 'k2'] })
+    await A.returnPermit({ permit: { id: 'LP-2026-0001' }, user, ticked, confirmed: ['k1', 'k2'] })
     expect(h.txCount).toBe(1)
 
     expect(wrote(PERMIT)[0].data).toMatchObject({
@@ -200,16 +200,16 @@ describe('returning and removing — every lock off, permit closed, ONE transact
 
   it('refuses, writing nothing, with the checklist incomplete or a lock unconfirmed', async () => {
     seed(basePermit({ status: 'active' }), heldProc())
-    await expect(A.returnPermit({ orgId: 'o1', permit: { id: 'LP-2026-0001' }, user, ticked: { ...ticked, toolsRemoved: false }, confirmed: ['k1', 'k2'] }))
+    await expect(A.returnPermit({ permit: { id: 'LP-2026-0001' }, user, ticked: { ...ticked, toolsRemoved: false }, confirmed: ['k1', 'k2'] }))
       .rejects.toThrow(/checklist/)
-    await expect(A.returnPermit({ orgId: 'o1', permit: { id: 'LP-2026-0001' }, user, ticked, confirmed: ['k1'] }))
+    await expect(A.returnPermit({ permit: { id: 'LP-2026-0001' }, user, ticked, confirmed: ['k1'] }))
       .rejects.toThrow(/Confirm each lock/)
     expect(h.committed).toEqual([])
   })
 
   it('refuses to return a permit that no longer holds the equipment', async () => {
     seed(basePermit({ status: 'active' }), baseProc({ activePermit: { id: 'LP-2026-0099' } }))
-    await expect(A.returnPermit({ orgId: 'o1', permit: { id: 'LP-2026-0001' }, user, ticked, confirmed: ['k1', 'k2'] }))
+    await expect(A.returnPermit({ permit: { id: 'LP-2026-0001' }, user, ticked, confirmed: ['k1', 'k2'] }))
       .rejects.toThrow(/not held by this permit/)
     expect(h.committed).toEqual([])
   })
@@ -217,7 +217,7 @@ describe('returning and removing — every lock off, permit closed, ONE transact
   it('emergency removal: same release, with the reason and attestations stored on the permit', async () => {
     seed(basePermit({ status: 'active' }), heldProc())
     const attest = { ownerUnavailable: true, equipmentInspected: true, ownerWillBeTold: true }
-    await A.emergencyRemovePermit({ orgId: 'o1', permit: { id: 'LP-2026-0001' }, user: admin, reason: 'Owner left site, line must clear', attest })
+    await A.emergencyRemovePermit({ permit: { id: 'LP-2026-0001' }, user: admin, reason: 'Owner left site, line must clear', attest })
     expect(h.txCount).toBe(1)
     expect(wrote(PERMIT)[0].data).toMatchObject({ status: 'emergency_removed', emergency: { by: 'adm', attest } })
     expect(wrote('procedures/p1')[0].data.activePermit).toBe('__delete__')
@@ -226,7 +226,7 @@ describe('returning and removing — every lock off, permit closed, ONE transact
 
   it('emergency removal needs a reason and every attestation', async () => {
     seed(basePermit({ status: 'active' }), heldProc())
-    await expect(A.emergencyRemovePermit({ orgId: 'o1', permit: { id: 'LP-2026-0001' }, user: admin, reason: 'ok', attest: {} }))
+    await expect(A.emergencyRemovePermit({ permit: { id: 'LP-2026-0001' }, user: admin, reason: 'ok', attest: {} }))
       .rejects.toThrow()
     expect(h.committed).toEqual([])
   })
@@ -236,7 +236,7 @@ describe('extendPermit', () => {
   const H = 3_600_000
   it('appends one record and moves the end later', async () => {
     seed(basePermit({ status: 'active', extensions: [{ at: 1 }] }))
-    await A.extendPermit({ orgId: 'o1', permit: { id: 'LP-2026-0001' }, user: admin, newEndMs: NOW + 5 * H, reason: 'Bearing seized, needs longer' })
+    await A.extendPermit({ permit: { id: 'LP-2026-0001' }, user: admin, newEndMs: NOW + 5 * H, reason: 'Bearing seized, needs longer' })
     const w = wrote(PERMIT)[0].data
     expect(w.windowEnd).toEqual({ __ms: NOW + 5 * H })
     expect(w.extensions).toHaveLength(2)
@@ -245,7 +245,7 @@ describe('extendPermit', () => {
 
   it('refuses an earlier end, more than a day, a missing reason, or a permit that is not active', async () => {
     seed(basePermit({ status: 'active' }))
-    const args = { orgId: 'o1', permit: { id: 'LP-2026-0001' }, user: admin, reason: 'Bearing seized, needs longer' }
+    const args = { permit: { id: 'LP-2026-0001' }, user: admin, reason: 'Bearing seized, needs longer' }
     await expect(A.extendPermit({ ...args, newEndMs: NOW })).rejects.toThrow(/later than/)
     await expect(A.extendPermit({ ...args, newEndMs: NOW + 30 * H })).rejects.toThrow(/at most/)
     await expect(A.extendPermit({ ...args, newEndMs: NOW + 5 * H, reason: 'x' })).rejects.toThrow(/Say why/)
@@ -257,26 +257,26 @@ describe('extendPermit', () => {
 
 describe('decidePermit / withdrawPermit', () => {
   it('approves with the approval record and a timeline entry in one batch', async () => {
-    await A.decidePermit({ orgId: 'o1', permit: { id: 'LP-2026-0001', requestedBy: 'u1' }, user: admin, approve: true })
+    await A.decidePermit({ permit: { id: 'LP-2026-0001', requestedBy: 'u1' }, user: admin, approve: true })
     expect(h.batches[0].map((o) => o.op)).toEqual(['update', 'set'])
     expect(h.batches[0][0].data).toMatchObject({ status: 'approved', approval: { by: 'adm', at: '__now' } })
   })
 
   it('will not let a requester approve their own request without saying why nobody else could', async () => {
     const p = { id: 'LP-2026-0001', requestedBy: 'adm' }
-    await expect(A.decidePermit({ orgId: 'o1', permit: p, user: admin, approve: true })).rejects.toThrow(/Another administrator/)
-    await A.decidePermit({ orgId: 'o1', permit: p, user: admin, approve: true, selfApprovalReason: 'Sole administrator on night shift' })
+    await expect(A.decidePermit({ permit: p, user: admin, approve: true })).rejects.toThrow(/Another administrator/)
+    await A.decidePermit({ permit: p, user: admin, approve: true, selfApprovalReason: 'Sole administrator on night shift' })
     expect(h.batches[0][0].data.approval).toMatchObject({ selfApproved: true, selfApprovalReason: 'Sole administrator on night shift' })
   })
 
   it('needs a reason to reject, and closes the permit', async () => {
-    await expect(A.decidePermit({ orgId: 'o1', permit: { id: 'x', requestedBy: 'u1' }, user: admin, approve: false })).rejects.toThrow(/Say why/)
-    await A.decidePermit({ orgId: 'o1', permit: { id: 'x', requestedBy: 'u1' }, user: admin, approve: false, note: 'Procedure needs revising first' })
+    await expect(A.decidePermit({ permit: { id: 'x', requestedBy: 'u1' }, user: admin, approve: false })).rejects.toThrow(/Say why/)
+    await A.decidePermit({ permit: { id: 'x', requestedBy: 'u1' }, user: admin, approve: false, note: 'Procedure needs revising first' })
     expect(h.batches[0][0].data).toMatchObject({ status: 'rejected', closedAt: '__now' })
   })
 
   it('withdraws with a closure record', async () => {
-    await A.withdrawPermit({ orgId: 'o1', permit: { id: 'LP-2026-0001' }, user, note: 'Job cancelled' })
+    await A.withdrawPermit({ permit: { id: 'LP-2026-0001' }, user, note: 'Job cancelled' })
     expect(h.batches[0][0].data).toMatchObject({ status: 'withdrawn', closure: { by: 'u1', note: 'Job cancelled' }, closedAt: '__now' })
   })
 })

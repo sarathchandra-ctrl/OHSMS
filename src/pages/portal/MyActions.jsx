@@ -24,16 +24,15 @@ const FILTERS = [
 ]
 
 export default function MyActions() {
-  const { orgId, profile } = useAuth()
+  const { profile } = useAuth()
   const [rows, setRows] = useState([])
   const [incomplete, setIncomplete] = useState(null)
   const [filter, setFilter] = useState('all')
   const [savingKey, setSavingKey] = useState(null)
 
   useEffect(() => {
-    if (!orgId) return undefined
-    return subscribeActions(orgId, ({ rows, incomplete }) => { setRows(rows); setIncomplete(incomplete) })
-  }, [orgId])
+    return subscribeActions(({ rows, incomplete }) => { setRows(rows); setIncomplete(incomplete) })
+  }, [])
 
   const mine = useMemo(() => myActions(rows, profile), [rows, profile])
   const counts = useMemo(() => ({
@@ -48,7 +47,7 @@ export default function MyActions() {
   const setStatus = async (action, norm) => {
     setSavingKey(action.key)
     try {
-      await updateActionStatus(orgId, action, norm)
+      await updateActionStatus(action, norm)
       toast.success(`Marked ${NORM_BY_KEY[norm]?.label || norm}`)
     } catch (e) {
       toastCaught(e, 'Could not update the action')

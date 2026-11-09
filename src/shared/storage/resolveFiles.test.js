@@ -33,7 +33,7 @@ describe('resolveSealedFiles', () => {
     // The path every existing gallery takes until something is uploaded under a
     // sealed policy: no fetch, no allocation, same array back.
     const rows = [plain('a'), plain('b')]
-    const out = await resolveSealedFiles(ORG, COL, rows)
+    const out = await resolveSealedFiles(COL, rows)
     expect(out.rows).toBe(rows)
     expect(calls.fetched).toEqual([])
   })
@@ -41,12 +41,12 @@ describe('resolveSealedFiles', () => {
   it('resolves a sealed row onto the same field the renderers read', async () => {
     // .dataUrl is the one field every gallery and all three PDFs read. If the
     // decrypted URL landed anywhere else, nothing would render.
-    const out = await resolveSealedFiles(ORG, COL, [sealed('x')])
+    const out = await resolveSealedFiles(COL, [sealed('x')])
     expect(out.rows[0].dataUrl).toBe('blob:x')
   })
 
   it('fetches only the sealed rows in a mixed list', async () => {
-    const out = await resolveSealedFiles(ORG, COL, [plain('a'), sealed('b'), plain('c')])
+    const out = await resolveSealedFiles(COL, [plain('a'), sealed('b'), plain('c')])
     expect(calls.fetched).toEqual(['b'])
     expect(out.rows[0].dataUrl).toBe('https://bucket/a')
     expect(out.rows[2].dataUrl).toBe('https://bucket/c')
@@ -54,12 +54,12 @@ describe('resolveSealedFiles', () => {
 
   it('does not mutate the rows it was given', async () => {
     const rows = [sealed('x')]
-    await resolveSealedFiles(ORG, COL, rows)
+    await resolveSealedFiles(COL, rows)
     expect(rows[0].dataUrl).toBe('https://bucket/x')
   })
 
   it('releases every URL when revoked', async () => {
-    const out = await resolveSealedFiles(ORG, COL, [sealed('a'), sealed('b'), sealed('c')])
+    const out = await resolveSealedFiles(COL, [sealed('a'), sealed('b'), sealed('c')])
     out.revoke()
     expect(calls.revoked).toBe(3)
   })
@@ -68,34 +68,34 @@ describe('resolveSealedFiles', () => {
     // That URL points at ciphertext. Falling back would render a broken image,
     // which reads to a manager as "the file is gone" rather than "you have no
     // key loaded".
-    const out = await resolveSealedFiles(ORG, COL, [sealed('nokey')])
+    const out = await resolveSealedFiles(COL, [sealed('nokey')])
     expect(out.rows[0].dataUrl).toBe('')
     expect(out.rows[0].restricted).toBe(true)
   })
 
   it('lets one bad file through without taking the gallery down', async () => {
-    const out = await resolveSealedFiles(ORG, COL, [sealed('boom'), sealed('ok')])
+    const out = await resolveSealedFiles(COL, [sealed('boom'), sealed('ok')])
     expect(out.rows[0].restricted).toBe(true)
     expect(out.rows[1].dataUrl).toBe('blob:ok')
   })
 
   it('survives a missing org or a non-array', async () => {
-    expect((await resolveSealedFiles('', COL, [sealed('x')])).rows).toHaveLength(1)
-    expect((await resolveSealedFiles(ORG, COL, null)).rows).toEqual([])
+    expect((await resolveSealedFiles(COL, [sealed('x')])).rows).toHaveLength(1)
+    expect((await resolveSealedFiles(COL, null)).rows).toEqual([])
   })
 })
 
 describe('resolveSubscription', () => {
   it('delivers resolved rows to the callback', async () => {
     const cb = vi.fn()
-    resolveSubscription(ORG, COL, cb)([sealed('a')])
+    resolveSubscription(COL, cb)([sealed('a')])
     await settle()
     expect(cb.mock.calls.at(-1)[0][0].dataUrl).toBe('blob:a')
   })
 
   it('revokes the previous batch when a new snapshot arrives', async () => {
     // Without this a live gallery leaks every photo it has ever shown.
-    const onRows = resolveSubscription(ORG, COL, vi.fn())
+    const onRows = resolveSubscription(COL, vi.fn())
     onRows([sealed('a')])
     await settle()
     expect(calls.revoked).toBe(0)
@@ -105,7 +105,7 @@ describe('resolveSubscription', () => {
   })
 
   it('revokes the last batch when the listener stops', async () => {
-    const onRows = resolveSubscription(ORG, COL, vi.fn())
+    const onRows = resolveSubscription(COL, vi.fn())
     onRows([sealed('a'), sealed('b')])
     await settle()
     onRows.stop()
@@ -117,7 +117,7 @@ describe('resolveSubscription', () => {
     // decrypts, so two batches can finish in the wrong order. Dropping the
     // stale one without revoking would leak precisely the batches nobody sees.
     const cb = vi.fn()
-    const onRows = resolveSubscription(ORG, COL, cb)
+    const onRows = resolveSubscription(COL, cb)
     onRows([sealed('old')])
     onRows([sealed('new')])
     await settle()
@@ -128,7 +128,7 @@ describe('resolveSubscription', () => {
 
   it('delivers nothing after it has been stopped', async () => {
     const cb = vi.fn()
-    const onRows = resolveSubscription(ORG, COL, cb)
+    const onRows = resolveSubscription(COL, cb)
     onRows.stop()
     onRows([sealed('a')])
     await settle()

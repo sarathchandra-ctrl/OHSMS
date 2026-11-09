@@ -206,7 +206,7 @@ function ObservationForm({ permit, token }) {
     if (!role) return
     setBusy(true)
     try {
-      await createPublicObservation(permit.orgId, {
+      await createPublicObservation({
         permitId: permit.permitId,
         permitNo: permit.permitNo,
         token,

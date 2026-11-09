@@ -64,12 +64,12 @@ const millis = (v) => {
  *
  * @returns { kind, total, assigned, skipped, from, to }
  */
-export async function backfillKind(orgId, kind, { orgCode } = {}) {
+export async function backfillKind(kind, { orgCode } = {}) {
   const collectionName = DOC_COLLECTIONS[kind]
   if (!collectionName) throw new Error(`No collection mapped for "${kind}"`)
 
-  const code = orgCode || (await getOrgCode(orgId))
-  const snap = await getDocs(collection(db, 'organizations', orgId, collectionName))
+  const code = orgCode || (await getOrgCode())
+  const snap = await getDocs(collection(db, collectionName))
   const rows = snap.docs.map((d) => ({ id: d.id, data: d.data() }))
 
   // "Already numbered" means numbered in *this* scheme. Mock drills carried a
@@ -82,7 +82,7 @@ export async function backfillKind(orgId, kind, { orgCode } = {}) {
 
   // Continue past both the live counter and anything already issued, so a
   // partially-numbered collection cannot produce a duplicate.
-  const counters = await readCounters(orgId)
+  const counters = await readCounters()
   let seq = Math.max(
     Number(counters[kind]) || 0,
     highestSeq(already.map((r) => r.data.docId))
@@ -100,12 +100,12 @@ export async function backfillKind(orgId, kind, { orgCode } = {}) {
       // Only when there was a real id to displace, and only once — a re-run
       // must not overwrite the original legacy value with a generated one.
       if (row.data.docId && !row.data.legacyDocId) update.legacyDocId = row.data.docId
-      batch.update(doc(db, 'organizations', orgId, collectionName, row.id), update)
+      batch.update(doc(db, collectionName, row.id), update)
     }
     await batch.commit()
   }
 
-  if (seq > 0) await raiseCounter(orgId, kind, seq)
+  if (seq > 0) await raiseCounter(kind, seq)
 
   return {
     kind,
@@ -125,12 +125,12 @@ export async function backfillKind(orgId, kind, { orgCode } = {}) {
  * A kind that fails is reported and does not stop the others — a missing
  * collection or a rules gap on one module should not block the other fourteen.
  */
-export async function backfillAll(orgId, { onProgress } = {}) {
-  const orgCode = await getOrgCode(orgId)
+export async function backfillAll({ onProgress } = {}) {
+  const orgCode = await getOrgCode()
   const results = []
   for (const kind of BACKFILL_KINDS) {
     try {
-      const r = await backfillKind(orgId, kind, { orgCode })
+      const r = await backfillKind(kind, { orgCode })
       results.push(r)
       onProgress?.(r)
     } catch (e) {

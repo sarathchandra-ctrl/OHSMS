@@ -16,7 +16,7 @@ import EmployeeChips from '../components/EmployeeChips'
 const EMPTY = { courseId: '', trainerName: '', completedOn: todayISO(), notes: '', region: '', entity: '', siteId: '', site: '' }
 
 export default function Records() {
-  const { orgId, orgName, actor, isManager } = useAuth()
+  const { orgName, actor, isManager } = useAuth()
   const [certRecord, setCertRecord] = useState(null)
   const { loading, courses, records, users, siteInventory, openAssignments } = useTraining()
   const today = todayISO()
@@ -48,7 +48,7 @@ export default function Records() {
     setBusy(true)
     try {
       const employees = users.filter((u) => picked.includes(u.uid))
-      const n = await logTraining(orgId, {
+      const n = await logTraining({
         course, employees,
         trainerName: form.trainerName,
         completedOn: form.completedOn,
@@ -62,7 +62,7 @@ export default function Records() {
 
   const remove = async (r) => {
     if (!window.confirm(`Delete ${r.employeeName}'s "${r.courseName}" record?`)) return
-    try { await deleteRecord(orgId, r.id, actor, `${r.courseName} · ${r.employeeName}`); toast.success('Record deleted') }
+    try { await deleteRecord(r.id, actor, `${r.courseName} · ${r.employeeName}`); toast.success('Record deleted') }
     catch (err) { toastCaught(err, 'Failed') }
   }
 

@@ -231,7 +231,7 @@ export function undatedNote({ undated = 0, noDue = 0 } = {}, rangeActive = false
   return parts.join(' ')
 }
 
-export default function ActionsTab({ orgId, sites = [], keepUnplaced = true }) {
+export default function ActionsTab({ sites = [], keepUnplaced = true }) {
   const [rows, setRows] = useState(null)
   const [incomplete, setIncomplete] = useState(null)
   const [siteId, setSiteId] = useState('all')
@@ -241,9 +241,8 @@ export default function ActionsTab({ orgId, sites = [], keepUnplaced = true }) {
   const today = todayISO()
 
   useEffect(() => {
-    if (!orgId) return undefined
-    return subscribeActions(orgId, ({ rows, incomplete }) => { setRows(rows); setIncomplete(incomplete) })
-  }, [orgId])
+    return subscribeActions(({ rows, incomplete }) => { setRows(rows); setIncomplete(incomplete) })
+  }, [])
 
   const a = useMemo(
     () => actionAnalytics(rows || [], sites, { siteId, source, from, to, keepUnplaced, today }),

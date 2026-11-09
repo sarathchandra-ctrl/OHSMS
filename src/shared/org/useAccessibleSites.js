@@ -15,7 +15,7 @@ import { subscribeSitesRead } from './orgData'
  * `useAccessibleSites`.
  */
 function useAccessibleSitesState(sites) {
-  const { orgId, profile, isAdmin } = useAuth()
+  const { profile, isAdmin } = useAuth()
   const [own, setOwn] = useState({ rows: [], status: 'pending' })
   const external = sites !== undefined
 
@@ -31,12 +31,12 @@ function useAccessibleSitesState(sites) {
   //
   // Depending on the profile means the listener cannot open before it could
   // succeed, and closes the moment it could not.
-  const canRead = Boolean(orgId && profile?.status === 'approved')
+  const canRead = Boolean((profile?.status === 'approved'))
 
   useEffect(() => {
     if (external || !canRead) return undefined
-    return subscribeSitesRead(orgId, setOwn)
-  }, [external, canRead, orgId])
+    return subscribeSitesRead(setOwn)
+  }, [external, canRead])
 
   const all = external ? sites : own.rows
   const resolved = useMemo(

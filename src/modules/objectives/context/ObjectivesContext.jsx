@@ -20,7 +20,6 @@ const EMPTY = Object.fromEntries(Object.keys(SOURCES).map((k) => [k, []]))
 
 /** Targets plus live module records, so KPI actuals are never snapshotted. */
 export function ObjectivesProvider({ children }) {
-  const { orgId } = useAuth()
   const [objectives, setObjectives] = useState(null)
   const [raw, setRaw] = useState(EMPTY)
   const [rawActions, setRawActions] = useState([])
@@ -36,24 +35,23 @@ export function ObjectivesProvider({ children }) {
   const { regions, entities } = useSiteFacets(sites)
 
   useEffect(() => {
-    if (!orgId) return undefined
     const unsubs = [
-      subscribeObjectives(orgId, setObjectives),
-      subscribeActions(orgId, ({ rows, incomplete }) => {
+      subscribeObjectives(setObjectives),
+      subscribeActions(({ rows, incomplete }) => {
         setRawActions(rows)
         // The Action Tracker resolves its own sources, so it hands back a ready
         // notice rather than a per-collection status. Fold it in under one key.
         setReadStatus((s) => ({ ...s, actions: incomplete ? 'capped' : 'ok' }))
       }),
       ...Object.entries(SOURCES).map(([key, name]) =>
-        subscribeOrgCollection(orgId, name, ({ rows, status }) => {
+        subscribeOrgCollection(name, ({ rows, status }) => {
           setRaw((r) => ({ ...r, [key]: rows }))
           setReadStatus((s) => ({ ...s, [name]: status }))
         }),
       ),
     ]
     return () => unsubs.forEach((u) => u && u())
-  }, [orgId])
+  }, [])
 
   const value = useMemo(() => ({
     loading: objectives === null,

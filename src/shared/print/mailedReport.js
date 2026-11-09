@@ -27,15 +27,14 @@ export const MAILED_REPORT_KIND = 'mailed-reports'
 const MAX_PAGES = 25
 
 /** A path this app will treat as one of its own mailed-report objects. */
-export function mailedReportPath(orgId, filePath) {
-  if (typeof orgId !== 'string' || !/^[A-Za-z0-9_-]+$/.test(orgId)) return ''
+export function mailedReportPath(filePath) {
   if (typeof filePath !== 'string') return ''
   const path = filePath.trim()
   if (!path || path.length > 512) return ''
   if (path.includes('..') || path.includes('\\') || path.includes('\0') || path.includes('//')) {
     return ''
   }
-  const prefix = `orgs/${orgId}/${MAILED_REPORT_KIND}/`
+  const prefix = `files/${MAILED_REPORT_KIND}/`
   if (!path.startsWith(prefix)) return ''
   const rest = path.slice(prefix.length)
   if (!rest || rest.includes('/')) return ''
@@ -43,8 +42,8 @@ export function mailedReportPath(orgId, filePath) {
 }
 
 /** Best-effort. An orphaned object is a cost; a failed delete must not block the record delete. */
-export function discardMailedReport(orgId, filePath) {
-  const path = mailedReportPath(orgId, filePath)
+export function discardMailedReport(filePath) {
+  const path = mailedReportPath(filePath)
   if (path) removeFile(path)
 }
 
@@ -128,7 +127,7 @@ export async function renderElementPdf(node) {
   }
 }
 
-export async function uploadMailedReport(orgId, blob, fileName) {
+export async function uploadMailedReport(blob, fileName) {
   if (!blob || !blob.size) return ''
   const name = String(fileName || 'report')
     .toLowerCase()
@@ -138,7 +137,7 @@ export async function uploadMailedReport(orgId, blob, fileName) {
   const file = new File([blob], name, { type: 'application/pdf' })
   // No `collection`. sealFileBytes would encrypt the object, and the mail
   // function has no content key — it would skip the file as sealed.
-  const up = await putFile(orgId, MAILED_REPORT_KIND, file, name)
+  const up = await putFile(MAILED_REPORT_KIND, file, name)
   return up?.path || ''
 }
 
@@ -147,11 +146,11 @@ export async function uploadMailedReport(orgId, blob, fileName) {
  * (tests, a save that is not in a browser) or when capture fails. A failed
  * capture must not fail the save: the mail still goes, without the file.
  */
-export async function captureReactPdf(orgId, fileName, node) {
+export async function captureReactPdf(fileName, node) {
   if (typeof document === 'undefined' || !node) return ''
   try {
     const blob = await renderElementPdf(node)
-    return await uploadMailedReport(orgId, blob, fileName)
+    return await uploadMailedReport(blob, fileName)
   } catch (err) {
     reportError(err, { source: 'print.captureReactPdf' })
     return ''

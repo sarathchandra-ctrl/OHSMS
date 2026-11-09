@@ -17,7 +17,6 @@ const OrgDataContext = createContext(null)
  */
 export function OrgDataProvider({ children }) {
   const { profile, isApproved, isAdmin } = useAuth()
-  const orgId = isApproved ? profile?.orgId : null
 
   const [sites, setSites] = useState([])
   const [audits, setAudits] = useState([])
@@ -27,25 +26,16 @@ export function OrgDataProvider({ children }) {
   const [org, setOrg] = useState(null)
 
   useEffect(() => {
-    if (!orgId) {
-      setSites([])
-      setAudits([])
-      setFindings([])
-      setCapas([])
-      setUsers([])
-      setOrg(null)
-      return undefined
-    }
     const unsubs = [
-      subscribeSites(orgId, setSites),
-      subscribeAudits(orgId, setAudits),
-      subscribeFindings(orgId, setFindings),
-      subscribeCapas(orgId, setCapas),
-      subscribeOrgUsers(orgId, setUsers),
-      subscribeOrg(orgId, setOrg),
+      subscribeSites(setSites),
+      subscribeAudits(setAudits),
+      subscribeFindings(setFindings),
+      subscribeCapas(setCapas),
+      subscribeOrgUsers(setUsers),
+      subscribeOrg(setOrg),
     ]
     return () => unsubs.forEach((u) => u && u())
-  }, [orgId])
+  }, [])
 
   // Convenience lookups by id.
   const value = useMemo(() => {
@@ -54,7 +44,6 @@ export function OrgDataProvider({ children }) {
     const auditById = Object.fromEntries(audits.map((a) => [a.id, a]))
     const findingById = Object.fromEntries(findings.map((f) => [f.id, f]))
     return {
-      orgId,
       org,
       locations: org?.locations || [],
       sites,
@@ -68,7 +57,7 @@ export function OrgDataProvider({ children }) {
       auditById,
       findingById,
     }
-  }, [orgId, org, sites, audits, findings, capas, users, profile, isAdmin])
+  }, [org, sites, audits, findings, capas, users, profile, isAdmin])
 
   return (
     <OrgDataContext.Provider value={value}>{children}</OrgDataContext.Provider>

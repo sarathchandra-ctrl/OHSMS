@@ -34,7 +34,7 @@ const EMPTY = {
 export default function LegalIssueForm() {
   const { id } = useParams()
   const navigate = useNavigate()
-  const { orgId, actor, isManager } = useAuth()
+  const { actor, isManager } = useAuth()
   const { legalIssues, sites, escalationOptions, loading } = useStakeholder()
 
   const [form, setForm] = useState(EMPTY)
@@ -66,8 +66,8 @@ export default function LegalIssueForm() {
     }
     setBusy(true)
     try {
-      if (id) await updateLegalIssue(orgId, id, form, actor)
-      else await addLegalIssue(orgId, form, actor)
+      if (id) await updateLegalIssue(id, form, actor)
+      else await addLegalIssue(form, actor)
       toast.success(id ? 'Saved' : 'Legal issue logged')
       navigate('/stakeholder/legal')
     } catch (e) {
@@ -81,7 +81,7 @@ export default function LegalIssueForm() {
     // eslint-disable-next-line no-alert
     if (!window.confirm('Delete this legal issue?')) return
     try {
-      await deleteLegalIssue(orgId, id, form.title, actor)
+      await deleteLegalIssue(id, form.title, actor)
       toast.success('Deleted')
       navigate('/stakeholder/legal')
     } catch (e) {

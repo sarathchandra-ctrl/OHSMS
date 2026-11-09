@@ -77,7 +77,7 @@ function DateCell({ value }) {
 }
 
 export default function AEDRepository() {
-  const { orgId, orgName, profile, isAdmin, isManager } = useAuth()
+  const { orgName, profile, isAdmin, isManager } = useAuth()
   const { aeds, sites, siteInventory, loading } = useFleet()
   const siteMeta = useSiteMeta()
   const today = useMemo(() => new Date(), [])
@@ -117,7 +117,7 @@ export default function AEDRepository() {
     if (!linkPlan?.linked.length) return
     setBusy(true)
     try {
-      const r = await linkAedsToSites(orgId, orgName, linkPlan, { uid: profile?.uid, name: profile?.name })
+      const r = await linkAedsToSites(orgName, linkPlan, { uid: profile?.uid, name: profile?.name })
       toast.success(`${r.linked} linked · ${r.nameChanges} renamed · ${r.entityChanges} entity value(s) corrected`)
       setLinkOpen(false)
     } catch (e) {
@@ -134,7 +134,7 @@ export default function AEDRepository() {
   // gap in a sequence is harmless, two labels reading the same is not.
   const openAdd = async () => {
     try {
-      const [assetId] = await reserveAssetIds(orgId, 'aed', 'AED', {
+      const [assetId] = await reserveAssetIds('aed', 'AED', {
         floor: highestAssetSeq('AED', aeds, 'assetId'),
       })
       setEditing({ ...EMPTY, assetId })
@@ -151,12 +151,12 @@ export default function AEDRepository() {
     try {
       // The whole block reserved at once, so another operator adding a unit
       // mid-batch cannot land inside it.
-      const ids = await reserveAssetIds(orgId, 'aed', 'AED', {
+      const ids = await reserveAssetIds('aed', 'AED', {
         count: missingSites.length,
         floor: highestAssetSeq('AED', aeds, 'assetId'),
       })
       const rows = missingSites.map((s, i) => ({ assetId: ids[i], centerName: s, region: siteMeta[s]?.region || '', entity: siteMeta[s]?.entity || '', status: AED_STATUS.READY }))
-      const res = await bulkAddAeds(orgId, orgName, rows, { uid: profile?.uid, name: profile?.name })
+      const res = await bulkAddAeds(orgName, rows, { uid: profile?.uid, name: profile?.name })
       toast.success(`Generated ${res.created} AED(s) with QR codes`)
     } catch (e) { toastCaught(e) } finally { setBusy(false) }
   }
@@ -215,7 +215,7 @@ export default function AEDRepository() {
     const items = deletable.map((a) => ({ id: a.id, qrToken: a.qrToken }))
     setBusy(true)
     try {
-      await bulkDeleteAeds(orgId, items, { uid: profile?.uid, name: profile?.name })
+      await bulkDeleteAeds(items, { uid: profile?.uid, name: profile?.name })
       const skipped = selectedItems.length - deletable.length
       toast.success(
         skipped
@@ -233,14 +233,14 @@ export default function AEDRepository() {
     setBusy(true)
     try {
       const actor = { uid: profile?.uid, name: profile?.name }
-      if (editing.id) { await updateAed(orgId, orgName, editing.id, editing, actor); toast.success('AED updated') }
-      else { await addAed(orgId, orgName, editing, actor); toast.success('AED added') }
+      if (editing.id) { await updateAed(orgName, editing.id, editing, actor); toast.success('AED updated') }
+      else { await addAed(orgName, editing, actor); toast.success('AED added') }
       setEditing(null)
     } catch (err) { toastCaught(err) } finally { setBusy(false) }
   }
   const confirmDelete = async () => {
     try {
-      await deleteAed(orgId, removing.id, removing.qrToken, { uid: profile?.uid, name: profile?.name }, `${removing.assetId || 'AED'} @ ${removing.centerName}`)
+      await deleteAed(removing.id, removing.qrToken, { uid: profile?.uid, name: profile?.name }, `${removing.assetId || 'AED'} @ ${removing.centerName}`)
       toast.success('Moved to Recently deleted')
     } catch (err) { toastCaught(err) } finally { setRemoving(null) }
   }
@@ -250,7 +250,7 @@ export default function AEDRepository() {
     if (!isAdmin) { toast.error('Only an admin can generate QR codes'); return }
     setBusy(true)
     try {
-      const token = await generateAedQr(orgId, orgName, a, { uid: profile?.uid, name: profile?.name })
+      const token = await generateAedQr(orgName, a, { uid: profile?.uid, name: profile?.name })
       setQrFor({ ...a, qrToken: token })
       toast.success('QR code generated')
     } catch (e) { toastCaught(e) } finally { setBusy(false) }
@@ -259,7 +259,7 @@ export default function AEDRepository() {
   const confirmService = async () => {
     setBusy(true)
     try {
-      await serviceAed(orgId, orgName, serviceFor, nextDate, { uid: profile?.uid, name: profile?.name })
+      await serviceAed(orgName, serviceFor, nextDate, { uid: profile?.uid, name: profile?.name })
       toast.success('Inspection logged')
       setServiceFor(null)
     } catch (err) { toastCaught(err) } finally { setBusy(false) }

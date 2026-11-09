@@ -217,7 +217,7 @@ export function validateDraft(draft, ctx = {}) {
  * The permit document (without server-assigned fields). Timestamps are carried
  * as epoch ms here and converted by the service, so this stays testable.
  */
-export function buildPermit({ orgId, user, draft, snapshot }) {
+export function buildPermit({ user, draft, snapshot }) {
   const internalPersonnel = (draft.internalPersonnel || []).map((p) => ({
     uid: clean(p.uid),
     name: clean(p.name),
@@ -244,7 +244,6 @@ export function buildPermit({ orgId, user, draft, snapshot }) {
       })
     : []
   return {
-    orgId,
     workType: draft.workType,
     reason: clean(draft.reason),
     workOrder: clean(draft.workOrder),

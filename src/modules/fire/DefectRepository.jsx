@@ -59,7 +59,7 @@ function rowFromClosure(c) {
 
 export default function DefectRepository() {
   const { physicalOpen, pendingReports, extinguishers, aeds, fas, defectClosures = [] } = useFleet()
-  const { orgId, orgName, profile, isManager } = useAuth()
+  const { orgName, profile, isManager } = useAuth()
   const [busyId, setBusyId] = useState(null)
   const [closeFor, setCloseFor] = useState(null)
   const [filters, setFilters] = useState(emptyDefectFilters)
@@ -185,7 +185,7 @@ export default function DefectRepository() {
   const decideAsset = async (row, approve) => {
     setBusyId(row.key)
     try {
-      await decideAssetReport(orgId, row.raw, approve, profile?.name, {
+      await decideAssetReport(row.raw, approve, profile?.name, {
         uid: profile?.uid,
         name: profile?.name,
       })
@@ -413,7 +413,7 @@ export default function DefectRepository() {
         open={!!closeFor}
         onClose={() => setCloseFor(null)}
         row={closeFor}
-        orgId={orgId}
+       
         orgName={orgName}
         actor={{ uid: profile?.uid, name: profile?.name }}
       />

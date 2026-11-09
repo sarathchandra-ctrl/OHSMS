@@ -46,11 +46,11 @@ const SEALED_PHOTOS = 'incidents/photos'
 const BUCKET_NAMES = Object.keys(BUCKETS)
 
 // ── Path helpers ─────────────────────────────────────────────────────────────
-const incidentCol = (orgId) => collection(db, 'organizations', orgId, 'incidents')
-const incidentRef = (orgId, id) => doc(db, 'organizations', orgId, 'incidents', id)
-const photoCol = (orgId, id) => collection(db, 'organizations', orgId, 'incidents', id, 'photos')
-const photoRef = (orgId, id, pid) => doc(db, 'organizations', orgId, 'incidents', id, 'photos', pid)
-const statsRef = (orgId) => doc(db, 'organizations', orgId, 'meta', 'stats')
+const incidentCol = () => collection(db, 'incidents')
+const incidentRef = (id) => doc(db, 'incidents', id)
+const photoCol = (id) => collection(db, 'incidents', id, 'photos')
+const photoRef = (id, pid) => doc(db, 'incidents', id, 'photos', pid)
+const statsRef = () => doc(db, 'meta', 'stats')
 
 export const INCIDENT_LOAD_CAP = 2000
 
@@ -59,7 +59,7 @@ export const INCIDENT_LOAD_CAP = 2000
 // out; a stats failure must not roll back the real write. Uses updateDoc (which
 // interprets dotted field paths e.g. "bySeverity.high"), self-healing the doc if
 // it doesn't exist yet.
-async function bumpStats(orgId, delta) {
+async function bumpStats(delta) {
   if (!delta) return
   const fields = {}
   if (delta.total) fields.total = increment(delta.total)
@@ -71,7 +71,7 @@ async function bumpStats(orgId, delta) {
   if (Object.keys(fields).length === 0) return
   fields.updatedAt = serverTimestamp()
   try {
-    await updateDoc(statsRef(orgId), fields)
+    await updateDoc(statsRef(), fields)
   } catch (e) {
     try {
       // Seed WITHOUT nextSeq. emptyStats() carries nextSeq: 0, and a merge
@@ -80,8 +80,8 @@ async function bumpStats(orgId, delta) {
       // already printed on one.
       const seed = emptyStats()
       delete seed.nextSeq
-      await setDoc(statsRef(orgId), seed, { merge: true })
-      await updateDoc(statsRef(orgId), fields)
+      await setDoc(statsRef(), seed, { merge: true })
+      await updateDoc(statsRef(), fields)
     } catch (e2) {
       // eslint-disable-next-line no-console
       console.warn('[Incident IRA] stats update skipped:', e2?.message || e2)
@@ -89,9 +89,9 @@ async function bumpStats(orgId, delta) {
   }
 }
 
-export function subscribeStats(orgId, cb) {
+export function subscribeStats(cb) {
   return onSnapshot(
-    statsRef(orgId),
+    statsRef(),
     (snap) => cb(snap.exists() ? snap.data() : null),
     onReadError('the incident counters', cb, null),
   )
@@ -160,12 +160,12 @@ export async function reserveRefNo(counterDoc, prefix) {
 }
 
 /** Create a new incident (optionally pre-filled with Step-1 data). Returns id. */
-export async function createIncident(orgId, actor, initial = {}) {
+export async function createIncident(actor, initial = {}) {
   // Both identifiers are reserved before anything is written, so a failure to
   // issue one leaves no half-created incident behind — only an unused number.
-  const refNo = await reserveRefNo(statsRef(orgId), 'IRA')
-  const docId = await reserveDocId(orgId, 'incidents')
-  const ref = doc(incidentCol(orgId))
+  const refNo = await reserveRefNo(statsRef(), 'IRA')
+  const docId = await reserveDocId('incidents')
+  const ref = doc(incidentCol())
   const incident = {
     // The org-wide document id. refNo is kept alongside it because incidents
     // raised before this scheme are quoted by that number in closed
@@ -213,14 +213,14 @@ export async function createIncident(orgId, actor, initial = {}) {
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   }
-  await setDoc(ref, await sealDoc(orgId, SEALED, incident))
+  await setDoc(ref, await sealDoc(SEALED, incident))
   // The delta is computed from the PLAINTEXT incident, not the sealed copy.
   // Every dimension it counts — type, severity, category, location, lifecycle —
   // is left readable by the policy, so the two agree today; passing the sealed
   // copy would still be wrong the first time a counted field is added to the
   // policy, and the counters would drift with nothing to show for it.
-  await bumpStats(orgId, statsDeltaFor(null, incident))
-  await logAudit(orgId, actor, AUDIT.INCIDENT_CREATE, {
+  await bumpStats(statsDeltaFor(null, incident))
+  await logAudit(actor, AUDIT.INCIDENT_CREATE, {
     target: 'incident',
     targetId: ref.id,
     targetLabel: incident.docId,
@@ -241,7 +241,7 @@ export async function createIncident(orgId, actor, initial = {}) {
  * this document, and a rule that lives in the caller is a rule the next caller
  * will not know about.
  */
-export async function updateIncident(orgId, id, updates, opts = {}) {
+export async function updateIncident(id, updates, opts = {}) {
   // assignedByUid is what the assignment-mail trigger uses to skip a person
   // assigning the action to themselves, and to name the assigner. It is a
   // uid, so it stays unsealed — the same decision ownerUid already got.
@@ -251,13 +251,13 @@ export async function updateIncident(orgId, id, updates, opts = {}) {
     ? { ...updates, injuryReports: incidentInjuryStubs(updates.injuryReports) }
     : { ...updates }
   if (Array.isArray(safe.capa) && opts.actor?.uid) {
-    const prev = await getDoc(incidentRef(orgId, id))
+    const prev = await getDoc(incidentRef(id))
     safe.capa = stampNewAssignees(prev.exists() ? prev.data()?.capa : [], safe.capa, opts.actor.uid)
   }
   // Sealed OUTSIDE the transaction. It depends only on `updates`, and a
   // transaction body can retry — running RSA/AES over the same fields on every
   // attempt would be work for nothing.
-  const sealed = { ...await sealDoc(orgId, SEALED, safe), updatedAt: serverTimestamp() }
+  const sealed = { ...await sealDoc(SEALED, safe), updatedAt: serverTimestamp() }
 
   // ── Read and write in one transaction ──────────────────────────────────────
   //
@@ -271,7 +271,7 @@ export async function updateIncident(orgId, id, updates, opts = {}) {
   let before = null
   let merged = null
   await runTransaction(db, async (tx) => {
-    const snap = await tx.get(incidentRef(orgId, id))
+    const snap = await tx.get(incidentRef(id))
     if (!snap.exists()) throw new Error('Incident not found')
     before = snap.data()
     // Build a shallow "merged" view for the stats delta (only top-level dimension
@@ -280,16 +280,16 @@ export async function updateIncident(orgId, id, updates, opts = {}) {
     for (const [k, v] of Object.entries(safe)) {
       if (!k.includes('.')) merged[k] = v
     }
-    tx.update(incidentRef(orgId, id), sealed)
+    tx.update(incidentRef(id), sealed)
   })
   // `before` is as stored — sealed — and `merged` mixes it with plaintext
   // updates. Neither is opened, and neither needs to be: every dimension the
   // delta counts is left readable by the policy. diffSummary below handles the
   // mismatch itself, reporting a sealed field as changed without printing
   // either side into /auditLogs.
-  await bumpStats(orgId, statsDeltaFor(before, merged))
+  await bumpStats(statsDeltaFor(before, merged))
   if (!opts.silent) {
-    await logAudit(orgId, opts.actor, opts.action || AUDIT.INCIDENT_UPDATE, {
+    await logAudit(opts.actor, opts.action || AUDIT.INCIDENT_UPDATE, {
       target: 'incident',
       targetId: id,
       targetLabel: before.refNo || id,
@@ -298,14 +298,14 @@ export async function updateIncident(orgId, id, updates, opts = {}) {
   }
 }
 
-export async function getIncident(orgId, id) {
-  const snap = await getDoc(incidentRef(orgId, id))
-  return snap.exists() ? openDoc(orgId, SEALED, { id, ...snap.data() }) : null
+export async function getIncident(id) {
+  const snap = await getDoc(incidentRef(id))
+  return snap.exists() ? openDoc(SEALED, { id, ...snap.data() }) : null
 }
 
-export function subscribeIncidents(orgId, cb, max = INCIDENT_LOAD_CAP) {
-  const q = query(incidentCol(orgId), orderBy('createdAt', 'desc'), limit(max))
-  const opened = openSnapshots(orgId, SEALED, cb)
+export function subscribeIncidents(cb, max = INCIDENT_LOAD_CAP) {
+  const q = query(incidentCol(), orderBy('createdAt', 'desc'), limit(max))
+  const opened = openSnapshots(SEALED, cb)
   // The fallback goes to `cb`, not to `opened`: there is nothing to unseal, and
   // routing an empty list through the decryption step would report a read
   // failure as a decryption failure.
@@ -317,8 +317,8 @@ export function subscribeIncidents(orgId, cb, max = INCIDENT_LOAD_CAP) {
 }
 
 /** Mark an incident closed (after horizontal-deployment step). */
-export async function closeIncident(orgId, id, actor) {
-  await updateIncident(orgId, id, {
+export async function closeIncident(id, actor) {
+  await updateIncident(id, {
     lifecycle: 'closed',
     'stagesDone.horizontal': true,
     closedAt: serverTimestamp(),
@@ -327,40 +327,40 @@ export async function closeIncident(orgId, id, actor) {
 }
 
 // ── Soft delete / restore / purge ─────────────────────────────────────────────
-export async function deleteIncident(orgId, id, actor) {
-  const snap = await getDoc(incidentRef(orgId, id))
+export async function deleteIncident(id, actor) {
+  const snap = await getDoc(incidentRef(id))
   if (!snap.exists()) return
   const before = snap.data()
-  await updateDoc(incidentRef(orgId, id), { deletedAt: serverTimestamp(), deletedBy: actor?.name || '' })
-  await bumpStats(orgId, statsDeltaFor(before, { ...before, deletedAt: true }))
-  await logAudit(orgId, actor, AUDIT.INCIDENT_DELETE, { target: 'incident', targetId: id, targetLabel: before.refNo || id })
+  await updateDoc(incidentRef(id), { deletedAt: serverTimestamp(), deletedBy: actor?.name || '' })
+  await bumpStats(statsDeltaFor(before, { ...before, deletedAt: true }))
+  await logAudit(actor, AUDIT.INCIDENT_DELETE, { target: 'incident', targetId: id, targetLabel: before.refNo || id })
 }
 
-export async function restoreIncident(orgId, id, actor) {
-  const snap = await getDoc(incidentRef(orgId, id))
+export async function restoreIncident(id, actor) {
+  const snap = await getDoc(incidentRef(id))
   if (!snap.exists()) return
   const data = snap.data()
-  await updateDoc(incidentRef(orgId, id), { deletedAt: null, deletedBy: null, updatedAt: serverTimestamp() })
-  await bumpStats(orgId, statsDeltaFor({ ...data, deletedAt: true }, { ...data, deletedAt: null }))
-  await logAudit(orgId, actor, AUDIT.INCIDENT_RESTORE, { target: 'incident', targetId: id, targetLabel: data.refNo || id })
+  await updateDoc(incidentRef(id), { deletedAt: null, deletedBy: null, updatedAt: serverTimestamp() })
+  await bumpStats(statsDeltaFor({ ...data, deletedAt: true }, { ...data, deletedAt: null }))
+  await logAudit(actor, AUDIT.INCIDENT_RESTORE, { target: 'incident', targetId: id, targetLabel: data.refNo || id })
 }
 
-export async function purgeIncident(orgId, id, actor, label) {
+export async function purgeIncident(id, actor, label) {
   // The mailed PDF is a plaintext rendering of this report. It goes with the
   // record; a purge that left it would keep the narrative after the incident
   // itself was gone.
   try {
-    const parent = await getDoc(incidentRef(orgId, id))
-    discardMailedReport(orgId, parent.data()?.reportPdfPath)
+    const parent = await getDoc(incidentRef(id))
+    discardMailedReport(parent.data()?.reportPdfPath)
   } catch { /* orphan tolerated */ }
   // Remove photos subcollection then the doc.
-  const photos = await getDocs(photoCol(orgId, id))
+  const photos = await getDocs(photoCol(id))
   photos.docs.forEach((d) => { if (d.data().path) removeFile(d.data().path) })
   const batch = writeBatch(db)
   photos.docs.forEach((d) => batch.delete(d.ref))
-  batch.delete(incidentRef(orgId, id))
+  batch.delete(incidentRef(id))
   await batch.commit()
-  await logAudit(orgId, actor, AUDIT.INCIDENT_PURGE, { target: 'incident', targetId: id, targetLabel: label || id })
+  await logAudit(actor, AUDIT.INCIDENT_PURGE, { target: 'incident', targetId: id, targetLabel: label || id })
 }
 
 // ── Scene photos and investigation diagrams ───────────────────────────────────
@@ -368,7 +368,7 @@ export async function purgeIncident(orgId, id, actor, label) {
 // approved member and by the auditor, and its bytes sit under `incident-photos`,
 // which storage.rules hands to the same people. A GP letter filed beside a
 // guard-rail photo is the letter. addMedicalRecord in injuries.js is the writer.
-export async function addIncidentPhoto(orgId, id, photo) {
+export async function addIncidentPhoto(id, photo) {
   if (photo?.kind === 'medical_record') {
     throw new Error('Medical records are filed on the injury report, not with the incident photos.')
   }
@@ -376,7 +376,7 @@ export async function addIncidentPhoto(orgId, id, photo) {
   // putFile returning null (bucket not enabled, offline) keeps the legacy
   // inline path, so evidence upload never fails harder than it used to.
   const up = photo.dataUrl
-    ? await putFile(orgId, 'incident-photos', photo.dataUrl, photo.name, { collection: SEALED_PHOTOS })
+    ? await putFile('incident-photos', photo.dataUrl, photo.name, { collection: SEALED_PHOTOS })
     : null
   // No bucket: the file would be written base64 INSIDE this document, and
   // Firestore rejects anything over 1MB with an error nobody can act on. Refuse
@@ -384,7 +384,7 @@ export async function addIncidentPhoto(orgId, id, photo) {
   if (!up && photo.dataUrl && (photo.size || 0) > MAX_INLINE_BYTES) {
     throw new Error(tooLargeForInline(photo.name))
   }
-  const ref = await addDoc(photoCol(orgId, id), await sealDoc(orgId, SEALED_PHOTOS, {
+  const ref = await addDoc(photoCol(id), await sealDoc(SEALED_PHOTOS, {
     name: photo.name || '',
     type: photo.type || '',
     dataUrl: up ? '' : photo.dataUrl,
@@ -397,22 +397,22 @@ export async function addIncidentPhoto(orgId, id, photo) {
     uploadedAt: serverTimestamp(),
     ...(up?.encIv ? { encScheme: up.encScheme, encKeyId: up.encKeyId, encIv: up.encIv, ...(up.encWrapped ? { encWrapped: up.encWrapped } : {}) } : {}),
   }))
-  await updateDoc(incidentRef(orgId, id), { photoCount: increment(1), updatedAt: serverTimestamp() })
+  await updateDoc(incidentRef(id), { photoCount: increment(1), updatedAt: serverTimestamp() })
   return ref.id
 }
 
-export function subscribeIncidentPhotos(orgId, id, cb) {
-  const q = query(photoCol(orgId, id), orderBy('uploadedAt', 'asc'))
+export function subscribeIncidentPhotos(id, cb) {
+  const q = query(photoCol(id), orderBy('uploadedAt', 'asc'))
   // Normalised at the seam: every renderer (gallery, report doc, PDF) reads
   // .dataUrl, whichever era the photo was saved in — and now whether or not the
   // object behind it is encrypted. resolveSubscription fetches and decrypts the
   // sealed ones, hands back blob: URLs under that same field name, and revokes
   // the previous batch on every new snapshot and the last on unsubscribe. An
   // unsealed photo costs nothing: it keeps the `.url` it always had.
-  const resolve = resolveSubscription(orgId, SEALED_PHOTOS, cb)
+  const resolve = resolveSubscription(SEALED_PHOTOS, cb)
   // Field metadata first (captions and filenames are sealed under the policy),
   // then the bytes. Two different keys, two different steps, one field name out.
-  const opened = openSnapshots(orgId, SEALED_PHOTOS, (rows) => resolve(
+  const opened = openSnapshots(SEALED_PHOTOS, (rows) => resolve(
     rows.map((r) => ({ ...r, dataUrl: r.dataUrl || r.url || '' })),
   ))
   const stop = onSnapshot(
@@ -423,12 +423,12 @@ export function subscribeIncidentPhotos(orgId, id, cb) {
   return () => { resolve.stop(); stop() }
 }
 
-export async function deleteIncidentPhoto(orgId, id, photoId) {
+export async function deleteIncidentPhoto(id, photoId) {
   // The doc is the only thing that remembers the cloud path — read it first.
   try {
-    const snap = await getDoc(photoRef(orgId, id, photoId))
+    const snap = await getDoc(photoRef(id, photoId))
     if (snap.data()?.path) removeFile(snap.data().path)
   } catch { /* orphan tolerated */ }
-  await deleteDoc(photoRef(orgId, id, photoId))
-  await updateDoc(incidentRef(orgId, id), { photoCount: increment(-1), updatedAt: serverTimestamp() })
+  await deleteDoc(photoRef(id, photoId))
+  await updateDoc(incidentRef(id), { photoCount: increment(-1), updatedAt: serverTimestamp() })
 }

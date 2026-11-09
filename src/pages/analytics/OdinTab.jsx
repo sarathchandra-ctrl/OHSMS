@@ -129,7 +129,7 @@ function Segments({ label, value, options, onChange }) {
   )
 }
 
-export default function OdinTab({ view = 'scores', sites = [], orgId, actor, isAdmin = false, keepUnplaced = true }) {
+export default function OdinTab({ view = 'scores', sites = [], actor, isAdmin = false, keepUnplaced = true }) {
   // Which half is on screen. The scores view still needs the findings
   // question — the centre watchlist puts tickets beside pass rates, and the
   // pass figures fall back to findings rows when the audits question carries
@@ -285,7 +285,7 @@ export default function OdinTab({ view = 'scores', sites = [], orgId, actor, isA
   const connectPanel = (
     <div className="mx-auto max-w-2xl animate-fade-in-up">
       <MetabaseConnect
-        orgId={orgId}
+       
         actor={actor}
         compact
         onSaved={() => { setConnecting(false); load() }}

@@ -13,15 +13,15 @@ const ROLE_COLOR = { reporter: '#0891b2', investigator: '#795548', admin: '#dc26
 
 export default function Users() {
   const { users } = useIncidents()
-  const { orgId, profile, user } = useAuth()
+  const { profile, user } = useAuth()
   const actor = { uid: user?.uid, name: profile?.name }
 
   const pending = useMemo(() => users.filter((u) => u.status === 'pending'), [users])
   const members = useMemo(() => users.filter((u) => u.status === 'approved'), [users])
 
-  const approve = async (u) => { try { await setUserStatus(u.uid, 'approved', orgId, actor, u.name); toast.success(`${u.name} approved`) } catch (e) { toastCaught(e) } }
-  const reject = async (u) => { try { await setUserStatus(u.uid, 'rejected', orgId, actor, u.name); toast(`${u.name} rejected`, { icon: '🚫' }) } catch (e) { toastCaught(e) } }
-  const changeRole = async (u, role) => { try { await setUserRole(u.uid, role, orgId, actor, u.name); toast.success(`${u.name} → ${roleLabel(role)}`) } catch (e) { toastCaught(e) } }
+  const approve = async (u) => { try { await setUserStatus(u.uid, 'approved', actor, u.name); toast.success(`${u.name} approved`) } catch (e) { toastCaught(e) } }
+  const reject = async (u) => { try { await setUserStatus(u.uid, 'rejected', actor, u.name); toast(`${u.name} rejected`, { icon: '🚫' }) } catch (e) { toastCaught(e) } }
+  const changeRole = async (u, role) => { try { await setUserRole(u.uid, role, actor, u.name); toast.success(`${u.name} → ${roleLabel(role)}`) } catch (e) { toastCaught(e) } }
 
   return (
     <div>

@@ -77,7 +77,7 @@ function ToggleChip({ active, onClick, children }) {
 
 export default function PermitForm() {
   const navigate = useNavigate()
-  const { user, profile, orgId, org, isAdmin } = useAuth()
+  const { user, profile, org, isAdmin } = useAuth()
   const { users } = usePermits()
   const [form, setForm] = useState(EMPTY)
 
@@ -85,9 +85,8 @@ export default function PermitForm() {
   // Site (+ any custom levels like Location) picker, per the module's granularity.
   const [orgSites, setOrgSites] = useState([])
   useEffect(() => {
-    if (!orgId) return undefined
-    return subscribeOrgSites(orgId, setOrgSites)
-  }, [orgId])
+    return subscribeOrgSites(setOrgSites)
+  }, [])
   const siteInventory = useMemo(
     () => resolveAccessibleSites(profile, orgSites, { isAdmin }),
     [profile, orgSites, isAdmin],
@@ -191,7 +190,7 @@ export default function PermitForm() {
         assignedEngineer: form.assignedEngineer || null,
         assignedOperator: form.assignedOperator || null,
       }
-      const { id, permitNo } = await createPermit(profile.orgId, payload, actor)
+      const { id, permitNo } = await createPermit(payload, actor)
       toast.success(`Permit ${permitNo} created`)
       navigate(`/permits/${id}`)
     } catch (err) {

@@ -8,7 +8,7 @@ import { captureReactPdf } from '../../../shared/print/mailedReport'
  * page derives it, so the watermark matches the print. '' when capture
  * cannot run.
  */
-export function capturePermitReport(orgId, permit, documents = []) {
+export function capturePermitReport(permit, documents = []) {
   if (!permit) return Promise.resolve('')
   const view = {
     ...permit,
@@ -16,7 +16,6 @@ export function capturePermitReport(orgId, permit, documents = []) {
   }
   const ref = permit.permitNo || permit.docId || 'permit'
   return captureReactPdf(
-    orgId,
     `Permit-to-Work-${ref}.pdf`,
     createElement(PermitPrintable, { permit: view, documents })
   )

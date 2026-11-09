@@ -42,7 +42,7 @@ const EMPTY = {
 }
 
 export default function Inventory() {
-  const { orgId, orgName, actor, isManager } = useAuth()
+  const { orgName, actor, isManager } = useAuth()
   // scopedRows is already narrowed by the module-wide site/entity/region filter;
   // the raw lists are still needed for the unfiltered totals in the header.
   const { cameras, dvrs, merakis, sites, estate, scopedRows, isScoped, loading, dvrOptions, siteOptions } = useCctv()
@@ -110,7 +110,7 @@ export default function Inventory() {
         dvrs: id ? updateDvr : addDvr,
         merakis: id ? updateMeraki : addMeraki,
       }[kind]
-      await (id ? fn(orgId, id, payload, actor) : fn(orgId, payload, actor))
+      await (id ? fn(id, payload, actor) : fn(payload, actor))
       toast.success(id ? 'Saved' : 'Added')
       setForm(null)
     } catch (e) {
@@ -131,7 +131,7 @@ export default function Inventory() {
     // eslint-disable-next-line no-alert
     if (!window.confirm(warn)) return
     try {
-      await fn(orgId, row.id, row.name, actor)
+      await fn(row.id, row.name, actor)
       toast.success('Removed')
     } catch (e) {
       toastCaught(e)
@@ -153,7 +153,7 @@ export default function Inventory() {
   const provision = async () => {
     setBusy(true)
     try {
-      const n = await provisionSiteMerakis(orgId, sites, merakis, actor)
+      const n = await provisionSiteMerakis(sites, merakis, actor)
       toast.success(n ? `Created ${n} Meraki device${n === 1 ? '' : 's'}` : 'Every site already has one')
     } catch (e) {
       toastCaught(e)
@@ -175,7 +175,7 @@ export default function Inventory() {
       return toast.error('A defect cannot be reported in the future')
     }
     try {
-      await setDefects(orgId, kind, row.id, { defects: keys, defectReportedOn: reportedOn }, actor, row.name)
+      await setDefects(kind, row.id, { defects: keys, defectReportedOn: reportedOn }, actor, row.name)
       toast.success('Defects updated')
       setDefectFor(null)
     } catch (e) {

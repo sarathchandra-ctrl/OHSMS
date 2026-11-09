@@ -13,15 +13,14 @@ import { Raised, Inset, PortalHeading, Ring } from './ui'
 import { courseProgress } from './myWork'
 
 export default function MyTraining() {
-  const { orgId, profile } = useAuth()
+  const { profile } = useAuth()
   const [assignments, setAssignments] = useState([])
   const [courses, setCourses] = useState([])
 
   useEffect(() => {
-    if (!orgId) return undefined
-    const unsubs = [subscribeAssignments(orgId, setAssignments), subscribeCourses(orgId, setCourses)]
+    const unsubs = [subscribeAssignments(setAssignments), subscribeCourses(setCourses)]
     return () => unsubs.forEach((u) => u && u())
-  }, [orgId])
+  }, [])
 
   const rows = useMemo(
     () => courseProgress(assignments, courses, profile),

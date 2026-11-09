@@ -56,9 +56,8 @@ export const documentsService = {
    * screen says a site is behind when it is not. A reader cannot tell those two
    * apart, so the read has to.
    */
-  subscribe(orgId, cb, viewer = {}) {
-    if (!orgId) return () => {}
-    const col = collection(db, 'organizations', orgId, 'documents')
+  subscribe(cb, viewer = {}) {
+    const col = collection(db, 'documents')
     const plan = readPlan(viewer.role, viewer.sites)
 
     // Each query keeps its own slot, so a late snapshot from one cannot drop

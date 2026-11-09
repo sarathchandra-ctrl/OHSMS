@@ -1,7 +1,7 @@
 import { PGlite } from '@electric-sql/pglite'
 import { describe, expect, it } from 'vitest'
 import { applySchema, asWorker, createEngine } from '../../../stack/engine.mjs'
-import { fulfillRequest } from '../../../stack/fulfill.mjs'
+import { initializeOrganization } from '../../../stack/setup.mjs'
 import { establishIdentity } from '../../../stack/identity.mjs'
 
 const WORKER = { role: 'ohsms_worker', uid: '' }
@@ -11,11 +11,11 @@ async function invited() {
   await applySchema(db)
   const engine = createEngine(db)
   await engine.commit(WORKER, [
-    { type: 'set', path: 'organizations', id: 'org1', merge: false, data: { name: 'Keel Works' } },
+    { type: 'set', path: 'organization', id: 'profile', merge: false, data: { name: 'Keel Works' } },
   ])
   await asWorker(
     db,
-    "INSERT INTO invites (email, org_id, role, name) VALUES ('ana@keel.test', 'org1', 'admin', 'Ana')"
+    "INSERT INTO invites (email, role, name) VALUES ('ana@keel.test', 'admin', 'Ana')"
   )
   return { db, engine }
 }
@@ -45,40 +45,45 @@ describe('first sign-in claims the invite once', () => {
   })
 })
 
-describe('fulfillment refuses a sign-in it could never serve', () => {
-  const base = {
-    id: 'reqKeel000001',
-    status: 'requested',
-    orgName: 'Keel Works',
-    contactEmail: 'ana@keel.test',
-    engine: 'postgres',
-    mode: 'weehs-operated',
-  }
-  const run = (request, secrets = { oidcClientSecret: 's' }) =>
-    fulfillRequest({ request, secrets, engine: null, db: null, admin: null })
-
-  it('refuses Supabase without its issuer or anon key', async () => {
-    expect(
-      await run({ ...base, authMethod: 'supabase', authIssuer: '' }, { supabaseAnonKey: 'k' })
-    ).toEqual({ ok: false, reason: 'supabase' })
-    expect(
-      await run({ ...base, authMethod: 'supabase', authIssuer: 'https://x.supabase.co/auth/v1' })
-    ).toEqual({ ok: false, reason: 'supabase' })
+describe('creating the organization', () => {
+  it('makes one organization and invites its first administrator', async () => {
+    const db = new PGlite()
+    await applySchema(db)
+    const engine = createEngine(db)
+    const made = await initializeOrganization({
+      engine,
+      db,
+      orgName: 'Keel Works',
+      adminEmail: 'Ana@Keel.test',
+      adminName: 'Ana',
+    })
+    expect(made).toEqual({ ok: true })
+    expect(await engine.get(WORKER, 'organization', 'profile')).toMatchObject({ name: 'Keel Works' })
+    const invite = await asWorker(db, 'SELECT email, role FROM invites')
+    expect(invite.rows).toEqual([{ email: 'ana@keel.test', role: 'admin' }])
+    const again = await initializeOrganization({
+      engine,
+      db,
+      orgName: 'Someone Else',
+      adminEmail: 'eve@evil.test',
+    })
+    expect(again).toEqual({ ok: false, reason: 'already-live' })
+    const after = await asWorker(db, 'SELECT email FROM invites')
+    expect(after.rows).toEqual([{ email: 'ana@keel.test' }])
   })
 
-  it('refuses OIDC without its issuer or client id', async () => {
-    expect(await run({ ...base, authMethod: 'oidc', authIssuer: '', authClientId: 'c' })).toEqual({
+  it('refuses a missing name or a malformed administrator address', async () => {
+    const db = new PGlite()
+    await applySchema(db)
+    const engine = createEngine(db)
+    expect(await initializeOrganization({ engine, db, orgName: '', adminEmail: 'a@b.test' })).toEqual({
       ok: false,
-      reason: 'oidc',
+      reason: 'orgName',
     })
-    expect(
-      await run({
-        ...base,
-        authMethod: 'oidc',
-        authIssuer: 'https://login.keel.test',
-        authClientId: '',
-      })
-    ).toEqual({ ok: false, reason: 'oidc' })
+    expect(await initializeOrganization({ engine, db, orgName: 'Keel', adminEmail: 'nope' })).toEqual({
+      ok: false,
+      reason: 'adminEmail',
+    })
   })
 })
 

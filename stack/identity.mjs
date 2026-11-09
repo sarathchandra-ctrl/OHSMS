@@ -30,7 +30,7 @@ export async function establishIdentity(engine, db, { sub, email, name, groups =
   const existing = await engine.get(WORKER, 'users', uid)
   if (existing) {
     if (existing.status === 'disabled') return { ok: false, reason: 'disabled' }
-    const mine = await expandGroups(db, existing.orgId, mail, groups)
+    const mine = await expandGroups(db, mail, groups)
     const profile = await syncRoleFromGroups(engine, db, uid, existing, mine)
     return { ok: true, uid, profile }
   }
@@ -41,15 +41,15 @@ export async function establishIdentity(engine, db, { sub, email, name, groups =
   // members, and let a revoke that landed in between be ignored.
   const claimed = await asWorker(
     db,
-    'DELETE FROM invites WHERE email = $1 RETURNING email, org_id, role, name',
+    'DELETE FROM invites WHERE email = $1 RETURNING email, role, name',
     [mail]
   )
   const row = claimed.rows[0]
   // With the groups the directory pushed, and Entra's IDs named (directory.mjs).
-  const mine = await expandGroups(db, row ? row.org_id : null, mail, groups)
+  const mine = await expandGroups(db, mail, groups)
   let join
   if (row) {
-    join = { orgId: row.org_id, role: row.role, name: row.name, by: 'invite' }
+    join = { role: row.role, name: row.name, by: 'invite' }
   } else {
     // The other sign-in won the claim; it is the same person, so use its user.
     const raced = await engine.get(WORKER, 'users', uid)
@@ -62,7 +62,7 @@ export async function establishIdentity(engine, db, { sub, email, name, groups =
   }
   // Mapped groups decide the role whenever they give one, invited or not.
   if (join.by !== 'groups') {
-    const org = await engine.get(WORKER, 'organizations', join.orgId)
+    const org = await engine.get(WORKER, 'organization', 'profile')
     join.role = roleFromGroups(org?.groupRoles, mine) || join.role
   }
 
@@ -74,7 +74,6 @@ export async function establishIdentity(engine, db, { sub, email, name, groups =
         id: uid,
         merge: false,
         data: {
-          orgId: join.orgId,
           role: join.role,
           status: 'approved',
           name: name || join.name || mail,
@@ -90,9 +89,9 @@ export async function establishIdentity(engine, db, { sub, email, name, groups =
       // them with neither an invite nor an account.
       await asWorker(
         db,
-        `INSERT INTO invites (email, org_id, role, name) VALUES ($1, $2, $3, $4)
+        `INSERT INTO invites (email, role, name) VALUES ($1, $2, $3)
          ON CONFLICT (email) DO NOTHING`,
-        [row.email, row.org_id, row.role, row.name]
+        [row.email, row.role, row.name]
       )
     }
     throw err

@@ -21,7 +21,7 @@ import { releaseDefectLocks } from '../../fire/lib/firestore'
 import { openSnapshots } from '../../../shared/crypto'
 import { actionOwnerDisplay } from '../../committee/lib/actionOwner'
 
-const dref = (orgId, name, id) => doc(db, 'organizations', orgId, name, id)
+const dref = (name, id) => doc(db, name, id)
 
 export const NORM_STATUS = [
   { key: 'open', label: 'Open', color: '#ef4444' },
@@ -55,13 +55,13 @@ export const SOURCES = [
         context: d.refNo || d.referenceNo || 'Incident',
         link: `/incidents/${d.id}`,
       })),
-    write: async (orgId, action, native) => {
-      const snap = await getDoc(dref(orgId, 'incidents', action.docId))
+    write: async (action, native) => {
+      const snap = await getDoc(dref('incidents', action.docId))
       if (!snap.exists()) throw new Error('Incident not found')
       const capa = (snap.data().capa || []).map((a) =>
         a.id === action.actionId ? { ...a, status: native, closedAt: native === 'closed' ? nowISO() : null } : a,
       )
-      await updateDoc(dref(orgId, 'incidents', action.docId), { capa })
+      await updateDoc(dref('incidents', action.docId), { capa })
     },
   },
   {
@@ -81,13 +81,13 @@ export const SOURCES = [
         context: d.refNo || 'Illness',
         link: `/incidents/illness/${d.id}`,
       })),
-    write: async (orgId, action, native) => {
-      const snap = await getDoc(dref(orgId, 'illnesses', action.docId))
+    write: async (action, native) => {
+      const snap = await getDoc(dref('illnesses', action.docId))
       if (!snap.exists()) throw new Error('Illness record not found')
       const actions = (snap.data().actions || []).map((a) =>
         a.id === action.actionId ? { ...a, status: native, closedAt: native === 'closed' ? nowISO() : null } : a,
       )
-      await updateDoc(dref(orgId, 'illnesses', action.docId), { actions })
+      await updateDoc(dref('illnesses', action.docId), { actions })
     },
   },
   {
@@ -113,15 +113,15 @@ export const SOURCES = [
         link: '/equipment/defects',
       }))
     },
-    write: async (orgId, action, native) => {
-      const snap = await getDoc(dref(orgId, 'extinguishers', action.docId))
+    write: async (action, native) => {
+      const snap = await getDoc(dref('extinguishers', action.docId))
       if (!snap.exists()) throw new Error('Extinguisher not found')
       const data = snap.data()
       const statuses = { ...(data.defectStatuses || {}) }
       if (native === 'closed') {
         const remaining = (data.physicalDefects || []).filter((k) => k !== action.actionId)
         delete statuses[action.actionId]
-        await updateDoc(dref(orgId, 'extinguishers', action.docId), {
+        await updateDoc(dref('extinguishers', action.docId), {
           physicalDefects: remaining, defectStatuses: statuses, quotation: null,
         })
         // Release the QR reporting lock too. Resolving the defect here without
@@ -130,10 +130,10 @@ export const SOURCES = [
         // reported — permanently, with no way to clear it from the app. The
         // fire module's own resolve path always did this; the tracker, which
         // resolves the identical defect, did not.
-        await releaseDefectLocks(orgId, action.docId, [action.actionId])
+        await releaseDefectLocks(action.docId, [action.actionId])
       } else {
         statuses[action.actionId] = native
-        await updateDoc(dref(orgId, 'extinguishers', action.docId), { defectStatuses: statuses })
+        await updateDoc(dref('extinguishers', action.docId), { defectStatuses: statuses })
       }
     },
   },
@@ -155,13 +155,13 @@ export const SOURCES = [
         context: `${d.scenario || 'Drill'}${d.centerName ? ` · ${d.centerName}` : ''}`,
         link: '/mock-drills',
       })),
-    write: async (orgId, action, native) => {
-      const snap = await getDoc(dref(orgId, 'mockDrills', action.docId))
+    write: async (action, native) => {
+      const snap = await getDoc(dref('mockDrills', action.docId))
       if (!snap.exists()) throw new Error('Drill record not found')
       const capa = (snap.data().capa || []).map((c, i) =>
         i === action.actionId ? { ...c, status: native } : c,
       )
-      await updateDoc(dref(orgId, 'mockDrills', action.docId), { capa })
+      await updateDoc(dref('mockDrills', action.docId), { capa })
     },
   },
   {
@@ -197,14 +197,14 @@ export const SOURCES = [
           repeat: Number(r.repeatCount) || 1,
           repeatSince: r.repeatSince || '',
         })),
-    write: async (orgId, action, native) => {
-      const snap = await getDoc(dref(orgId, 'inspectionRecords', action.docId))
+    write: async (action, native) => {
+      const snap = await getDoc(dref('inspectionRecords', action.docId))
       if (!snap.exists()) throw new Error('Inspection record not found')
       const responses = { ...(snap.data().responses || {}) }
       const r = responses[action.actionId]
       if (!r) throw new Error('Inspection item not found')
       responses[action.actionId] = { ...r, actionStatus: native, actionClosedAt: native === 'closed' ? nowISO() : null }
-      await updateDoc(dref(orgId, 'inspectionRecords', action.docId), { responses })
+      await updateDoc(dref('inspectionRecords', action.docId), { responses })
     },
   },
   {
@@ -231,13 +231,13 @@ export const SOURCES = [
         context: `${d.docId || 'Audit'}${d.taskDetails?.dept ? ` · ${d.taskDetails.dept}` : ''}`,
         link: '/audit',
       })),
-    write: async (orgId, action, native) => {
-      const snap = await getDoc(dref(orgId, 'auditFindings', action.docId))
+    write: async (action, native) => {
+      const snap = await getDoc(dref('auditFindings', action.docId))
       if (!snap.exists()) throw new Error('Audit finding not found')
       const findings = (snap.data().findings || []).map((f) =>
         f.id === action.actionId ? { ...f, status: native } : f,
       )
-      await updateDoc(dref(orgId, 'auditFindings', action.docId), { findings })
+      await updateDoc(dref('auditFindings', action.docId), { findings })
     },
   },
   {
@@ -258,13 +258,13 @@ export const SOURCES = [
         context: d.subject || d.docId || 'Meeting',
         link: '/committee',
       })),
-    write: async (orgId, action, native) => {
-      const snap = await getDoc(dref(orgId, 'consultations', action.docId))
+    write: async (action, native) => {
+      const snap = await getDoc(dref('consultations', action.docId))
       if (!snap.exists()) throw new Error('Meeting not found')
       const actions = (snap.data().actions || []).map((a, i) =>
         i === action.actionId ? { ...a, status: native } : a,
       )
-      await updateDoc(dref(orgId, 'consultations', action.docId), { actions })
+      await updateDoc(dref('consultations', action.docId), { actions })
     },
   },
   {
@@ -284,13 +284,13 @@ export const SOURCES = [
         context: d.docId || d.title || 'Customer escalation',
         link: `/stakeholder/escalations/${d.id}`,
       })),
-    write: async (orgId, action, native) => {
-      const snap = await getDoc(dref(orgId, 'escalations', action.docId))
+    write: async (action, native) => {
+      const snap = await getDoc(dref('escalations', action.docId))
       if (!snap.exists()) throw new Error('Escalation not found')
       const capa = (snap.data().capa || []).map((a) =>
         a.id === action.actionId ? { ...a, status: native, closedAt: native === 'closed' ? nowISO() : null } : a,
       )
-      await updateDoc(dref(orgId, 'escalations', action.docId), { capa })
+      await updateDoc(dref('escalations', action.docId), { capa })
     },
   },
   {
@@ -310,13 +310,13 @@ export const SOURCES = [
         context: d.docId || d.title || 'Legal issue',
         link: `/stakeholder/legal/${d.id}`,
       })),
-    write: async (orgId, action, native) => {
-      const snap = await getDoc(dref(orgId, 'legalIssues', action.docId))
+    write: async (action, native) => {
+      const snap = await getDoc(dref('legalIssues', action.docId))
       if (!snap.exists()) throw new Error('Legal issue not found')
       const capa = (snap.data().capa || []).map((a) =>
         a.id === action.actionId ? { ...a, status: native, closedAt: native === 'closed' ? nowISO() : null } : a,
       )
-      await updateDoc(dref(orgId, 'legalIssues', action.docId), { capa })
+      await updateDoc(dref('legalIssues', action.docId), { capa })
     },
   },
 
@@ -328,7 +328,7 @@ export const SOURCE_BY_KEY = Object.fromEntries(SOURCES.map((s) => [s.key, s]))
  * Subscribe to every source collection and deliver one flat, normalized list of
  * action items. Returns an unsubscribe function.
  */
-export function subscribeActions(orgId, cb) {
+export function subscribeActions(cb) {
   const latest = {} // { [sourceKey]: docs[] }
   // Keyed by COLLECTION, not source key: two sources can read the same
   // collection, and the notice names collections. Start pending so a caller
@@ -391,11 +391,11 @@ export function subscribeActions(orgId, cb) {
   // would let a fast source silently discard a slow source's batch.
   const openers = Object.fromEntries(SOURCES.map((src) => [
     src.key,
-    openSnapshots(orgId, src.collection, (rows) => { latest[src.key] = rows; emit() }),
+    openSnapshots(src.collection, (rows) => { latest[src.key] = rows; emit() }),
   ]))
 
   const unsubs = SOURCES.map((src) =>
-    subscribeOrgCollection(orgId, src.collection, ({ rows, status: st }) => {
+    subscribeOrgCollection(src.collection, ({ rows, status: st }) => {
       status[src.collection] = st
       openers[src.key](rows)
     }),
@@ -404,8 +404,8 @@ export function subscribeActions(orgId, cb) {
 }
 
 /** Write a normalized status back into the originating source document. */
-export async function updateActionStatus(orgId, action, normStatus) {
+export async function updateActionStatus(action, normStatus) {
   const src = SOURCE_BY_KEY[action.source]
   if (!src) throw new Error(`Unknown source: ${action.source}`)
-  await src.write(orgId, action, src.toNative(normStatus))
+  await src.write(action, src.toNative(normStatus))
 }

@@ -38,7 +38,7 @@ const hazName = (h) => h.hazardType || categoryLabel(h.hazardCategory)
 
 export default function RiskRegister() {
   const { assessments, loading } = useRa()
-  const { orgId, user, profile } = useAuth()
+  const { user, profile } = useAuth()
   const navigate = useNavigate()
   // Baselines are activity templates — keep their hazards out of the live register.
   const siteAssessments = useMemo(() => assessments.filter((a) => a.kind !== 'baseline'), [assessments])
@@ -58,8 +58,8 @@ export default function RiskRegister() {
       hazards: (act.hazards || []).map((h) => (h.id === row.hazard.id ? { ...h, alarp: true } : h)),
     }))
     try {
-      await updateAssessment(orgId, a.id, { activities })
-      logActivity(orgId, { uid: user?.uid, name: profile?.name }, {
+      await updateAssessment(a.id, { activities })
+      logActivity({ uid: user?.uid, name: profile?.name }, {
         type: 'alarp',
         message: `declared ALARP on “${hazName(row.hazard)}” (${row.assessmentName})`,
         assessmentId: row.assessmentId,

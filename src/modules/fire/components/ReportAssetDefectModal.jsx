@@ -43,7 +43,7 @@ export default function ReportAssetDefectModal({ open, onClose, asset, kind }) {
     if (!role) return toast.error('Select who is reporting')
     setBusy(true)
     try {
-      await createAssetReport(asset.orgId, {
+      await createAssetReport({
         assetKind: kind,
         assetRefId: asset.assetRefId,
         assetLabel: label,

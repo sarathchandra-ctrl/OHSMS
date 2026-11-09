@@ -5,7 +5,6 @@ import {
   subscribeObservations,
   subscribeOrgUsers,
   subscribeOrg,
-  ensureOrgIndex,
   reconcilePermitStatus,
 } from '../lib/firestore'
 import { derivePermitStatus, STATUS } from '../lib/permitStatus'
@@ -16,38 +15,30 @@ const PermitContext = createContext(null)
 
 /** One set of real-time listeners for the authed app: permits, users, org. */
 export function PermitProvider({ children }) {
-  const { orgId, profile, isApprover } = useAuth()
+  const { profile, isApprover } = useAuth()
   const [permits, setPermits] = useState([])
   const [observations, setObservations] = useState([])
   const [users, setUsers] = useState([])
   const [org, setOrg] = useState(null)
   const [loading, setLoading] = useState(true)
-  const orgIndexedRef = useRef(null)
   const reconciledRef = useRef(new Set())
 
   useEffect(() => {
-    if (!orgId) return
     setLoading(true)
     let ready = false
     const done = () => { if (!ready) { ready = true; setLoading(false) } }
-    const u1 = subscribePermits(orgId, (list) => { setPermits(list); done() })
-    const u2 = subscribeOrgUsers(orgId, setUsers)
-    const u4 = subscribeObservations(orgId, setObservations)
-    const u3 = subscribeOrg(orgId, (o) => {
-      setOrg(o)
-      if (o && o.name && orgIndexedRef.current !== orgId) {
-        orgIndexedRef.current = orgId
-        ensureOrgIndex({ id: o.id || orgId, name: o.name })
-      }
-    })
+    const u1 = subscribePermits((list) => { setPermits(list); done() })
+    const u2 = subscribeOrgUsers(setUsers)
+    const u4 = subscribeObservations(setObservations)
+    const u3 = subscribeOrg(setOrg)
     return () => { u1(); u2(); u3(); u4() }
-  }, [orgId])
+  }, [])
 
   // Auto-expire: persist storedStatus for permits whose live status drifted
   // (e.g. 8h window elapsed → Not Closed). Only approvers can write; once per
   // permit/status per session to avoid write storms.
   useEffect(() => {
-    if (!orgId || !isApprover) return
+    if ((!isApprover)) return
     const now = Date.now()
     for (const p of permits) {
       const live = derivePermitStatus(p, now)
@@ -55,11 +46,11 @@ export function PermitProvider({ children }) {
         const key = `${p.id}:${live}`
         if (!reconciledRef.current.has(key)) {
           reconciledRef.current.add(key)
-          reconcilePermitStatus(orgId, p)
+          reconcilePermitStatus(p)
         }
       }
     }
-  }, [permits, orgId, isApprover])
+  }, [permits, isApprover])
 
   const value = useMemo(() => {
     const now = Date.now()

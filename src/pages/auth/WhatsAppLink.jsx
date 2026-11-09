@@ -45,7 +45,7 @@ export default function WhatsAppLink() {
     try {
       const out = await startWhatsAppLink()
       setIssued(out)
-      await logAudit(profile?.orgId, actor, 'wa.link_code', {
+      await logAudit(actor, 'wa.link_code', {
         module: 'core',
         target: 'whatsapp',
         summary: 'Requested a WhatsApp link code',
@@ -61,7 +61,7 @@ export default function WhatsAppLink() {
     setBusy(true)
     try {
       await unlinkWhatsApp()
-      await logAudit(profile?.orgId, actor, 'wa.unlink', {
+      await logAudit(actor, 'wa.unlink', {
         module: 'core',
         target: 'whatsapp',
         summary: 'Unlinked WhatsApp site lookup',

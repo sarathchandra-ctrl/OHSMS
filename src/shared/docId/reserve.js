@@ -26,15 +26,17 @@ import { formatDocId, deriveOrgCode, normalizeOrgCode } from './format'
 // counter fell under the generic member rule and any approved member could set
 // it backwards — handing the next record an id already printed on a permit.
 // Split per kind, the rule becomes `n > resource.data.n`, which is checkable.
-const seqRef = (orgId, kind) => doc(db, 'organizations', orgId, 'docSeq', kind)
-const seqCol = (orgId) => collection(db, 'organizations', orgId, 'docSeq')
+const seqRef = (kind) => doc(db, 'docSeq', kind)
+const seqCol = () => collection(db, 'docSeq')
 // The pre-split counter. Read once per kind to seed the new document, so
 // existing orgs migrate on first use with no script and no downtime.
-const legacySeqRef = (orgId) => doc(db, 'organizations', orgId, 'meta', 'docSeq')
-const orgRef = (orgId) => doc(db, 'organizations', orgId)
+const legacySeqRef = () => doc(db, 'meta', 'docSeq')
+const orgRef = () => doc(db, 'organization', 'profile')
 
 // The org code changes about never, and every create would otherwise read the
 // org document to learn it.
+// One organization per installation: the caches hold one entry.
+const ORG_KEY = 'org'
 const codeCache = new Map()
 
 /** Forget cached codes — used after an admin edits one, and by tests. */
@@ -48,28 +50,27 @@ export function _clearOrgCodeCache() {
  * has never been set. Deriving rather than refusing means an org that predates
  * this gets sensible ids without an admin having to do anything first.
  */
-export async function getOrgCode(orgId) {
-  if (!orgId) return 'ORG'
-  if (codeCache.has(orgId)) return codeCache.get(orgId)
+export async function getOrgCode() {
+  if (codeCache.has(ORG_KEY)) return codeCache.get(ORG_KEY)
   let code = 'ORG'
   try {
-    const snap = await getDoc(orgRef(orgId))
+    const snap = await getDoc(orgRef())
     const data = snap.exists() ? snap.data() : {}
     code = normalizeOrgCode(data.docCode) || deriveOrgCode(data.name)
   } catch {
     // A create must not fail because the org document could not be read; the
     // fallback still produces a unique, well-formed id.
   }
-  codeCache.set(orgId, code)
+  codeCache.set(ORG_KEY, code)
   return code
 }
 
 /** Set the org's code explicitly. Returns the normalised value actually stored. */
-export async function setOrgCode(orgId, value) {
+export async function setOrgCode(value) {
   const code = normalizeOrgCode(value)
   if (!code) throw new Error('A document code needs 2–5 letters or digits')
-  await setDoc(orgRef(orgId), { docCode: code }, { merge: true })
-  codeCache.set(orgId, code)
+  await setDoc(orgRef(), { docCode: code }, { merge: true })
+  codeCache.set(ORG_KEY, code)
   return code
 }
 
@@ -79,9 +80,9 @@ export async function setOrgCode(orgId, value) {
  * @param floor optional lowest acceptable number, used by the backfill so that
  *              ids issued after it continue past what it assigned.
  */
-export async function reserveDocId(orgId, kind, { orgCode, floor = 0 } = {}) {
-  const code = orgCode || (await getOrgCode(orgId))
-  const seq = await reserveSeq(orgId, kind, { floor })
+export async function reserveDocId(kind, { orgCode, floor = 0 } = {}) {
+  const code = orgCode || (await getOrgCode())
+  const seq = await reserveSeq(kind, { floor })
   return formatDocId(kind, code, seq)
 }
 
@@ -93,11 +94,11 @@ export async function reserveDocId(orgId, kind, { orgCode, floor = 0 } = {}) {
  * transactions against the same counter document, each retrying against the
  * last — slow enough to look broken, and contended enough to sometimes be.
  */
-export async function reserveDocIds(orgId, kind, count, { orgCode } = {}) {
+export async function reserveDocIds(kind, count, { orgCode } = {}) {
   const n = Math.max(0, Math.floor(count))
   if (!n) return []
-  const code = orgCode || (await getOrgCode(orgId))
-  const first = await reserveSeq(orgId, kind, { count: n })
+  const code = orgCode || (await getOrgCode())
+  const first = await reserveSeq(kind, { count: n })
   return Array.from({ length: n }, (_, i) => formatDocId(kind, code, first + i))
 }
 
@@ -118,18 +119,18 @@ export async function reserveDocIds(orgId, kind, count, { orgCode } = {}) {
  *              highest, which is what seeds a counter that starts at zero
  *              against a register full of assets numbered before it existed.
  */
-export async function reserveSeq(orgId, kind, { count = 1, floor = 0 } = {}) {
+export async function reserveSeq(kind, { count = 1, floor = 0 } = {}) {
   // Read the legacy counter OUTSIDE the transaction: a transaction may retry,
   // and this is a one-time migration read whose value cannot change (nothing
   // writes the old document any more).
-  const legacyFloor = await legacyCounterFor(orgId, kind)
+  const legacyFloor = await legacyCounterFor(kind)
   const n = Math.max(1, Math.floor(count))
   return runTransaction(db, async (tx) => {
-    const snap = await tx.get(seqRef(orgId, kind))
+    const snap = await tx.get(seqRef(kind))
     const current = (snap.exists() && Number(snap.data().n)) || 0
     const first = Math.max(current, legacyFloor, floor) + 1
     // Not merge: the document holds exactly { n }, which is what the rule pins.
-    tx.set(seqRef(orgId, kind), { n: first + n - 1 })
+    tx.set(seqRef(kind), { n: first + n - 1 })
     return first
   })
 }
@@ -137,13 +138,13 @@ export async function reserveSeq(orgId, kind, { count = 1, floor = 0 } = {}) {
 // Legacy per-org counter values, fetched once per org and cached. Returns 0
 // once an org has no pre-split counter, which is every org created from here on.
 const legacyCache = new Map()
-async function legacyCounterFor(orgId, kind) {
-  if (!legacyCache.has(orgId)) {
-    legacyCache.set(orgId, getDoc(legacySeqRef(orgId))
+async function legacyCounterFor(kind) {
+  if (!legacyCache.has(ORG_KEY)) {
+    legacyCache.set(ORG_KEY, getDoc(legacySeqRef())
       .then((s) => (s.exists() ? s.data() : {}))
       .catch(() => ({})))
   }
-  const data = await legacyCache.get(orgId)
+  const data = await legacyCache.get(ORG_KEY)
   return Number(data?.[kind]) || 0
 }
 
@@ -152,10 +153,10 @@ async function legacyCounterFor(orgId, kind) {
  * documents over the legacy one so a partially-migrated org reports the true
  * high-water mark for every kind, not just the ones reserved since the split.
  */
-export async function readCounters(orgId) {
+export async function readCounters() {
   const [legacy, snap] = await Promise.all([
-    getDoc(legacySeqRef(orgId)).then((s) => (s.exists() ? s.data() : {})).catch(() => ({})),
-    getDocs(seqCol(orgId)).catch(() => ({ docs: [] })),
+    getDoc(legacySeqRef()).then((s) => (s.exists() ? s.data() : {})).catch(() => ({})),
+    getDocs(seqCol()).catch(() => ({ docs: [] })),
   ])
   const out = { ...legacy }
   for (const d of snap.docs) {
@@ -172,13 +173,13 @@ export async function readCounters(orgId) {
  * what stops a re-run — or a stale browser tab — from rewinding the counter and
  * handing out numbers that are already on documents.
  */
-export async function raiseCounter(orgId, kind, to) {
-  const legacyFloor = await legacyCounterFor(orgId, kind)
+export async function raiseCounter(kind, to) {
+  const legacyFloor = await legacyCounterFor(kind)
   await runTransaction(db, async (tx) => {
-    const snap = await tx.get(seqRef(orgId, kind))
+    const snap = await tx.get(seqRef(kind))
     const current = Math.max((snap.exists() && Number(snap.data().n)) || 0, legacyFloor)
     // The rule refuses a write that does not increase, so guarding here is not
     // only an optimisation — an equal write would be rejected outright.
-    if (to > current) tx.set(seqRef(orgId, kind), { n: to })
+    if (to > current) tx.set(seqRef(kind), { n: to })
   })
 }

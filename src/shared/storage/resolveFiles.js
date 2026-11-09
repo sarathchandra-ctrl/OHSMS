@@ -52,18 +52,18 @@ import { isSealedFile } from '../crypto'
  * the other eleven, and a caller can show a padlock where the thumbnail would
  * have been.
  */
-export async function resolveSealedFiles(orgId, collection, rows = []) {
+export async function resolveSealedFiles(collection, rows = []) {
   const list = Array.isArray(rows) ? rows : []
   // Nothing sealed: hand the input straight back, allocate nothing, and give
   // the caller a revoke that does nothing. This is the path every existing
   // gallery takes until the day something is uploaded under a sealed policy.
-  if (!orgId || !list.some(isSealedFile)) return { rows: list, revoke: () => {} }
+  if ((!list.some(isSealedFile))) return { rows: list, revoke: () => {} }
 
   const releases = []
   const resolved = await Promise.all(list.map(async (row) => {
     if (!isSealedFile(row)) return row
     try {
-      const { url, revoke, restricted } = await fileUrl(row, { orgId, collection })
+      const { url, revoke, restricted } = await fileUrl(row, { collection })
       if (revoke) releases.push(revoke)
       // fileUrl deliberately returns no URL for a sealed object it could not
       // open, rather than falling back to the stored one — that URL points at
@@ -93,7 +93,7 @@ export async function resolveSealedFiles(orgId, collection, rows = []) {
  * order. A stale batch is dropped AND its URLs revoked immediately — dropping it
  * without revoking would leak precisely the batches nobody ever sees.
  */
-export function resolveSubscription(orgId, collection, cb) {
+export function resolveSubscription(collection, cb) {
   let latest = 0
   let release = () => {}
   let stopped = false
@@ -101,7 +101,7 @@ export function resolveSubscription(orgId, collection, cb) {
   const onRows = (rows) => {
     const mine = latest + 1
     latest = mine
-    resolveSealedFiles(orgId, collection, rows).then((out) => {
+    resolveSealedFiles(collection, rows).then((out) => {
       if (stopped || mine !== latest) { out.revoke(); return }
       release()
       release = out.revoke

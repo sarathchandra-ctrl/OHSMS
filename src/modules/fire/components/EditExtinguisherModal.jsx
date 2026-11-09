@@ -15,7 +15,7 @@ import SiteScopePicker from '../../../shared/org/SiteScopePicker'
  *
  * Props: open, onClose, ext, orgId, orgName
  */
-export default function EditExtinguisherModal({ open, onClose, ext, orgId, orgName, actor }) {
+export default function EditExtinguisherModal({ open, onClose, ext, orgName, actor }) {
   const [form, setForm] = useState(null)
   const [busy, setBusy] = useState(false)
   const sites = useAccessibleSites()
@@ -56,7 +56,7 @@ export default function EditExtinguisherModal({ open, onClose, ext, orgId, orgNa
     if (!form.centerName.trim()) return toast.error('Site is required')
     setBusy(true)
     try {
-      await updateExtinguisher(orgId, orgName, ext.id, form, { actor })
+      await updateExtinguisher(orgName, ext.id, form, { actor })
       toast.success('Extinguisher updated')
       onClose?.()
     } catch (e) {

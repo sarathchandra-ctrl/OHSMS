@@ -15,7 +15,7 @@ import {
 } from '../lib/constants'
 
 export default function LegalIssues() {
-  const { orgId, actor, isManager } = useAuth()
+  const { actor, isManager } = useAuth()
   const navigate = useNavigate()
   const { legalIssues, loading } = useStakeholder()
   const [q, setQ] = useState('')
@@ -38,7 +38,7 @@ export default function LegalIssues() {
     // eslint-disable-next-line no-alert
     if (!window.confirm(`Delete ${row.title}?`)) return
     try {
-      await deleteLegalIssue(orgId, row.id, row.title, actor)
+      await deleteLegalIssue(row.id, row.title, actor)
       toast.success('Deleted')
     } catch (e) {
       toastCaught(e)

@@ -15,7 +15,6 @@ import {
   subscribeStretchers,
   subscribeDefectClosures,
   backfillDeletedAt,
-  ensureOrgIndex,
 } from '../lib/firestore'
 import {
   fleetSummary,
@@ -41,7 +40,7 @@ const FleetContext = createContext(null)
  * slices from here.
  */
 export function FleetProvider({ children }) {
-  const { orgId, profile, isAdmin } = useAuth()
+  const { profile, isAdmin } = useAuth()
   const [extinguishers, setExtinguishers] = useState([])
   const [allSites, setAllSites] = useState([])
   const [reports, setReports] = useState([])
@@ -57,13 +56,10 @@ export function FleetProvider({ children }) {
   const [stretchers, setStretchers] = useState([])
   const [defectClosures, setDefectClosures] = useState([])
   const [loading, setLoading] = useState(true)
-  // Run the deletedAt backfill at most once per org per session.
+  // Run the deletedAt backfill at most once per session.
   const backfilledRef = useRef(null)
-  // Self-heal the public orgIndex entry at most once per org per session.
-  const orgIndexedRef = useRef(null)
 
   useEffect(() => {
-    if (!orgId) return
     setLoading(true)
     let ready = false
     const done = () => {
@@ -72,42 +68,33 @@ export function FleetProvider({ children }) {
         setLoading(false)
       }
     }
-    const u1 = subscribeExtinguishers(orgId, (list) => {
+    const u1 = subscribeExtinguishers((list) => {
       setExtinguishers(list)
       done()
       // One-time migration: make pre-soft-delete docs visible to the Repository's
       // server query (which filters deletedAt == null). Fire-and-forget; the
       // listener re-delivers the patched docs automatically.
-      if (backfilledRef.current !== orgId && list.some((e) => e && e.deletedAt === undefined)) {
-        backfilledRef.current = orgId
-        backfillDeletedAt(orgId, list).catch((err) => {
+      if (!backfilledRef.current && list.some((e) => e && e.deletedAt === undefined)) {
+        backfilledRef.current = true
+        backfillDeletedAt(list).catch((err) => {
           // eslint-disable-next-line no-console
           console.warn('[Fire Marshal] deletedAt backfill failed:', err?.message || err)
         })
       }
     })
-    const u2 = subscribeReports(orgId, setReports)
-    const u3 = subscribeOrgUsers(orgId, setUsers)
-    const u4 = subscribeOrg(orgId, (o) => {
-      setOrg(o)
-      // Backfill the public orgIndex entry for orgs created before that feature,
-      // so they appear in the signup dropdown. Once per org per session.
-      if (o && o.name && orgIndexedRef.current !== orgId) {
-        orgIndexedRef.current = orgId
-        // Fire-and-forget self-heal; ignore failures (e.g. blocked in demo mode).
-        ensureOrgIndex({ id: o.id || orgId, name: o.name }).catch(() => {})
-      }
-    })
-    const u5 = subscribeStats(orgId, setStats)
-    const u6 = subscribeAuditLogs(orgId, setAuditLogs)
-    const u7 = subscribeSignages(orgId, setSignages)
-    const u8 = subscribeMockDrills(orgId, setMockDrills)
-    const u9 = subscribeAeds(orgId, setAeds)
-    const u10 = subscribeFas(orgId, setFas)
-    const u11 = subscribeSites(orgId, setAllSites)
-    const u12 = subscribeFirstAid(orgId, setFirstAid)
-    const u13 = subscribeStretchers(orgId, setStretchers)
-    const u14 = subscribeDefectClosures(orgId, setDefectClosures)
+    const u2 = subscribeReports(setReports)
+    const u3 = subscribeOrgUsers(setUsers)
+    const u4 = subscribeOrg(setOrg)
+    const u5 = subscribeStats(setStats)
+    const u6 = subscribeAuditLogs(setAuditLogs)
+    const u7 = subscribeSignages(setSignages)
+    const u8 = subscribeMockDrills(setMockDrills)
+    const u9 = subscribeAeds(setAeds)
+    const u10 = subscribeFas(setFas)
+    const u11 = subscribeSites(setAllSites)
+    const u12 = subscribeFirstAid(setFirstAid)
+    const u13 = subscribeStretchers(setStretchers)
+    const u14 = subscribeDefectClosures(setDefectClosures)
     return () => {
       u1()
       u2()
@@ -124,7 +111,7 @@ export function FleetProvider({ children }) {
       u13()
       u14()
     }
-  }, [orgId])
+  }, [])
 
   // Sites the current user is permitted for (correlated Region/Entity/Site picker).
   const siteInventory = useMemo(

@@ -30,12 +30,11 @@ export const COLLECTIONS = {
   merakis: 'cctvMeraki',
 }
 
-const col = (orgId, name) => collection(db, 'organizations', orgId, name)
-const ref = (orgId, name, id) => doc(db, 'organizations', orgId, name, id)
+const col = (name) => collection(db, name)
+const ref = (name, id) => doc(db, name, id)
 
 /** Live list, newest names first. Returns the unsubscribe. */
-function subscribe(orgId, name, cb) {
-  if (!orgId) return () => {}
+function subscribe(name, cb) {
   // orderBy('name') rather than a timestamp: these are read as an equipment
   // register, where people scan for a device by its label, not by when it was
   // added. Documents missing the field are dropped by Firestore's ordering, so
@@ -43,7 +42,7 @@ function subscribe(orgId, name, cb) {
   // Capped like every other live register in the app. A camera estate is the
   // one inventory here that genuinely can run to thousands, and an uncapped
   // listener bills a document read for every one of them on every page load.
-  const q = query(col(orgId, name), orderBy('name'), limit(COLLECTION_READ_CAP))
+  const q = query(col(name), orderBy('name'), limit(COLLECTION_READ_CAP))
   return onSnapshot(
     q,
     (snap) => cb(snap.docs.map((d) => ({ id: d.id, ...d.data() }))),
@@ -59,9 +58,9 @@ function subscribe(orgId, name, cb) {
   )
 }
 
-export const subscribeCameras = (orgId, cb) => subscribe(orgId, COLLECTIONS.cameras, cb)
-export const subscribeDvrs = (orgId, cb) => subscribe(orgId, COLLECTIONS.dvrs, cb)
-export const subscribeMerakis = (orgId, cb) => subscribe(orgId, COLLECTIONS.merakis, cb)
+export const subscribeCameras = (cb) => subscribe(COLLECTIONS.cameras, cb)
+export const subscribeDvrs = (cb) => subscribe(COLLECTIONS.dvrs, cb)
+export const subscribeMerakis = (cb) => subscribe(COLLECTIONS.merakis, cb)
 
 // ── Shape normalisation ──────────────────────────────────────────────────────
 // Firestore rejects `undefined`, and a half-filled form produces plenty of it.
@@ -139,49 +138,49 @@ const LABELS = {
 
 // ── Writes ───────────────────────────────────────────────────────────────────
 
-async function create(orgId, name, data, actor) {
+async function create(name, data, actor) {
   const payload = SHAPES[name](data)
   if (!payload.name) throw new Error(`Give the ${LABELS[name]} a name`)
-  const created = await addDoc(col(orgId, name), {
+  const created = await addDoc(col(name), {
     ...payload,
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   })
-  await logAudit(orgId, actor, 'cctv.create', {
+  await logAudit(actor, 'cctv.create', {
     target: name, targetId: created.id, targetLabel: payload.name,
     summary: `Added ${LABELS[name]} ${payload.name}`,
   })
   return created.id
 }
 
-async function update(orgId, name, id, data, actor) {
+async function update(name, id, data, actor) {
   const payload = SHAPES[name](data)
-  await updateDoc(ref(orgId, name, id), { ...payload, updatedAt: serverTimestamp() })
-  await logAudit(orgId, actor, 'cctv.update', {
+  await updateDoc(ref(name, id), { ...payload, updatedAt: serverTimestamp() })
+  await logAudit(actor, 'cctv.update', {
     target: name, targetId: id, targetLabel: payload.name,
     summary: `Updated ${LABELS[name]} ${payload.name}`,
   })
 }
 
-async function remove(orgId, name, id, label, actor) {
-  await deleteDoc(ref(orgId, name, id))
-  await logAudit(orgId, actor, 'cctv.delete', {
+async function remove(name, id, label, actor) {
+  await deleteDoc(ref(name, id))
+  await logAudit(actor, 'cctv.delete', {
     target: name, targetId: id, targetLabel: label,
     summary: `Removed ${LABELS[name]} ${label}`,
   })
 }
 
-export const addCamera = (orgId, d, actor) => create(orgId, COLLECTIONS.cameras, d, actor)
-export const updateCamera = (orgId, id, d, actor) => update(orgId, COLLECTIONS.cameras, id, d, actor)
-export const deleteCamera = (orgId, id, label, actor) => remove(orgId, COLLECTIONS.cameras, id, label, actor)
+export const addCamera = (d, actor) => create(COLLECTIONS.cameras, d, actor)
+export const updateCamera = (id, d, actor) => update(COLLECTIONS.cameras, id, d, actor)
+export const deleteCamera = (id, label, actor) => remove(COLLECTIONS.cameras, id, label, actor)
 
-export const addDvr = (orgId, d, actor) => create(orgId, COLLECTIONS.dvrs, d, actor)
-export const updateDvr = (orgId, id, d, actor) => update(orgId, COLLECTIONS.dvrs, id, d, actor)
-export const deleteDvr = (orgId, id, label, actor) => remove(orgId, COLLECTIONS.dvrs, id, label, actor)
+export const addDvr = (d, actor) => create(COLLECTIONS.dvrs, d, actor)
+export const updateDvr = (id, d, actor) => update(COLLECTIONS.dvrs, id, d, actor)
+export const deleteDvr = (id, label, actor) => remove(COLLECTIONS.dvrs, id, label, actor)
 
-export const addMeraki = (orgId, d, actor) => create(orgId, COLLECTIONS.merakis, d, actor)
-export const updateMeraki = (orgId, id, d, actor) => update(orgId, COLLECTIONS.merakis, id, d, actor)
-export const deleteMeraki = (orgId, id, label, actor) => remove(orgId, COLLECTIONS.merakis, id, label, actor)
+export const addMeraki = (d, actor) => create(COLLECTIONS.merakis, d, actor)
+export const updateMeraki = (id, d, actor) => update(COLLECTIONS.merakis, id, d, actor)
+export const deleteMeraki = (id, label, actor) => remove(COLLECTIONS.merakis, id, label, actor)
 
 /**
  * Write validated import rows.
@@ -194,7 +193,7 @@ export const deleteMeraki = (orgId, id, label, actor) => remove(orgId, COLLECTIO
  * a 900-row import that fails on the third chunk leaves the first 800 in place
  * rather than discarding the lot, and re-running skips them by name.
  */
-export async function bulkImport(orgId, kind, rows = [], actor) {
+export async function bulkImport(kind, rows = [], actor) {
   const name = COLLECTIONS[kind]
   if (!name) throw new Error(`Unknown device kind ${kind}`)
   if (!rows.length) return 0
@@ -204,7 +203,7 @@ export async function bulkImport(orgId, kind, rows = [], actor) {
   for (let i = 0; i < rows.length; i += CHUNK) {
     const batch = writeBatch(db)
     for (const r of rows.slice(i, i + CHUNK)) {
-      batch.set(doc(col(orgId, name)), {
+      batch.set(doc(col(name)), {
         ...SHAPES[name](r),
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
@@ -214,7 +213,7 @@ export async function bulkImport(orgId, kind, rows = [], actor) {
     written += Math.min(CHUNK, rows.length - i)
   }
 
-  await logAudit(orgId, actor, 'cctv.import', {
+  await logAudit(actor, 'cctv.import', {
     target: name,
     targetLabel: `${written} ${LABELS[name]}(s)`,
     summary: `Imported ${written} ${LABELS[name]}(s)`,
@@ -223,8 +222,8 @@ export async function bulkImport(orgId, kind, rows = [], actor) {
 }
 
 /** One-shot read of the Meraki list, for callers with no live subscription. */
-export async function getMerakis(orgId) {
-  const snap = await getDocs(col(orgId, COLLECTIONS.merakis))
+export async function getMerakis() {
+  const snap = await getDocs(col(COLLECTIONS.merakis))
   return snap.docs.map((d) => ({ id: d.id, ...d.data() }))
 }
 
@@ -238,8 +237,8 @@ export async function getMerakis(orgId) {
  * collection itself, and a second, staler view of it handed in from here could
  * only make the answer worse.
  */
-export async function provisionMerakisForNewSites(orgId, sites = [], actor) {
-  return provisionSiteMerakis(orgId, sites, [], actor)
+export async function provisionMerakisForNewSites(sites = [], actor) {
+  return provisionSiteMerakis(sites, [], actor)
 }
 
 /**
@@ -272,10 +271,10 @@ export async function provisionMerakisForNewSites(orgId, sites = [], actor) {
  *
  * @returns the number created — 0 means everything was already covered
  */
-export async function provisionSiteMerakis(orgId, sites = [], merakis = [], actor) {
-  if (!orgId || !sites.length) return 0
+export async function provisionSiteMerakis(sites = [], merakis = [], actor) {
+  if ((!sites.length)) return 0
 
-  const known = await getMerakis(orgId)
+  const known = await getMerakis()
   const payloads = standardMerakiPayloads(sites, [...known, ...merakis])
   if (!payloads.length) return 0
 
@@ -299,8 +298,8 @@ export async function provisionSiteMerakis(orgId, sites = [], merakis = [], acto
       // auto-id rather than skipping the site, which would leave it with no
       // switch at all — the failure this whole file exists to prevent.
       const target = w.id
-        ? doc(col(orgId, COLLECTIONS.merakis), w.id)
-        : doc(col(orgId, COLLECTIONS.merakis))
+        ? doc(col(COLLECTIONS.merakis), w.id)
+        : doc(col(COLLECTIONS.merakis))
       batch.set(target, {
         ...merakiShape(w.payload),
         createdAt: serverTimestamp(),
@@ -310,7 +309,7 @@ export async function provisionSiteMerakis(orgId, sites = [], merakis = [], acto
     await batch.commit()
   }
 
-  await logAudit(orgId, actor, 'cctv.provision', {
+  await logAudit(actor, 'cctv.provision', {
     target: COLLECTIONS.merakis,
     targetLabel: `${writes.length} site(s)`,
     summary: `Created the standard Meraki device for ${writes.length} site(s)`,
@@ -323,15 +322,15 @@ export async function provisionSiteMerakis(orgId, sites = [], merakis = [], acto
  * write, kept separate from the full update so a status poll cannot clobber the
  * inventory fields a person maintains by hand.
  */
-export async function setStatus(orgId, kind, id, status, actor, label) {
+export async function setStatus(kind, id, status, actor, label) {
   const name = COLLECTIONS[kind]
   if (!name) throw new Error(`Unknown device kind ${kind}`)
-  await updateDoc(ref(orgId, name, id), {
+  await updateDoc(ref(name, id), {
     status: str(status) || 'unknown',
     statusAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   })
-  await logAudit(orgId, actor, 'cctv.status', {
+  await logAudit(actor, 'cctv.status', {
     target: name, targetId: id, targetLabel: label || id,
     summary: `${LABELS[name]} ${label || id} marked ${status}`,
   })
@@ -348,12 +347,12 @@ export async function setStatus(orgId, kind, id, status, actor, label) {
  * those are different facts and the gap between them is the point: a defect
  * found on a Friday walk-round is often typed in the following Monday.
  */
-export async function setDefects(orgId, kind, id, { defects, defectReportedOn } = {}, actor, label) {
+export async function setDefects(kind, id, { defects, defectReportedOn } = {}, actor, label) {
   const name = COLLECTIONS[kind]
   if (!name) throw new Error(`Unknown device kind ${kind}`)
   const clean = defectFields({ defects, defectReportedOn })
-  await updateDoc(ref(orgId, name, id), { ...clean, updatedAt: serverTimestamp() })
-  await logAudit(orgId, actor, 'cctv.defects', {
+  await updateDoc(ref(name, id), { ...clean, updatedAt: serverTimestamp() })
+  await logAudit(actor, 'cctv.defects', {
     target: name, targetId: id, targetLabel: label || id,
     summary: clean.defects.length
       ? `${LABELS[name]} ${label || id}: ${clean.defects.join(', ')}${

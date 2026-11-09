@@ -110,20 +110,20 @@ export default function PermitDetail() {
   const qrEnsuredRef = useRef(false)
 
   useEffect(() => {
-    if (!profile?.orgId || !id) return undefined
-    const u1 = subscribePermitDocuments(profile.orgId, id, setDocuments)
-    const u2 = subscribePermitObservations(profile.orgId, id, setObservations)
+    if ((!id)) return undefined
+    const u1 = subscribePermitDocuments(id, setDocuments)
+    const u2 = subscribePermitObservations(id, setObservations)
     return () => { u1(); u2() }
-  }, [profile?.orgId, id])
+  }, [id])
 
   // Ensure this permit has a QR token + a current public mirror (self-heals
   // permits whose mirror write was previously blocked). Once per permit id.
   useEffect(() => {
-    if (!profile?.orgId || !permit) return
+    if ((!permit)) return
     if (qrEnsuredRef.current === permit.id) return
     qrEnsuredRef.current = permit.id
-    ensurePermitQr(profile.orgId, profile.orgName, permit).catch(() => {})
-  }, [profile?.orgId, profile?.orgName, permit])
+    ensurePermitQr(profile.orgName, permit).catch(() => {})
+  }, [profile?.orgName, permit])
 
   const handlePrint = useReactToPrint({
     content: () => printRef.current,
@@ -137,7 +137,6 @@ export default function PermitDetail() {
   }
 
   const actor = { uid: user.uid, name: profile?.name || '', orgName: profile?.orgName || '', role: profile?.role }
-  const orgId = profile.orgId
   const bothApproved = permit.engineering?.status === 'approved' && permit.operations?.status === 'approved'
   const isClosed = permit.status === STATUS.CLOSED || permit.status === STATUS.CLOSED_NONCOMPLIANCE
   const isExpired = permit.status === STATUS.NOT_CLOSED
@@ -161,17 +160,17 @@ export default function PermitDetail() {
     if (!file) return
     try {
       const f = await fileToDataUrl(file)
-      await addPermitDocument(orgId, permit.id, { key: 'extra', label: f.name, mandatory: false, fileName: f.name, fileType: f.type, fileData: f.dataUrl, size: f.size }, actor)
+      await addPermitDocument(permit.id, { key: 'extra', label: f.name, mandatory: false, fileName: f.name, fileType: f.type, fileData: f.dataUrl, size: f.size }, actor)
       toast.success('Document attached')
     } catch (err) { toastCaught(err) }
   }
   const onRemoveDocument = (d) => run(async () => {
-    await deletePermitDocument(orgId, permit.id, d.id, actor, d.label || d.fileName)
+    await deletePermitDocument(permit.id, d.id, actor, d.label || d.fileName)
     toast.success('Document removed')
   })
 
   const submitObservation = () => run(async () => {
-    await createObservation(orgId, {
+    await createObservation({
       permitId: permit.id, permitNo: permit.permitNo, token: permit.qrToken, type: obs.type, note: obs.note, source: 'portal',
     }, actor)
     toast.success(obs.type === 'unsafe' ? 'Logged — permit closed for non-compliance' : 'Safe observation logged')
@@ -181,9 +180,9 @@ export default function PermitDetail() {
   const confirmDecision = async () => {
     const { stage, team, decision: d } = decision
     await run(async () => {
-      if (stage === 'permit') await decideApproval(orgId, permit.id, team, d, note, actor)
-      else if (stage === 'closure') await decideClosure(orgId, permit.id, team, d, note, actor)
-      else if (stage === 'extension') await decideExtension(orgId, permit.id, team, d, note, actor)
+      if (stage === 'permit') await decideApproval(permit.id, team, d, note, actor)
+      else if (stage === 'closure') await decideClosure(permit.id, team, d, note, actor)
+      else if (stage === 'extension') await decideExtension(permit.id, team, d, note, actor)
       toast.success(`${d === 'approved' ? 'Approved' : 'Rejected'}`)
       setDecision(null); setNote('')
     })
@@ -193,21 +192,21 @@ export default function PermitDetail() {
     // Guarded twice: the button only exists for admins, and the modal will not
     // enable this until the permit number has been typed back.
     if (confirmNo.trim() !== permit.permitNo) throw new Error('Permit number does not match')
-    await deletePermit(orgId, permit, actor)
+    await deletePermit(permit, actor)
     toast.success(`Deleted permit ${permit.permitNo}`)
     setDeleting(false)
     navigate('/permits')
   })
 
   const submitClosure = () => run(async () => {
-    await requestClosure(orgId, permit.id, actor); toast.success('Submitted for closure'); setClosing(false)
+    await requestClosure(permit.id, actor); toast.success('Submitted for closure'); setClosing(false)
   })
 
   const submitExtension = () => run(async () => {
     if (!extForm.reason.trim()) throw new Error('Enter a reason for the extension')
     if (!extForm.newValidTo) throw new Error('Choose a new end date & time')
     if (Date.parse(extForm.newValidTo) <= Date.now()) throw new Error('The new end time must be in the future')
-    await requestExtension(orgId, permit.id, {
+    await requestExtension(permit.id, {
       ...extForm,
       newValidTo: new Date(extForm.newValidTo).toISOString(),
     }, actor)
@@ -215,7 +214,7 @@ export default function PermitDetail() {
   })
 
   const submitSuggestion = () => run(async () => {
-    await addExtensionSuggestion(orgId, permit.id, {
+    await addExtensionSuggestion(permit.id, {
       text: suggest.text,
       newValidTo: suggest.newValidTo ? new Date(suggest.newValidTo).toISOString() : null,
     }, actor)

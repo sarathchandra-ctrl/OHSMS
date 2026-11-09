@@ -1,6 +1,5 @@
 import { describe, it, expect } from 'vitest'
 import { istDay, dayOf, summariseSites, appResolveSite } from './siteSummary.js'
-import { packCounts, unpackCounts, packItems, unpackItems } from './whatsapp/store.js'
 
 // The cross-package parity test lives at src/pages/admin/siteSummary.parity.test.js;
 // these cover what only the server has: the IST calendar and the packed snapshot.
@@ -115,35 +114,3 @@ describe('summariseSites', () => {
   })
 })
 
-describe('packed snapshot rows', () => {
-  it('round-trip', () => {
-    const c = {
-      extinguishers: 6,
-      hptOverdue: 1,
-      openDefects: 3,
-      defectsByKind: { extinguisher: 2, aed: 1, fas: 0 },
-      firstAidBoxes: 2,
-      pendingActions: 4,
-      overdueActions: 1,
-      incidentsTotal: 7,
-      incidentsOpen: 1,
-      incidents90d: 2,
-      aeds: 3,
-      aedsOutOfService: 1,
-    }
-    expect(unpackCounts(packCounts(c))).toEqual(c)
-  })
-})
-
-describe('snapshot items', () => {
-  it('round-trips defect items without nested arrays', () => {
-    const items = {
-      extinguisher: [{ label: 'FE-1', where: 'Lobby', defect: 'HPT Due' }],
-      aed: [],
-      fas: [],
-    }
-    const packed = packItems(items)
-    expect(Object.values(packed).every((v) => v.every((x) => !Array.isArray(x)))).toBe(true)
-    expect(unpackItems(packed)).toEqual(items)
-  })
-})

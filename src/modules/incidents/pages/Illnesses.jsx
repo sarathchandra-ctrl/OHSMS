@@ -19,7 +19,7 @@ function fmtDate(v) {
 export default function Illnesses() {
   const navigate = useNavigate()
   const { illnesses, incidents } = useIncidents()
-  const { isAdmin, profile, user, orgId } = useAuth()
+  const { isAdmin, profile, user } = useAuth()
   const [search, setSearch] = useState('')
 
   const refByIncidentId = useMemo(() => Object.fromEntries(incidents.map((i) => [i.id, i.refNo])), [incidents])
@@ -33,7 +33,7 @@ export default function Illnesses() {
     e.stopPropagation()
     if (!window.confirm(`Delete illness ${ill.refNo}? It can be restored from the Recycle Bin.`)) return
     try {
-      await deleteIllness(orgId, ill.id, { uid: user.uid, name: profile.name })
+      await deleteIllness(ill.id, { uid: user.uid, name: profile.name })
       toast.success('Moved to Recycle Bin')
     } catch (err) {
       toastCaught(err, 'Could not delete')

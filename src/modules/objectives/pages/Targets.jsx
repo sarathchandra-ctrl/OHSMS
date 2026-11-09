@@ -15,7 +15,7 @@ const thisPeriod = () => `FY${new Date().getFullYear()}`
 const EMPTY = { kpi: 'auditPass', level: 'org', scope: '', entity: 'all', target: '', period: thisPeriod(), owner: '', notes: '' }
 
 export default function Targets() {
-  const { orgId, actor, isManager } = useAuth()
+  const { actor, isManager } = useAuth()
   const { loading, objectives, regionScopes, siteScopes, entities } = useObjectives()
   const [editing, setEditing] = useState(null)
   const [form, setForm] = useState(EMPTY)
@@ -49,15 +49,15 @@ export default function Targets() {
         ? 'Organization'
         : scopeOptions.find((s) => s.value === form.scope)?.label || form.scope
       const payload = { ...form, scopeLabel }
-      if (editing === 'new') { await addObjective(orgId, payload, actor); toast.success('Target set') }
-      else { await updateObjective(orgId, editing.id, payload, actor); toast.success('Target updated') }
+      if (editing === 'new') { await addObjective(payload, actor); toast.success('Target set') }
+      else { await updateObjective(editing.id, payload, actor); toast.success('Target updated') }
       setEditing(null)
     } catch (err) { toastCaught(err, 'Failed') } finally { setBusy(false) }
   }
 
   const remove = async (o) => {
     if (!window.confirm(`Remove the ${o.kpiMeta?.label} target for ${o.scopeLabel || 'Organization'}?`)) return
-    try { await deleteObjective(orgId, o.id, actor, `${o.kpiMeta?.label} · ${o.scopeLabel}`); toast.success('Target removed') }
+    try { await deleteObjective(o.id, actor, `${o.kpiMeta?.label} · ${o.scopeLabel}`); toast.success('Target removed') }
     catch (err) { toastCaught(err, 'Failed') }
   }
 
@@ -65,7 +65,7 @@ export default function Targets() {
     if (!window.confirm(`Create one organization-level target per KPI at its recommended default (${KPIS.length} targets)?`)) return
     setBusy(true)
     try {
-      const n = await seedDefaultTargets(orgId, thisPeriod(), actor)
+      const n = await seedDefaultTargets(thisPeriod(), actor)
       toast.success(`${n} default targets created`)
     } catch (err) { toastCaught(err, 'Failed') } finally { setBusy(false) }
   }

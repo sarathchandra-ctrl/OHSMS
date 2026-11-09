@@ -24,7 +24,7 @@ function fmtDate(ts) {
 export default function Incidents() {
   const navigate = useNavigate()
   const { incidents, capped, loadCap } = useIncidents()
-  const { isAdmin, profile, user, orgId } = useAuth()
+  const { isAdmin, profile, user } = useAuth()
   const [search, setSearch] = useState('')
   const [type, setType] = useState('')
   const [severity, setSeverity] = useState('')
@@ -72,7 +72,7 @@ export default function Incidents() {
       // lives in /injuries, which most people holding this button cannot read,
       // so a medical column here would be blank for them — and a blank medical
       // cell is indistinguishable from an uninjured person.
-      logAudit(orgId, { uid: user?.uid, name: profile?.name }, AUDIT.EXPORT, {
+      logAudit({ uid: user?.uid, name: profile?.name }, AUDIT.EXPORT, {
         module: 'incidents',
         targetLabel: `${n} incidents, ${actions} actions, ${chronology} chronology events`,
         summary: `Exported ${n} incidents (${filtered.length === incidents.length ? 'whole register' : 'filtered'})`,
@@ -87,7 +87,7 @@ export default function Incidents() {
     e.stopPropagation()
     if (!window.confirm(`Delete incident ${inc.refNo}? It can be restored from the Recycle Bin.`)) return
     try {
-      await deleteIncident(orgId, inc.id, { uid: user.uid, name: profile.name })
+      await deleteIncident(inc.id, { uid: user.uid, name: profile.name })
       toast.success('Incident moved to Recycle Bin')
     } catch (err) {
       toastCaught(err, 'Could not delete')

@@ -45,7 +45,7 @@ function PF({ value, onPick }) {
 export default function Execute() {
   const navigate = useNavigate()
   const location = useLocation()
-  const { profile, orgId } = useAuth()
+  const { profile } = useAuth()
   const { sites, records } = useData()
   const task = location.state?.task
 
@@ -144,7 +144,7 @@ export default function Execute() {
     }
     // Cloud first. photoEvidence is rendered straight into an <img src>, so a
     // URL drops in where the data URL used to sit and no renderer changes.
-    const up = await putFile(orgId, 'inspection-photos', file, file.name)
+    const up = await putFile('inspection-photos', file, file.name)
     if (up) {
       update(fid, { photoEvidence: up.url, photoEvidencePath: up.path, photoEvidenceName: file.name })
       return
@@ -192,14 +192,14 @@ export default function Execute() {
     }
     setBusy(true)
     try {
-      await addRecord(orgId, record, profile)
+      await addRecord(record, profile)
       // Take the assignment off the schedule now that it has been done.
       // Nothing ever did this: the only statuses written were Pending and
       // Cancelled, so a completed assigned inspection stayed Pending forever
       // and kept rolling into overdueTasks. Deliberately NOT awaited into the
       // failure path — the record is the thing that matters and it has landed,
       // and schedule.js now drops a completed one-off on the record alone.
-      if (task.assignmentId) completeAssignment(orgId, task.templateId, task.assignmentId)
+      if (task.assignmentId) completeAssignment(task.templateId, task.assignmentId)
       toast.success(`Inspection submitted — ${score}% (${result})`)
       navigate('/inspections/records')
     } catch (e) {

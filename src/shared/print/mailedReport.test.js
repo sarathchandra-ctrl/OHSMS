@@ -9,18 +9,18 @@ describe('mailedReportPath', () => {
   })
 
   it('accepts only this org mailed-reports object', () => {
-    expect(mailedReportPath('orgA', ok)).toBe(ok)
-    expect(mailedReportPath('orgA', 'orgs/orgB/mailed-reports/ab-secret.pdf')).toBe('')
-    expect(mailedReportPath('orgA', 'orgs/orgA/permit-documents/ab-method.pdf')).toBe('')
-    expect(mailedReportPath('orgA', 'orgs/orgA/medical-records/ab-letter.pdf')).toBe('')
-    expect(mailedReportPath('orgA', 'orgs/orgA/mailed-reports/../orgB/secret.pdf')).toBe('')
-    expect(mailedReportPath('orgA', 'orgs/orgA/mailed-reports/nested/x.pdf')).toBe('')
-    expect(mailedReportPath('orgA', 'https://storage.example/orgs/orgA/mailed-reports/a.pdf')).toBe(
+    expect(mailedReportPath(ok)).toBe(ok)
+    expect(mailedReportPath('orgs/orgB/mailed-reports/ab-secret.pdf')).toBe('')
+    expect(mailedReportPath('orgs/orgA/permit-documents/ab-method.pdf')).toBe('')
+    expect(mailedReportPath('orgs/orgA/medical-records/ab-letter.pdf')).toBe('')
+    expect(mailedReportPath('orgs/orgA/mailed-reports/../orgB/secret.pdf')).toBe('')
+    expect(mailedReportPath('orgs/orgA/mailed-reports/nested/x.pdf')).toBe('')
+    expect(mailedReportPath('https://storage.example/orgs/orgA/mailed-reports/a.pdf')).toBe(
       ''
     )
   })
 
   it('does not capture when there is no document to render into', async () => {
-    expect(await captureReactPdf('orgA', 'report.pdf', { type: 'div' })).toBe('')
+    expect(await captureReactPdf('report.pdf', { type: 'div' })).toBe('')
   })
 })

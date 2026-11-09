@@ -43,7 +43,7 @@ function extinguisherLabel(mirror) {
 export default function Asset() {
   const { token: rawToken } = useParams()
   const token = tokenFromQrValue(rawToken)
-  const { orgId, orgName, role, profile, actor } = useAuth()
+  const { orgName, role, profile, actor } = useAuth()
   const [mirror, setMirror] = useState(undefined)
   const [mode, setMode] = useState(null)
   const [record, setRecord] = useState(null)
@@ -99,7 +99,7 @@ export default function Asset() {
     )
   }
 
-  const decision = fieldQuickActions(mirror, { role, orgId })
+  const decision = fieldQuickActions(mirror, { role })
   const card = assetCard(mirror)
 
   if (decision.state === 'retired') {
@@ -152,7 +152,7 @@ export default function Asset() {
     }
     setBusy(true)
     try {
-      const loaded = await loadAssetRecord(orgId, card.kind, assetRecordId(mirror))
+      const loaded = await loadAssetRecord(card.kind, assetRecordId(mirror))
       if (!loaded) {
         toast.error(
           'The unit record could not be opened. The label may predate the current register.'
@@ -171,7 +171,7 @@ export default function Asset() {
   const openReceive = async () => {
     setBusy(true)
     try {
-      const loaded = await loadAssetRecord(orgId, 'extinguisher', assetRecordId(mirror))
+      const loaded = await loadAssetRecord('extinguisher', assetRecordId(mirror))
       if (!loaded) {
         toast.error('The extinguisher record could not be opened.')
         return
@@ -204,7 +204,7 @@ export default function Asset() {
       if (!service || !record) return toast.error('This unit cannot be inspected from here.')
       setBusy(true)
       try {
-        await service(orgId, orgName, { ...record, qrToken: record.qrToken || token }, nextDue, {
+        await service(orgName, { ...record, qrToken: record.qrToken || token }, nextDue, {
           uid: profile?.uid,
           name: profile?.name,
         })
@@ -234,7 +234,7 @@ export default function Asset() {
     setBusy(true)
     try {
       for (const item of failed) {
-        await createReport(orgId, {
+        await createReport({
           extId: id,
           extLabel: extinguisherLabel(mirror),
           kind: 'defect',
@@ -468,7 +468,7 @@ export default function Asset() {
           open={mode === 'defect'}
           onClose={() => setMode(null)}
           ext={{ ...mirror, extId: assetRecordId(mirror), qrToken: token }}
-          orgId={orgId}
+         
           reporter={{ uid: profile?.uid, name: profile?.name }}
           source="portal"
         />
@@ -488,7 +488,7 @@ export default function Asset() {
           reload()
         }}
         ext={record}
-        orgId={orgId}
+       
         orgName={orgName}
         actorName={profile?.name || actor?.name || ''}
       />
@@ -501,7 +501,7 @@ export default function Asset() {
           reload()
         }}
         row={closing}
-        orgId={orgId}
+       
         orgName={orgName}
         actor={{ uid: profile?.uid || actor?.uid, name: profile?.name || actor?.name }}
       />

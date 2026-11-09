@@ -22,9 +22,9 @@ vi.mock('../../../shared/firebase', () => ({ db: {} }))
 // full-suite run — a test that passes alone and fails in CI, which is worse
 // than no test.
 vi.mock('../../../shared/crypto', () => ({
-  openSnapshots: (orgId, collection, cb) => (rows) => Promise.resolve(rows).then(cb),
+  openSnapshots: (collection, cb) => (rows) => Promise.resolve(rows).then(cb),
 }))
-vi.mock('firebase/firestore', () => ({ doc: () => ({}), getDoc: vi.fn(), updateDoc: vi.fn() }))
+vi.mock('../../../shared/data/client.js', () => ({ doc: () => ({}), getDoc: vi.fn(), updateDoc: vi.fn() }))
 vi.mock('../../../shared/org/orgData', async () => {
   // The real notice builder — the wording is not what is under test here, but
   // using the real one means this breaks if the two drift apart.
@@ -40,7 +40,7 @@ vi.mock('../../../shared/org/orgData', async () => {
     // The cap constant travels with the seam: sources.js does not read it, but
     // orgData exports it and a partial mock of a module that does is an error.
     COLLECTION_READ_CAP: actual?.COLLECTION_READ_CAP ?? 5000,
-    subscribeOrgCollection: (orgId, name, cb) => {
+    subscribeOrgCollection: (name, cb) => {
       listeners[name] = cb
       return () => {
         listeners[name] = null
@@ -75,13 +75,13 @@ beforeEach(() => {
 
 describe('subscribeActions', () => {
   it('subscribes to every source collection', () => {
-    subscribeActions('orgA', vi.fn())
+    subscribeActions(vi.fn())
     COLLECTIONS.forEach((c) => expect(listeners[c]).toBeTypeOf('function'))
   })
 
   it('always emits rows and the reason together', async () => {
     const cb = vi.fn()
-    subscribeActions('orgA', cb)
+    subscribeActions(cb)
     await feedAll('ok')
     const payload = cb.mock.calls.at(-1)[0]
     expect(payload).toHaveProperty('rows')
@@ -92,7 +92,7 @@ describe('subscribeActions', () => {
 
   it('starts every source pending until it answers', async () => {
     const cb = vi.fn()
-    subscribeActions('orgA', cb)
+    subscribeActions(cb)
     listeners.incidents({ rows: [], status: 'ok' })
     await settle()
     const { status } = cb.mock.calls.at(-1)[0]
@@ -102,14 +102,14 @@ describe('subscribeActions', () => {
 
   it('says nothing when every source came back whole', async () => {
     const cb = vi.fn()
-    subscribeActions('orgA', cb)
+    subscribeActions(cb)
     await feedAll('ok')
     expect(cb.mock.calls.at(-1)[0].incomplete).toBeNull()
   })
 
   it('reports a capped source', async () => {
     const cb = vi.fn()
-    subscribeActions('orgA', cb)
+    subscribeActions(cb)
     await feedAll('ok')
     listeners.incidents({ rows: [], status: 'capped' })
     await settle()
@@ -121,7 +121,7 @@ describe('subscribeActions', () => {
   // The one that used to render as "no outstanding actions".
   it('reports a failed source rather than an empty list', async () => {
     const cb = vi.fn()
-    subscribeActions('orgA', cb)
+    subscribeActions(cb)
     await feedAll('ok')
     listeners.mockDrills({ rows: [], status: 'failed' })
     await settle()
@@ -131,7 +131,7 @@ describe('subscribeActions', () => {
 
   it('clears the notice when a failed source recovers', async () => {
     const cb = vi.fn()
-    subscribeActions('orgA', cb)
+    subscribeActions(cb)
     await feedAll('ok')
     listeners.incidents({ rows: [], status: 'failed' })
     await settle()
@@ -143,7 +143,7 @@ describe('subscribeActions', () => {
 
   it('still flattens actions out of the rows it did get', async () => {
     const cb = vi.fn()
-    subscribeActions('orgA', cb)
+    subscribeActions(cb)
     await feedAll('ok')
     listeners.incidents({
       status: 'capped',
@@ -173,7 +173,7 @@ describe('subscribeActions', () => {
   })
 
   it('unsubscribes every listener it opened', () => {
-    const stop = subscribeActions('orgA', vi.fn())
+    const stop = subscribeActions(vi.fn())
     stop()
     COLLECTIONS.forEach((c) => expect(listeners[c]).toBeNull())
   })

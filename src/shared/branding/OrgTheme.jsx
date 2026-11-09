@@ -37,7 +37,7 @@ import {
 } from './theme'
 
 export default function OrgTheme() {
-  const { org, orgId, isAdmin, actor } = useAuth()
+  const { org, isAdmin, actor } = useAuth()
   const { src, loading } = useFileUrl({ url: org?.logoUrl, path: org?.logoPath })
   const actorUid = actor?.uid || ''
   const actorName = actor?.name || ''
@@ -93,11 +93,11 @@ export default function OrgTheme() {
         }
         paint(derived.accent, derived.canvas)
         const theme = themePatchForLogo(org.theme, palette)
-        if (!theme || !isAdmin || !orgId || !actorUid) return
-        const key = `${orgId}|${org.logoPath || ''}|${org.logoUrl || ''}`
+        if (!theme || !isAdmin || !actorUid) return
+        const key = `${org.logoPath || ''}|${org.logoUrl || ''}`
         if (healed.current === key) return
         healed.current = key
-        updateOrgSettings(orgId, { theme }, { uid: actorUid, name: actorName || 'Unknown' }).catch(
+        updateOrgSettings({ theme }, { uid: actorUid, name: actorName || 'Unknown' }).catch(
           (err) => {
             healed.current = ''
             reportError(err, { source: 'branding.persistLogoTheme' })
@@ -112,7 +112,7 @@ export default function OrgTheme() {
     return () => {
       cancelled = true
     }
-  }, [org, src, loading, isAdmin, orgId, actorUid, actorName])
+  }, [org, src, loading, isAdmin, actorUid, actorName])
 
   return null
 }

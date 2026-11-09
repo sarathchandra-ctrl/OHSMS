@@ -17,7 +17,7 @@ const LIVE_LIMIT = 400
 const RANGE_LIMIT = 5000
 
 export default function AuditLog() {
-  const { orgId, orgName, actor } = useAuth()
+  const { orgName, actor } = useAuth()
   const [logs, setLogs] = useState(null)
   const [search, setSearch] = useState('')
   const [from, setFrom] = useState('')
@@ -28,16 +28,15 @@ export default function AuditLog() {
   const capped = ranged && (logs?.length ?? 0) >= RANGE_LIMIT
 
   useEffect(() => {
-    if (!orgId) return undefined
     // With no range this stays live, which is what the page is for day to day.
     // With one it becomes a one-shot read: collecting evidence is a question
     // asked once, and a subscription over a wide range would stream the whole
     // period into memory and keep it there.
-    if (!ranged) return subscribeAuditLogs(orgId, setLogs, LIVE_LIMIT)
+    if (!ranged) return subscribeAuditLogs(setLogs, LIVE_LIMIT)
 
     let alive = true
     setLogs(null)
-    fetchAuditLogs(orgId, { from, to, max: RANGE_LIMIT })
+    fetchAuditLogs({ from, to, max: RANGE_LIMIT })
       .then((rows) => alive && setLogs(rows))
       .catch((e) => {
         if (!alive) return
@@ -49,7 +48,7 @@ export default function AuditLog() {
         setLogs([])
       })
     return () => { alive = false }
-  }, [orgId, ranged, from, to])
+  }, [ranged, from, to])
 
   /**
    * Hand the trail over as a file.
@@ -80,7 +79,7 @@ export default function AuditLog() {
       // export where an unrecorded copy matters most — it is the evidence
       // itself leaving the system, and the next entry after this one is the
       // proof of who took it.
-      logAudit(orgId, actor, AUDIT.EXPORT, {
+      logAudit(actor, AUDIT.EXPORT, {
         module: 'core',
         targetLabel: `${rows.length} audit entries`,
         summary: `Exported the audit log (${from || 'earliest'} to ${to || 'latest'})${capped ? ', truncated at the query limit' : ''}`,

@@ -59,12 +59,12 @@ export const RESTRICTED_KEY = '_restricted'
  * actually present — so `updateDoc(ref, { medication })` seals the one field it
  * carries and says nothing about the rest.
  */
-export async function sealDoc(orgId, collection, data) {
+export async function sealDoc(collection, data) {
   const keyClass = keyClassFor(collection)
-  if (!keyClass || !orgId || data == null) return data
+  if (!keyClass || data == null) return data
   if (!sealingEnabled) return data
 
-  const sealer = await sealerFor(orgId, keyClass)
+  const sealer = await sealerFor(keyClass)
   if (!sealer) return data
   return mapSealed(collection, data, (fieldPath, value) => sealer.seal(fieldPath, value))
 }
@@ -76,19 +76,19 @@ export async function sealDoc(orgId, collection, data) {
  * where an exception is an uncaught rejection that takes out the listener and
  * leaves the screen frozen on stale data with nothing in the UI to say so.
  */
-export async function openDoc(orgId, collection, data) {
-  if (!policyFor(collection) || !orgId || data == null) return data
+export async function openDoc(collection, data) {
+  if (!policyFor(collection) || data == null) return data
 
   // Not awaited: resolverFor is synchronous and fetches keys only if a value
   // turns out to be sealed. A document with nothing encrypted on it must not
   // cost a callable round trip.
-  const resolve = resolverFor(orgId)
+  const resolve = resolverFor()
   const cache = contentKeyCache()
   const restricted = []
 
   const out = await mapSealed(collection, data, async (fieldPath, value) => {
     try {
-      return await openValue(resolve, orgId, fieldPath, value, cache)
+      return await openValue(resolve, fieldPath, value, cache)
     } catch (e) {
       if (e instanceof SealedValueError && e.reason === 'restricted') {
         // The designed outcome for a reader without the key. Recorded, not
@@ -115,14 +115,14 @@ export async function openDoc(orgId, collection, data) {
 }
 
 /** The same, for a list, sharing one content-key cache across the batch. */
-export async function openDocs(orgId, collection, list) {
-  if (!Array.isArray(list) || !policyFor(collection) || !orgId) return list
+export async function openDocs(collection, list) {
+  if ((!Array.isArray(list) || !policyFor(collection))) return list
   // No pre-warm. Fetching the keyring up front here would undo the laziness in
   // resolverFor and put a callable round trip in front of every list, sealed or
   // not — which is the regression this shape exists to prevent. The first
   // sealed value in the batch fetches; loadKeys caches the PROMISE, so the rest
   // await that one call rather than racing it.
-  return Promise.all(list.map((d) => openDoc(orgId, collection, d)))
+  return Promise.all(list.map((d) => openDoc(collection, d)))
 }
 
 /**
@@ -143,12 +143,12 @@ export async function openDocs(orgId, collection, list) {
  * Usage: `onSnapshot(q, openSnapshots(orgId, 'injuries', (rows) => cb(rows), map))`
  * where `map` turns the QuerySnapshot into plain rows.
  */
-export function openSnapshots(orgId, collection, cb) {
+export function openSnapshots(collection, cb) {
   let latest = 0
   return (rows) => {
     const mine = latest + 1
     latest = mine
-    openDocs(orgId, collection, rows).then((opened) => {
+    openDocs(collection, rows).then((opened) => {
       if (mine === latest) cb(opened)
     })
   }
@@ -174,11 +174,11 @@ export const isRestricted = (doc, field) => {
  * so, which means a reader refused the key learns it from a 300-byte document
  * instead of after downloading eight megabytes it cannot open.
  */
-export async function sealFileBytes(orgId, collection, bytes) {
+export async function sealFileBytes(collection, bytes) {
   const policy = policyFor(collection)
-  if (!policy?.files || !orgId || !sealingEnabled) return { bytes, meta: null }
+  if (!policy?.files || !sealingEnabled) return { bytes, meta: null }
 
-  const sealer = await sealerFor(orgId, policy.keyClass)
+  const sealer = await sealerFor(policy.keyClass)
   if (!sealer) return { bytes, meta: null }
 
   const sealed = await sealer.sealFile(fileLabel(policy.keyClass), bytes)
@@ -211,18 +211,17 @@ export const isSealedFile = (pointer) => Boolean(pointer?.encIv && pointer?.encK
  * screen, but a file the viewer asked to open cannot silently show nothing —
  * they clicked it, and they need to be told they are not allowed to see it.
  */
-export async function openFileBytes(orgId, collection, pointer, bytes) {
-  if (!isSealedFile(pointer) || !orgId) return bytes
+export async function openFileBytes(collection, pointer, bytes) {
+  if ((!isSealedFile(pointer))) return bytes
 
   const policy = policyFor(collection)
   if (!policy) return bytes
 
   const scheme = pointer.encScheme || SCHEME
-  const resolve = resolverFor(orgId)
+  const resolve = resolverFor()
   const key = await resolve(pointer.encKeyId, scheme)
   return openBytes(
     key,
-    orgId,
     fileLabel(policy.keyClass),
     { scheme, iv: pointer.encIv, wrapped: pointer.encWrapped },
     bytes,

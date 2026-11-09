@@ -28,7 +28,7 @@ function Stat({ icon: Icon, label, value, color }) {
 
 export default function AEDDashboard() {
   const { aeds, pendingReports, incomplete, loading } = useFleet()
-  const { orgId, profile, isManager } = useAuth()
+  const { profile, isManager } = useAuth()
   const [busyId, setBusyId] = useState(null)
   const today = useMemo(() => new Date(), [])
   const s = useMemo(() => aedSummary(aeds, today), [aeds, today])
@@ -37,7 +37,7 @@ export default function AEDDashboard() {
   const decideDefect = async (report, approve) => {
     setBusyId(report.id)
     try {
-      await decideAssetReport(orgId, report, approve, profile?.name, { uid: profile?.uid, name: profile?.name })
+      await decideAssetReport(report, approve, profile?.name, { uid: profile?.uid, name: profile?.name })
       toast.success(approve ? 'Defect confirmed — AED marked out of service' : 'Defect report dismissed')
     } catch (e) {
       toastCaught(e, 'Could not update the report')

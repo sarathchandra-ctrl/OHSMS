@@ -5,27 +5,25 @@ import {
   resolveDataDriver,
 } from './resolveDriver'
 
-const registered = { firestore: { name: 'firestore' }, memory: { name: 'memory' } }
+const registered = { postgres: { name: 'postgres' }, memory: { name: 'memory' } }
 
 describe('resolveDataDriver', () => {
-  it('keeps the default build on firestore', () => {
-    expect(resolveDataDriver(undefined, registered)).toBe('firestore')
-    expect(resolveDataDriver('', registered)).toBe('firestore')
-    expect(resolveDataDriver('  FIRESTORE  ', registered)).toBe('firestore')
+  it('defaults to postgres', () => {
+    expect(resolveDataDriver(undefined, registered)).toBe('postgres')
+    expect(resolveDataDriver('', registered)).toBe('postgres')
+    expect(resolveDataDriver('  POSTGRES  ', registered)).toBe('postgres')
   })
 
   it('selects the memory driver when asked', () => {
     expect(resolveDataDriver('memory', registered)).toBe('memory')
   })
 
-  it('treats an unknown name as a typo and stays on firestore', () => {
-    // A misspelling must not take down the Firebase deployment, which is
-    // still the product. A published path 3 name is not a misspelling.
-    expect(resolveDataDriver('mysql', registered)).toBe('firestore')
+  it('treats an unknown name as a typo and stays on postgres', () => {
+    expect(resolveDataDriver('mysql', registered)).toBe('postgres')
   })
 
   it.each(RESERVED_DATA_DRIVERS)(
-    'refuses %s instead of opening Firestore under that name',
+    'refuses %s instead of opening another database under that name',
     (name) => {
       expect(RESERVED_DATA_DRIVERS).toEqual(['supabase'])
       let caught
@@ -36,8 +34,7 @@ describe('resolveDataDriver', () => {
       }
       expect(caught).toBeInstanceOf(UnimplementedDataDriverError)
       expect(caught.driver).toBe(name)
-      expect(caught.message).toContain('docs/CUSTOM-STACK.md')
-      expect(caught.message).toContain('will not fall back to Firestore')
+      expect(caught.message).toContain('will not fall back to another database')
     }
   )
 
@@ -46,9 +43,8 @@ describe('resolveDataDriver', () => {
   })
 
   it('selects postgres once that adapter is registered', () => {
-    const withPostgres = { ...registered, postgres: { name: 'postgres' } }
-    expect(resolveDataDriver('postgres', withPostgres)).toBe('postgres')
-    expect(resolveDataDriver('  POSTGRES ', withPostgres)).toBe('postgres')
+    expect(resolveDataDriver('postgres', registered)).toBe('postgres')
+    expect(resolveDataDriver('  POSTGRES ', registered)).toBe('postgres')
   })
 
   it('prefers a registered adapter when the name is still on the reserved list', () => {

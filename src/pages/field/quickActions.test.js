@@ -3,7 +3,6 @@ import { assetCard, fieldQuickActions, validateNextDue } from './quickActions'
 import { AED_STATUS, FAS_STATUS, STATUS } from '../../modules/fire/lib/constants'
 
 const ext = {
-  orgId: 'org-1',
   serialNo: 'FE-10',
   type: 'ABC',
   capacity: '6kg',
@@ -14,7 +13,7 @@ const ext = {
 
 describe('fieldQuickActions', () => {
   it('lets a member inspect and raise a defect, and nothing that closes one', () => {
-    const { state, actions } = fieldQuickActions(ext, { role: 'member', orgId: 'org-1' })
+    const { state, actions } = fieldQuickActions(ext, { role: 'member' })
     expect(state).toBe('ready')
     expect(actions.map((a) => a.key)).toEqual(['inspect', 'defect'])
   })
@@ -22,53 +21,51 @@ describe('fieldQuickActions', () => {
   it('offers mark received only while the cylinder is with the vendor', () => {
     const away = { ...ext, status: STATUS.IN_PROCESS_REFILLING }
     expect(
-      fieldQuickActions(away, { role: 'member', orgId: 'org-1' }).actions.map((a) => a.key)
+      fieldQuickActions(away, { role: 'member' }).actions.map((a) => a.key)
     ).toContain('receive')
     expect(
-      fieldQuickActions(ext, { role: 'member', orgId: 'org-1' }).actions.map((a) => a.key)
+      fieldQuickActions(ext, { role: 'member' }).actions.map((a) => a.key)
     ).not.toContain('receive')
   })
 
   it('offers close to a manager when the unit has an open physical defect', () => {
     const open = { ...ext, physicalDefects: ['pin'] }
     expect(
-      fieldQuickActions(open, { role: 'manager', orgId: 'org-1' }).actions.map((a) => a.key)
+      fieldQuickActions(open, { role: 'manager' }).actions.map((a) => a.key)
     ).toContain('close')
     expect(
-      fieldQuickActions(open, { role: 'member', orgId: 'org-1' }).actions.map((a) => a.key)
+      fieldQuickActions(open, { role: 'member' }).actions.map((a) => a.key)
     ).not.toContain('close')
   })
 
   it('offers close on an AED or panel that is out of service, to a manager only', () => {
     const aed = {
-      orgId: 'org-1',
       assetKind: 'aed',
       status: AED_STATUS.OUT_OF_SERVICE,
       assetRefId: 'a1',
     }
     expect(
-      fieldQuickActions(aed, { role: 'manager', orgId: 'org-1' }).actions.map((a) => a.key)
+      fieldQuickActions(aed, { role: 'manager' }).actions.map((a) => a.key)
     ).toContain('close')
-    const fas = { orgId: 'org-1', assetKind: 'fas', status: FAS_STATUS.FAULTY, assetRefId: 'f1' }
+    const fas = { assetKind: 'fas', status: FAS_STATUS.FAULTY, assetRefId: 'f1' }
     expect(
-      fieldQuickActions(fas, { role: 'admin', orgId: 'org-1' }).actions.map((a) => a.key)
+      fieldQuickActions(fas, { role: 'admin' }).actions.map((a) => a.key)
     ).toContain('close')
     const ready = { ...aed, status: AED_STATUS.READY }
     expect(
-      fieldQuickActions(ready, { role: 'manager', orgId: 'org-1' }).actions.map((a) => a.key)
+      fieldQuickActions(ready, { role: 'manager' }).actions.map((a) => a.key)
     ).not.toContain('close')
   })
 
   it('shows an auditor the unit and no buttons', () => {
-    expect(fieldQuickActions(ext, { role: 'auditor', orgId: 'org-1' }).actions).toEqual([])
+    expect(fieldQuickActions(ext, { role: 'auditor' }).actions).toEqual([])
   })
 
   it('refuses a code that belongs to another organisation', () => {
     const result = fieldQuickActions(
-      { ...ext, orgId: 'org-2', orgName: 'Other' },
+      { ...ext, orgName: 'Other' },
       {
         role: 'admin',
-        orgId: 'org-1',
       }
     )
     expect(result.state).toBe('foreign')
@@ -78,12 +75,12 @@ describe('fieldQuickActions', () => {
   it('refuses a mirror that never recorded an organisation', () => {
     const unstamped = { ...ext }
     delete unstamped.orgId
-    expect(fieldQuickActions(unstamped, { role: 'admin', orgId: 'org-1' }).state).toBe('unscoped')
+    expect(fieldQuickActions(unstamped, { role: 'admin' }).state).toBe('unscoped')
   })
 
   it('does not offer actions on a retired unit', () => {
     expect(
-      fieldQuickActions({ ...ext, deletedAt: '2026-10-01' }, { role: 'admin', orgId: 'org-1' })
+      fieldQuickActions({ ...ext, deletedAt: '2026-10-01' }, { role: 'admin' })
         .state
     ).toBe('retired')
   })

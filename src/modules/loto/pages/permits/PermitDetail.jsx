@@ -41,9 +41,8 @@ export default function PermitDetail() {
   const now = useNow()
   const [users, setUsers] = useState([])
   useEffect(() => {
-    if (!profile?.orgId) return undefined
-    return subscribeOrgUsers(profile.orgId, setUsers)
-  }, [profile?.orgId])
+    return subscribeOrgUsers(setUsers)
+  }, [])
 
   if (loading) {
     return (
@@ -176,7 +175,7 @@ export default function PermitDetail() {
       )}
 
       <PermitActions
-        orgId={profile.orgId}
+       
         permit={permit}
         user={profile}
         isAdmin={scopedAdmin}

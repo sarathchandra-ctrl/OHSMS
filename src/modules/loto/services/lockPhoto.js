@@ -5,12 +5,11 @@ import { doc, serverTimestamp, setDoc } from '../../../shared/data/client.js'
 import { db } from '../../../shared/db'
 import { putFile } from '../../../shared/storage'
 
-export async function storeLockPhoto({ orgId, permit, dataUrl }) {
+export async function storeLockPhoto({ permit, dataUrl }) {
   const permitNo = permit.permitNo || permit.id
-  const up = await putFile(orgId, 'loto-photos', dataUrl, `${permitNo}.jpg`)
+  const up = await putFile('loto-photos', dataUrl, `${permitNo}.jpg`)
   if (!up?.path) throw new Error('Could not store the lock photo.')
   await setDoc(doc(db, 'procedurePhotos', `permitlock_${permitNo}`), {
-    orgId,
     kind: 'permit-lock',
     permitNo,
     photos: { lock: { path: up.path, url: up.url || '' } },

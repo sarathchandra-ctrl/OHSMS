@@ -15,8 +15,8 @@ import { COLLECTION_READ_CAP } from '../../../shared/org/orgData'
 
 const COL = 'locks'
 
-export function subscribeLocks(orgId, cb, onError) {
-  const q = query(collection(db, COL), where('orgId', '==', orgId), limit(COLLECTION_READ_CAP))
+export function subscribeLocks(cb, onError) {
+  const q = query(collection(db, COL), limit(COLLECTION_READ_CAP))
   return onSnapshot(
     q,
     (snap) => {
@@ -28,9 +28,8 @@ export function subscribeLocks(orgId, cb, onError) {
   )
 }
 
-export async function addLock({ orgId, lockNo, type, tagNo, color }, user) {
+export async function addLock({ lockNo, type, tagNo, color }, user) {
   return addDoc(collection(db, COL), {
-    orgId,
     lockNo: (lockNo || '').trim(),
     tagNo: (tagNo || '').trim(),
     color: color || 'red',

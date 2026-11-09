@@ -14,16 +14,15 @@ import { readableOnTint } from '../../shared/lib/contrast'
 const fmtDue = (due) => (due ? due : '—')
 
 export default function ActionTracker() {
-  const { orgId, isApproved } = useAuth()
+  const { isApproved } = useAuth()
   const [rows, setRows] = useState(null)
   const [incomplete, setIncomplete] = useState(null)
   const [busyKey, setBusyKey] = useState(null)
   const [f, setF] = useState({ source: 'all', status: 'all', q: '', overdue: false, repeating: false })
 
   useEffect(() => {
-    if (!orgId) return undefined
-    return subscribeActions(orgId, ({ rows, incomplete }) => { setRows(rows); setIncomplete(incomplete) })
-  }, [orgId])
+    return subscribeActions(({ rows, incomplete }) => { setRows(rows); setIncomplete(incomplete) })
+  }, [])
 
   const today = todayISO()
 
@@ -65,7 +64,7 @@ export default function ActionTracker() {
   const changeStatus = async (row, norm) => {
     setBusyKey(row.key)
     try {
-      await updateActionStatus(orgId, row, norm)
+      await updateActionStatus(row, norm)
       toast.success(`Updated in ${row.sourceLabel} → ${NORM_BY_KEY[norm]?.label}`)
     } catch (e) {
       toastCaught(e, 'Could not update the action')

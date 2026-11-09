@@ -221,8 +221,8 @@ export function fromB64u(text) {
  * Versioned along with the format so a future scheme can bind differently
  * without silently accepting values sealed under the old rules.
  */
-export function aad(orgId, fieldPath) {
-  return utf8.encode(`ohsms:${VERSION}:${String(orgId ?? '')}:${String(fieldPath ?? '')}`)
+export function aad(fieldPath) {
+  return utf8.encode(`ohsms:${VERSION}:org:${String(fieldPath ?? '')}`)
 }
 
 /**
@@ -280,7 +280,7 @@ export class SealedValueError extends Error {
  *     incident would need five decryptions to read. Nothing would look wrong
  *     until the document outgrew Firestore's 1MB limit.
  */
-export async function sealValue(key, keyId, orgId, fieldPath, value) {
+export async function sealValue(key, keyId, fieldPath, value) {
   if (value === undefined) return undefined
   if (isEnvelope(value)) return value
   if (!/^[A-Za-z0-9._-]{1,32}$/.test(String(keyId || ''))) {
@@ -291,7 +291,7 @@ export async function sealValue(key, keyId, orgId, fieldPath, value) {
   }
   const iv = crypto.getRandomValues(new Uint8Array(IV_BYTES))
   const ct = await crypto.subtle.encrypt(
-    { name: 'AES-GCM', iv, additionalData: aad(orgId, fieldPath) },
+    { name: 'AES-GCM', iv, additionalData: aad(fieldPath) },
     key,
     utf8.encode(JSON.stringify(value === undefined ? null : value)),
   )
@@ -315,7 +315,7 @@ export async function sealValue(key, keyId, orgId, fieldPath, value) {
  * reads as "this incident had no narrative" rather than "this is still
  * encrypting".
  */
-export async function openValue(resolveKey, orgId, fieldPath, value, cekCache) {
+export async function openValue(resolveKey, fieldPath, value, cekCache) {
   const parsed = parseEnvelope(value)
   if (!parsed) return value
 
@@ -340,7 +340,7 @@ export async function openValue(resolveKey, orgId, fieldPath, value, cekCache) {
   let plain
   try {
     plain = await crypto.subtle.decrypt(
-      { name: 'AES-GCM', iv: parsed.iv, additionalData: aad(orgId, fieldPath) },
+      { name: 'AES-GCM', iv: parsed.iv, additionalData: aad(fieldPath) },
       contentKey,
       parsed.ct,
     )
@@ -460,7 +460,7 @@ async function wrapContentKey(publicKey, cek) {
  * document-level CEK could not have, and losing a colleague's medication to a
  * partial save is not a trade worth any amount of speed.
  */
-export async function hybridSealer(publicKey, keyId, orgId) {
+export async function hybridSealer(publicKey, keyId) {
   if (!/^[A-Za-z0-9._-]{1,32}$/.test(String(keyId || ''))) {
     throw new Error(`Invalid key id: ${keyId}`)
   }
@@ -470,7 +470,7 @@ export async function hybridSealer(publicKey, keyId, orgId) {
   const encrypt = async (label, bytes) => {
     const iv = crypto.getRandomValues(new Uint8Array(IV_BYTES))
     const ct = await crypto.subtle.encrypt(
-      { name: 'AES-GCM', iv, additionalData: aad(orgId, label) },
+      { name: 'AES-GCM', iv, additionalData: aad(label) },
       cek,
       bytes,
     )
@@ -501,10 +501,10 @@ export async function hybridSealer(publicKey, keyId, orgId) {
  * arguments, not the return value, not the discarded CEK — can be turned back
  * into the medication they just typed.
  */
-export async function sealHybridValue(publicKey, keyId, orgId, fieldPath, value) {
+export async function sealHybridValue(publicKey, keyId, fieldPath, value) {
   if (value === undefined) return undefined
   if (isEnvelope(value)) return value
-  return (await hybridSealer(publicKey, keyId, orgId)).seal(fieldPath, value)
+  return (await hybridSealer(publicKey, keyId)).seal(fieldPath, value)
 }
 
 // ── Files ────────────────────────────────────────────────────────────────────
@@ -522,10 +522,10 @@ export async function sealHybridValue(publicKey, keyId, orgId, fieldPath, value)
  * `{ scheme, keyId, iv, bytes }` — persist everything but `bytes` on the
  * pointer document, upload `bytes` to the bucket.
  */
-export async function sealBytes(key, keyId, orgId, label, bytes) {
+export async function sealBytes(key, keyId, label, bytes) {
   const iv = crypto.getRandomValues(new Uint8Array(IV_BYTES))
   const ct = await crypto.subtle.encrypt(
-    { name: 'AES-GCM', iv, additionalData: aad(orgId, label) },
+    { name: 'AES-GCM', iv, additionalData: aad(label) },
     key,
     bytes,
   )
@@ -540,8 +540,8 @@ export async function sealBytes(key, keyId, orgId, label, bytes) {
  * is what firestore.rules and storage.rules both already claim about that file
  * and could not previously enforce against anyone holding the object.
  */
-export async function sealHybridBytes(publicKey, keyId, orgId, label, bytes) {
-  return (await hybridSealer(publicKey, keyId, orgId)).sealFile(label, bytes)
+export async function sealHybridBytes(publicKey, keyId, label, bytes) {
+  return (await hybridSealer(publicKey, keyId)).sealFile(label, bytes)
 }
 
 /**
@@ -550,7 +550,7 @@ export async function sealHybridBytes(publicKey, keyId, orgId, label, bytes) {
  * `meta` is what sealBytes/sealHybridBytes returned, minus the bytes — i.e. the
  * fields the pointer document carries.
  */
-export async function openBytes(key, orgId, label, meta, bytes, cekCache) {
+export async function openBytes(key, label, meta, bytes, cekCache) {
   if (!key) throw new SealedValueError('restricted', label)
   const { scheme = SCHEME, iv, wrapped } = meta || {}
   try {
@@ -559,7 +559,7 @@ export async function openBytes(key, orgId, label, meta, bytes, cekCache) {
       contentKey = await unwrapContentKey(key, fromB64u(wrapped), wrapped, cekCache)
     }
     const plain = await crypto.subtle.decrypt(
-      { name: 'AES-GCM', iv: fromB64u(iv), additionalData: aad(orgId, label) },
+      { name: 'AES-GCM', iv: fromB64u(iv), additionalData: aad(label) },
       contentKey,
       bytes,
     )

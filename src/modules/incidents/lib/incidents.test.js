@@ -56,7 +56,7 @@ vi.mock('../firebase', () => ({ db: {} }))
 
 // Everything else stays real; only the transaction runner is swapped for the
 // fake store above, so the code under test is the code that ships.
-vi.mock('firebase/firestore', async (importOriginal) => ({
+vi.mock('../../../shared/data/client.js', async (importOriginal) => ({
   ...(await importOriginal()),
   runTransaction: (_db, fn) => store.runTransaction(fn),
 }))

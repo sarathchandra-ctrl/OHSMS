@@ -102,7 +102,7 @@ const STATUS_FILTER_OPTIONS = [...SIGNAGE_STATUSES, SIGNAGE_STATUS_NOT_SET]
 const EMPTY_FILTERS = { search: '', regions: [], entities: [], types: [], statuses: [] }
 
 export default function Signages() {
-  const { orgId, orgName, profile } = useAuth()
+  const { orgName, profile } = useAuth()
   const { signages, sites, extinguishers, aeds, fas, firstAid, stretchers, mockDrills, siteInventory, incomplete, loading } = useFleet()
 
   const [view, setView] = useState('matrix') // 'matrix' | 'list'
@@ -194,7 +194,7 @@ export default function Signages() {
     if (!linkPlan?.linked.length) return
     setBusy(true)
     try {
-      const r = await linkSignagesToSites(orgId, orgName || '', linkPlan, { uid: profile?.uid, name: profile?.name })
+      const r = await linkSignagesToSites(orgName || '', linkPlan, { uid: profile?.uid, name: profile?.name })
       toast.success(`${r.linked} linked · ${r.nameChanges} renamed · ${r.entityChanges} entity value(s) corrected`)
       setLinkOpen(false)
     } catch (e) {
@@ -342,10 +342,10 @@ export default function Signages() {
     try {
       const actor = { uid: profile?.uid, name: profile?.name }
       if (editing.id) {
-        await updateSignage(orgId, editing.id, payload, actor, editingPrev)
+        await updateSignage(editing.id, payload, actor, editingPrev)
         toast.success('Signage updated')
       } else {
-        await addSignage(orgId, payload, actor)
+        await addSignage(payload, actor)
         toast.success('Signage added')
       }
       setEditing(null)
@@ -358,7 +358,7 @@ export default function Signages() {
 
   const confirmDelete = async () => {
     try {
-      await deleteSignage(orgId, removing.id, { uid: profile?.uid, name: profile?.name }, `${removing.type} @ ${removing.centerName}`, signagePhotos(removing).map((p) => p?.path).filter(Boolean))
+      await deleteSignage(removing.id, { uid: profile?.uid, name: profile?.name }, `${removing.type} @ ${removing.centerName}`, signagePhotos(removing).map((p) => p?.path).filter(Boolean))
       toast.success('Signage deleted')
     } catch (err) {
       toastCaught(err)
@@ -681,7 +681,7 @@ export default function Signages() {
                           ) : (
                             <StoredImage
                               pointer={ph}
-                              orgId={orgId}
+                             
                               alt={`Signage ${i + 1}`}
                               className="h-full w-full object-cover"
                               fallback={<span className="grid h-full w-full place-items-center text-ink-300"><ImageIcon size={20} /></span>}

@@ -29,7 +29,7 @@ import { safeHref } from '../../../shared/safeUrl'
 
 export default function RefillDue() {
   const { refillDue, loading } = useFleet()
-  const { orgId, orgName, profile } = useAuth()
+  const { orgName, profile } = useAuth()
   const today = useMemo(() => new Date(), [])
   const [reportFor, setReportFor] = useState(null)
   const [quoteFor, setQuoteFor] = useState(null)
@@ -48,7 +48,7 @@ export default function RefillDue() {
   const receive = async (ext) => {
     setBusyId(ext.id)
     try {
-      await markReceivedByVendor(orgId, orgName, ext.id, profile?.name)
+      await markReceivedByVendor(orgName, ext.id, profile?.name)
       toast.success('Marked received by vendor — now In Process')
     } catch (e) {
       toastCaught(e)
@@ -174,7 +174,7 @@ export default function RefillDue() {
         open={!!reportFor}
         onClose={() => setReportFor(null)}
         ext={reportFor}
-        orgId={orgId}
+       
         reporter={{ uid: profile?.uid, name: profile?.name }}
       />
 
@@ -182,7 +182,7 @@ export default function RefillDue() {
         open={!!quoteFor}
         onClose={() => setQuoteFor(null)}
         ext={quoteFor}
-        orgId={orgId}
+       
         orgName={orgName}
         actor={{ uid: profile?.uid, name: profile?.name }}
       />
@@ -191,7 +191,7 @@ export default function RefillDue() {
         open={!!hptFor}
         onClose={() => setHptFor(null)}
         ext={hptFor}
-        orgId={orgId}
+       
         orgName={orgName}
         actor={{ uid: profile?.uid, name: profile?.name }}
       />

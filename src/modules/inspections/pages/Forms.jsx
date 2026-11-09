@@ -14,7 +14,7 @@ import InspectionAssignmentsModal from './Inspections/InspectionAssignmentsModal
 
 export default function Forms() {
   const navigate = useNavigate()
-  const { profile, orgId, isAdmin } = useAuth()
+  const { profile, isAdmin } = useAuth()
   const { templates } = useData()
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('All')
@@ -39,14 +39,14 @@ export default function Forms() {
   }
 
   const handleStatus = async (t, status) => {
-    try { await setTemplateStatus(orgId, t.id, status) }
+    try { await setTemplateStatus(t.id, status) }
     catch (e) { toastCaught(e, 'Could not update status') }
   }
 
   const handleDelete = async (t) => {
     if (!isAdmin) return
     if (!window.confirm(`Permanently delete "${t.title}"?`)) return
-    try { await deleteTemplate(orgId, t.id, t.title, profile); toast.success('Form deleted') }
+    try { await deleteTemplate(t.id, t.title, profile); toast.success('Form deleted') }
     catch (e) { toastCaught(e, 'Delete failed') }
   }
 
@@ -77,7 +77,7 @@ export default function Forms() {
   }
 
   const saveAssignments = async (next) => {
-    await updateTemplateAssignments(orgId, assignTemplate.id, next, profile)
+    await updateTemplateAssignments(assignTemplate.id, next, profile)
     setAssignTemplate((prev) => (prev ? { ...prev, assignments: next } : prev))
     toast.success('Assignments saved')
   }

@@ -15,7 +15,7 @@ const addSignage = vi.fn(async () => 'new-id')
 const updateSignage = vi.fn(async () => {})
 
 vi.mock('../context/AuthContext', () => ({
-  useAuth: () => ({ orgId: 'org-1', orgName: 'Acme', profile: { uid: 'u1', name: 'Ravi' } }),
+  useAuth: () => ({ orgName: 'Acme', profile: { uid: 'u1', name: 'Ravi' } }),
 }))
 vi.mock('../context/FleetContext', () => ({ useFleet: () => fleet.value }))
 vi.mock('../lib/firestore', () => ({

@@ -40,7 +40,7 @@ function reportMeta(r) {
 
 export default function Approvals() {
   const { reports, pendingReports } = useFleet()
-  const { orgId, orgName, profile } = useAuth()
+  const { orgName, profile } = useAuth()
   const [busyId, setBusyId] = useState(null)
   const history = reports.filter((r) => r.approvalStatus !== 'pending').slice(0, 20)
 
@@ -48,9 +48,9 @@ export default function Approvals() {
     setBusyId(r.id)
     try {
       const actor = { uid: profile?.uid, name: profile?.name }
-      if (r.kind === 'asset_defect') await decideAssetReport(orgId, r, approve, profile?.name, actor)
-      else if (approve) await approveReport(orgId, orgName, r, profile?.name, actor)
-      else await rejectReport(orgId, r, profile?.name, actor)
+      if (r.kind === 'asset_defect') await decideAssetReport(r, approve, profile?.name, actor)
+      else if (approve) await approveReport(orgName, r, profile?.name, actor)
+      else await rejectReport(r, profile?.name, actor)
       toast.success(approve ? 'Approved & applied' : 'Rejected')
     } catch (e) {
       toastCaught(e)

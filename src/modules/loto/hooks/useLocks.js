@@ -9,9 +9,7 @@ export function useLocks() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    if (!profile?.orgId) return undefined
     const unsub = subscribeLocks(
-      profile.orgId,
       (items) => {
         setLocks(items)
         setLoading(false)
@@ -19,7 +17,7 @@ export function useLocks() {
       () => setLoading(false),
     )
     return unsub
-  }, [profile?.orgId])
+  }, [])
 
   return { locks, loading }
 }

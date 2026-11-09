@@ -18,7 +18,7 @@ vi.mock('../../../shared/storage', () => ({
 }))
 vi.mock('../../../shared/docId/reserve', () => ({ reserveDocId: vi.fn(async () => 'DOC-1') }))
 vi.mock('../../../shared/org/orgData', () => ({ logAudit: vi.fn(), subscribeSites: vi.fn(), COLLECTION_READ_CAP: 5000 }))
-vi.mock('firebase/firestore', () => ({
+vi.mock('../../../shared/data/client.js', () => ({
   collection: () => ({}),
   doc: () => ({}),
   getDoc: (...a) => getDoc(...a),
@@ -57,12 +57,12 @@ describe('a refused QR defect report', () => {
   // told "it is handled" walks away from a discharged extinguisher.
   it('hedges when it cannot tell, for an anonymous scanner', async () => {
     getDoc.mockRejectedValue(denied)
-    await expect(createReport('orgA', report)).rejects.toThrow(/looks like it has already been reported/)
+    await expect(createReport(report)).rejects.toThrow(/looks like it has already been reported/)
   })
 
   it('is certain when it can see the lock is there', async () => {
     getDoc.mockResolvedValue({ exists: () => true })
-    await expect(createReport('orgA', report)).rejects.toThrow(/already been reported/)
+    await expect(createReport(report)).rejects.toThrow(/already been reported/)
   })
 
   // The one that was impossible before: we KNOW there is no duplicate, so
@@ -70,19 +70,19 @@ describe('a refused QR defect report', () => {
   // not recorded.
   it('says it was refused when it can see there is no duplicate', async () => {
     getDoc.mockResolvedValue({ exists: () => false })
-    await expect(createReport('orgA', report)).rejects.toThrow(/NOT been logged/)
+    await expect(createReport(report)).rejects.toThrow(/NOT been logged/)
   })
 
   it('never claims a duplicate when it knows there is none', async () => {
     getDoc.mockResolvedValue({ exists: () => false })
-    await expect(createReport('orgA', report)).rejects.not.toThrow(/already been reported/)
+    await expect(createReport(report)).rejects.not.toThrow(/already been reported/)
   })
 
   // Whatever the wording, an operator has to find out. The whole cost of the
   // original bug was that this failure reached nobody.
   it('reports the underlying error every time, with enough to debug it', async () => {
     getDoc.mockRejectedValue(denied)
-    await createReport('orgA', report).catch(() => {})
+    await createReport(report).catch(() => {})
     expect(reportError).toHaveBeenCalledTimes(1)
     const [err, ctx] = reportError.mock.calls[0]
     expect(err.code).toBe('permission-denied')
@@ -93,7 +93,7 @@ describe('a refused QR defect report', () => {
   // up as a duplicate.
   it('lets a non-permission error through untouched', async () => {
     commit.mockRejectedValue(Object.assign(new Error('offline'), { code: 'unavailable' }))
-    await expect(createReport('orgA', report)).rejects.toThrow('offline')
+    await expect(createReport(report)).rejects.toThrow('offline')
     expect(reportError).not.toHaveBeenCalled()
   })
 })

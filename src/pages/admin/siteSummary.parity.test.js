@@ -17,7 +17,7 @@ import { describe, it, expect, vi } from 'vitest'
 // extract / toNorm / isOverdue are used here.
 vi.mock('../../shared/firebase', () => ({ db: {} }))
 vi.mock('../../shared/crypto', () => ({ openSnapshots: () => () => {} }))
-vi.mock('firebase/firestore', () => ({ doc: () => ({}), getDoc: vi.fn(), updateDoc: vi.fn() }))
+vi.mock('../../shared/data/client.js', () => ({ doc: () => ({}), getDoc: vi.fn(), updateDoc: vi.fn() }))
 vi.mock('../../shared/org/orgData', () => ({
   subscribeOrgCollection: () => () => {},
   incompleteReadNotice: () => null,

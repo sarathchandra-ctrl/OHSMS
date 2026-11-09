@@ -62,7 +62,7 @@ function RecordDetail({ record, onClose }) {
 
 export default function Records() {
   const location = useLocation()
-  const { profile, orgId, isAdmin } = useAuth()
+  const { profile, isAdmin } = useAuth()
   const { filteredRecords } = useData()
   const [search, setSearch] = useState('')
   const [active, setActive] = useState(null)
@@ -90,7 +90,7 @@ export default function Records() {
   const handleDelete = async (r) => {
     if (!isAdmin) return
     if (!window.confirm('Permanently delete this inspection record?')) return
-    try { await deleteRecord(orgId, r.id, r.templateTitle, profile); toast.success('Record deleted') }
+    try { await deleteRecord(r.id, r.templateTitle, profile); toast.success('Record deleted') }
     catch (e) { toastCaught(e, 'Delete failed') }
   }
 

@@ -16,8 +16,8 @@ import { todayISO, addDaysISO } from '../../../shared/lib/dates'
 import { ERP_ROLE_KEYS } from '../../../shared/org/erpRoles'
 import { reserveDocId } from '../../../shared/docId/reserve'
 
-const col = (orgId) => collection(db, 'organizations', orgId, 'erpContacts')
-const ref = (orgId, id) => doc(db, 'organizations', orgId, 'erpContacts', id)
+const col = () => collection(db, 'erpContacts')
+const ref = (id) => doc(db, 'erpContacts', id)
 
 // Note: the Safety & Security helpline is org-wide (Org Settings → General),
 // not a per-site contact — it prints on every site's SOS poster.
@@ -29,8 +29,8 @@ export const EXTERNAL_ROLES = [
 // the labels it sees, in Org Settings → General. See shared/org/erpRoles.
 export const INTERNAL_ROLES = ERP_ROLE_KEYS
 
-export function subscribeContacts(orgId, cb) {
-  const q = query(col(orgId), orderBy('role'), limit(COLLECTION_READ_CAP))
+export function subscribeContacts(cb) {
+  const q = query(col(), orderBy('role'), limit(COLLECTION_READ_CAP))
   return onSnapshot(q, (s) => cb(s.docs.map((d) => ({ id: d.id, ...d.data() }))), () => cb([]))
 }
 
@@ -65,26 +65,26 @@ function distanceOrNull(v) {
   return Number.isFinite(n) ? Math.round(n * 10) / 10 : null
 }
 
-export async function addContact(orgId, data, actor) {
-  const r = await addDoc(col(orgId), { ...clean(data), createdAt: serverTimestamp(), createdBy: actor?.uid || null })
-  await logAudit(orgId, actor, 'erp.contact_create', {
+export async function addContact(data, actor) {
+  const r = await addDoc(col(), { ...clean(data), createdAt: serverTimestamp(), createdBy: actor?.uid || null })
+  await logAudit(actor, 'erp.contact_create', {
     module: 'emergency', target: 'contact', targetId: r.id, targetLabel: `${data.role} · ${data.name}`,
     summary: `Added ${data.kind} emergency contact "${data.name}" (${data.role})`,
   })
   return r.id
 }
 
-export async function updateContact(orgId, id, data, actor) {
-  await updateDoc(ref(orgId, id), { ...clean(data), updatedAt: serverTimestamp() })
-  await logAudit(orgId, actor, 'erp.contact_update', {
+export async function updateContact(id, data, actor) {
+  await updateDoc(ref(id), { ...clean(data), updatedAt: serverTimestamp() })
+  await logAudit(actor, 'erp.contact_update', {
     module: 'emergency', target: 'contact', targetId: id, targetLabel: `${data.role} · ${data.name}`,
     summary: `Updated emergency contact "${data.name}"`,
   })
 }
 
-export async function deleteContact(orgId, id, actor, label) {
-  await deleteDoc(ref(orgId, id))
-  await logAudit(orgId, actor, 'erp.contact_delete', {
+export async function deleteContact(id, actor, label) {
+  await deleteDoc(ref(id))
+  await logAudit(actor, 'erp.contact_delete', {
     module: 'emergency', target: 'contact', targetId: id, targetLabel: label,
     summary: `Removed emergency contact "${label}"`,
   })
@@ -92,15 +92,15 @@ export async function deleteContact(orgId, id, actor, label) {
 
 // ── Evacuation layouts (one doc per site, keyed by siteId) ───────────────────
 // Kept out of the site registry docs so the app-wide sites listener stays light.
-const layoutRef = (orgId, siteId) => doc(db, 'organizations', orgId, 'erpLayouts', siteId)
-const layoutCol = (orgId) => collection(db, 'organizations', orgId, 'erpLayouts')
+const layoutRef = (siteId) => doc(db, 'erpLayouts', siteId)
+const layoutCol = () => collection(db, 'erpLayouts')
 
-export function subscribeLayouts(orgId, cb) {
+export function subscribeLayouts(cb) {
   // One layout per site, so this is bounded by the site registry rather than
   // by activity — but bounded by something the customer controls is not the
   // same as bounded.
   return onSnapshot(
-    query(layoutCol(orgId), limit(COLLECTION_READ_CAP)),
+    query(layoutCol(), limit(COLLECTION_READ_CAP)),
     (s) => cb(Object.fromEntries(s.docs.map((d) => [d.id, d.data()]))),
     () => cb({})
   )
@@ -119,8 +119,8 @@ export function floorsOf(layout) {
     : []
 }
 
-export async function saveFloors(orgId, site, floors, actor, summary) {
-  await setDoc(layoutRef(orgId, site.id), {
+export async function saveFloors(site, floors, actor, summary) {
+  await setDoc(layoutRef(site.id), {
     siteId: site.id,
     siteName: site.name,
     floors,
@@ -128,23 +128,23 @@ export async function saveFloors(orgId, site, floors, actor, summary) {
     updatedBy: actor?.uid || null,
     updatedByName: actor?.name || '',
   })
-  await logAudit(orgId, actor, 'erp.layout_save', {
+  await logAudit(actor, 'erp.layout_save', {
     module: 'emergency', target: 'layout', targetId: site.id, targetLabel: site.name,
     summary: summary || `Updated FERP floor plans for ${site.name} (${floors.length} floor(s))`,
   })
 }
 
-export async function deleteLayout(orgId, site, actor) {
-  await deleteDoc(layoutRef(orgId, site.id))
-  await logAudit(orgId, actor, 'erp.layout_delete', {
+export async function deleteLayout(site, actor) {
+  await deleteDoc(layoutRef(site.id))
+  await logAudit(actor, 'erp.layout_delete', {
     module: 'emergency', target: 'layout', targetId: site.id, targetLabel: site.name,
     summary: `Removed all FERP floor plans for ${site.name}`,
   })
 }
 
 // ── Emergency rescue plans (per site, per scenario) ─────────────────────────
-const planCol = (orgId) => collection(db, 'organizations', orgId, 'erpRescuePlans')
-const planRef = (orgId, id) => doc(db, 'organizations', orgId, 'erpRescuePlans', id)
+const planCol = () => collection(db, 'erpRescuePlans')
+const planRef = (id) => doc(db, 'erpRescuePlans', id)
 
 /** Scenarios a site plans a rescue response for. */
 export const RESCUE_SCENARIOS = [
@@ -178,8 +178,8 @@ export const PLAN_STATUS = [
   { key: 'review_due', label: 'Review due', tone: 'amber' },
 ]
 
-export function subscribeRescuePlans(orgId, cb) {
-  const q = query(planCol(orgId), orderBy('scenario'), limit(COLLECTION_READ_CAP))
+export function subscribeRescuePlans(cb) {
+  const q = query(planCol(), orderBy('scenario'), limit(COLLECTION_READ_CAP))
   return onSnapshot(q, (s) => cb(s.docs.map((d) => ({ id: d.id, ...d.data() }))), () => cb([]))
 }
 
@@ -232,25 +232,25 @@ const cleanPlan = (data) => ({
   nextReviewOn: data.nextReviewOn || '',
 })
 
-export async function addRescuePlan(orgId, data, actor) {
-  const r = await addDoc(planCol(orgId), {
-    ...cleanPlan(data), docId: await reserveDocId(orgId, 'emergency'), createdAt: serverTimestamp(), createdBy: actor?.uid || null, createdByName: actor?.name || '',
+export async function addRescuePlan(data, actor) {
+  const r = await addDoc(planCol(), {
+    ...cleanPlan(data), docId: await reserveDocId('emergency'), createdAt: serverTimestamp(), createdBy: actor?.uid || null, createdByName: actor?.name || '',
   })
-  await logAudit(orgId, actor, 'erp.plan_create', {
+  await logAudit(actor, 'erp.plan_create', {
     module: 'emergency', target: 'rescuePlan', targetId: r.id, targetLabel: `${data.siteName} · ${data.scenario}`,
     summary: `Created rescue plan "${data.title}" (${data.scenario}) for ${data.siteName}`,
   })
   return r.id
 }
 
-export async function updateRescuePlan(orgId, id, data, actor) {
+export async function updateRescuePlan(id, data, actor) {
   // Editing a baseline bumps its revision, which is what tells every site that
   // recalled it that their copy is now behind.
   const bumped = data.kind === 'baseline'
     ? { ...data, revision: (Number(data.revision) || 0) + 1 }
     : data
-  await updateDoc(planRef(orgId, id), { ...cleanPlan(bumped), updatedAt: serverTimestamp() })
-  await logAudit(orgId, actor, 'erp.plan_update', {
+  await updateDoc(planRef(id), { ...cleanPlan(bumped), updatedAt: serverTimestamp() })
+  await logAudit(actor, 'erp.plan_update', {
     module: 'emergency', target: 'rescuePlan', targetId: id, targetLabel: `${data.siteName} · ${data.scenario}`,
     summary: `Updated rescue plan "${data.title}" for ${data.siteName}`,
   })
@@ -262,7 +262,7 @@ export async function updateRescuePlan(orgId, id, data, actor) {
  * local to the site and flag it as customized. Skips scenarios the site already
  * covers. Returns { copied, skipped }.
  */
-export async function recallBaselines(orgId, site, baselines, existingSitePlans, actor, contacts = []) {
+export async function recallBaselines(site, baselines, existingSitePlans, actor, contacts = []) {
   const covered = new Set(existingSitePlans.filter((p) => p.siteId === site.id).map((p) => p.scenario))
   const targets = baselines.filter((b) => !covered.has(b.scenario))
 
@@ -279,7 +279,7 @@ export async function recallBaselines(orgId, site, baselines, existingSitePlans,
   if (targets.length) {
     const batch = writeBatch(db)
     for (const b of targets) {
-      batch.set(doc(planCol(orgId)), {
+      batch.set(doc(planCol()), {
         ...cleanPlan({
           ...b,
           kind: 'site',
@@ -302,7 +302,7 @@ export async function recallBaselines(orgId, site, baselines, existingSitePlans,
       })
     }
     await batch.commit()
-    await logAudit(orgId, actor, 'erp.plan_recall', {
+    await logAudit(actor, 'erp.plan_recall', {
       module: 'emergency', target: 'rescuePlan', targetId: site.id, targetLabel: site.name,
       summary: `Recalled ${targets.length} baseline rescue plan(s) to ${site.name}`,
     })
@@ -359,7 +359,7 @@ export function planLibraryDiff(library, existingBaselines, replace = false) {
  * grows. `replace: true` overwrites the existing baseline for each scenario and
  * bumps its revision, which is what tells sites their copies are behind.
  */
-export async function installBaselineLibrary(orgId, library, existingBaselines, actor, { replace = false } = {}) {
+export async function installBaselineLibrary(library, existingBaselines, actor, { replace = false } = {}) {
   const { toAdd, toUpdate, byScenario } = planLibraryDiff(library, existingBaselines, replace)
 
   if (!toAdd.length && !toUpdate.length) return { added: 0, updated: 0 }
@@ -374,14 +374,14 @@ export async function installBaselineLibrary(orgId, library, existingBaselines, 
     for (const op of ops.slice(i, i + 400)) {
       const data = baselinePlanFrom(op.entry)
       if (op.kind === 'add') {
-        batch.set(doc(planCol(orgId)), {
+        batch.set(doc(planCol()), {
           ...data,
           createdAt: serverTimestamp(),
           createdBy: actor?.uid || null,
           createdByName: actor?.name || '',
         })
       } else {
-        batch.update(planRef(orgId, op.existing.id), {
+        batch.update(planRef(op.existing.id), {
           ...data,
           revision: (Number(op.existing.revision) || 0) + 1,
           updatedAt: serverTimestamp(),
@@ -391,7 +391,7 @@ export async function installBaselineLibrary(orgId, library, existingBaselines, 
     await batch.commit()
   }
 
-  await logAudit(orgId, actor, 'erp.baseline_install', {
+  await logAudit(actor, 'erp.baseline_install', {
     module: 'emergency', target: 'rescuePlan', targetLabel: 'Baseline library',
     summary: `Installed standard baseline library: ${toAdd.length} added` +
       `${toUpdate.length ? `, ${toUpdate.length} replaced` : ''}`,
@@ -427,7 +427,7 @@ export function isBehindBaseline(plan, baselines) {
  * baseline's steps are taken but the local title, description, triggers and
  * assembly point are preserved.
  */
-export async function syncFromBaseline(orgId, plan, baseline, actor, { keepLocalEdits = false } = {}) {
+export async function syncFromBaseline(plan, baseline, actor, { keepLocalEdits = false } = {}) {
   const payload = cleanPlan({
     ...plan,
     // Content comes from the baseline…
@@ -450,8 +450,8 @@ export async function syncFromBaseline(orgId, plan, baseline, actor, { keepLocal
     status: 'draft',
     approvedBy: '', approvedByName: '', approvedOn: '',
   })
-  await updateDoc(planRef(orgId, plan.id), { ...payload, updatedAt: serverTimestamp() })
-  await logAudit(orgId, actor, 'erp.plan_sync', {
+  await updateDoc(planRef(plan.id), { ...payload, updatedAt: serverTimestamp() })
+  await logAudit(actor, 'erp.plan_sync', {
     module: 'emergency', target: 'rescuePlan', targetId: plan.id,
     targetLabel: `${plan.siteName} · ${plan.scenario}`,
     summary: `Updated "${plan.title}" at ${plan.siteName} from baseline revision ${baseline.revision || 0}` +
@@ -460,23 +460,23 @@ export async function syncFromBaseline(orgId, plan, baseline, actor, { keepLocal
 }
 
 /** Approve a site plan for operational use (managers only, enforced in the UI). */
-export async function approveRescuePlan(orgId, plan, actor) {
-  await updateDoc(planRef(orgId, plan.id), {
+export async function approveRescuePlan(plan, actor) {
+  await updateDoc(planRef(plan.id), {
     status: 'approved',
     approvedBy: actor?.uid || null,
     approvedByName: actor?.name || '',
     approvedOn: todayISO(),
     updatedAt: serverTimestamp(),
   })
-  await logAudit(orgId, actor, 'erp.plan_approve', {
+  await logAudit(actor, 'erp.plan_approve', {
     module: 'emergency', target: 'rescuePlan', targetId: plan.id, targetLabel: `${plan.siteName} · ${plan.title}`,
     summary: `Approved rescue plan "${plan.title}" (${plan.scenario}) for use at ${plan.siteName}`,
   })
 }
 
-export async function deleteRescuePlan(orgId, id, actor, label) {
-  await deleteDoc(planRef(orgId, id))
-  await logAudit(orgId, actor, 'erp.plan_delete', {
+export async function deleteRescuePlan(id, actor, label) {
+  await deleteDoc(planRef(id))
+  await logAudit(actor, 'erp.plan_delete', {
     module: 'emergency', target: 'rescuePlan', targetId: id, targetLabel: label,
     summary: `Deleted rescue plan "${label}"`,
   })

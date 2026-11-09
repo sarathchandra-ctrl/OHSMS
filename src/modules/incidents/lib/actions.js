@@ -57,21 +57,21 @@ export function summarizeActions(actions = [], today = todayISO()) {
  * Update one embedded action's status, writing the whole parent array back.
  * `action` must carry { source, sourceId, id }.
  */
-export async function setActionStatus(orgId, action, status, actor) {
+export async function setActionStatus(action, status, actor) {
   const closedAt = status === 'closed' ? new Date().toISOString() : null
   const patch = (arr = []) => arr.map((a) => (a.id === action.id ? { ...a, status, closedAt } : a))
   if (action.source === 'incident') {
     const { getIncident } = await import('./incidents')
-    const inc = await getIncident(orgId, action.sourceId)
+    const inc = await getIncident(action.sourceId)
     if (!inc) throw new Error('Incident not found')
-    await updateIncident(orgId, action.sourceId, { capa: patch(inc.capa) }, {
+    await updateIncident(action.sourceId, { capa: patch(inc.capa) }, {
       actor, action: AUDIT.ACTION_UPDATE, summary: `Action "${action.description?.slice(0, 40) || ''}" → ${status}`,
     })
   } else {
     const { getIllness } = await import('./illnesses')
-    const ill = await getIllness(orgId, action.sourceId)
+    const ill = await getIllness(action.sourceId)
     if (!ill) throw new Error('Illness not found')
-    await updateIllness(orgId, action.sourceId, { actions: patch(ill.actions) }, {
+    await updateIllness(action.sourceId, { actions: patch(ill.actions) }, {
       actor, action: AUDIT.ACTION_UPDATE, summary: `Action "${action.description?.slice(0, 40) || ''}" → ${status}`,
     })
   }

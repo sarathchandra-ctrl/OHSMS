@@ -23,7 +23,7 @@ import { AUDIT } from '../../../shared/audit/audit'
 import { isPermissionDenied } from '../../../shared/lib/permissionDenied'
 
 const COLLECTION = 'documentFolders'
-const path = (orgId) => `organizations/${orgId}/${COLLECTION}`
+const path = () => `${COLLECTION}`
 
 // Generous, because this is the whole tree for the org and it is small: a
 // folder is a name and two ids. An org with more than this many folders has a
@@ -32,8 +32,8 @@ const MAX = 2000
 
 const clean = (v) => String(v ?? '').trim()
 
-const audit = (orgId, actor, action, folder, summary) =>
-  logAudit(orgId, actor, action, {
+const audit = (actor, action, folder, summary) =>
+  logAudit(actor, action, {
     module: 'documents',
     target: COLLECTION,
     targetId: folder?.id || null,
@@ -56,10 +56,9 @@ export const documentFolderService = {
    * scoped on read by firestore.rules, so an empty folder is all an
    * out-of-region member can see inside one.
    */
-  subscribe(orgId, cb) {
-    if (!orgId) return () => {}
+  subscribe(cb) {
     return dataProvider.subscribe(
-      path(orgId),
+      path(),
       { orderBy: ['createdAt', 'desc'], limit: MAX },
       cb,
       (err) => {
@@ -87,7 +86,7 @@ export const documentFolderService = {
    * the tree back, and neither is a security boundary: the worst a bad write
    * does is make a folder somebody has to rename.
    */
-  async create(orgId, folder, actor) {
+  async create(folder, actor) {
     const record = {
       name: clean(folder?.name),
       parentId: clean(folder?.parentId),
@@ -96,9 +95,8 @@ export const documentFolderService = {
       createdBy: actor?.uid || null,
       createdByName: actor?.name || 'Unknown',
     }
-    const id = await dataProvider.create(path(orgId), record)
+    const id = await dataProvider.create(path(), record)
     await audit(
-      orgId,
       actor,
       AUDIT.CREATE,
       { id, name: record.name },
@@ -107,14 +105,13 @@ export const documentFolderService = {
     return id
   },
 
-  async rename(orgId, folder, name, actor) {
+  async rename(folder, name, actor) {
     const next = clean(name)
-    await dataProvider.update(path(orgId), folder.id, {
+    await dataProvider.update(path(), folder.id, {
       name: next,
       updatedAt: dataProvider.serverTimestamp(),
     })
     await audit(
-      orgId,
       actor,
       AUDIT.UPDATE,
       { id: folder.id, name: next },
@@ -132,8 +129,8 @@ export const documentFolderService = {
    * and its contents are not, so the destructive version of this operation is
    * one the product does not offer.
    */
-  async remove(orgId, folder, actor) {
-    await dataProvider.remove(path(orgId), folder.id)
-    await audit(orgId, actor, AUDIT.DELETE, folder, `Deleted folder "${clean(folder.name)}"`)
+  async remove(folder, actor) {
+    await dataProvider.remove(path(), folder.id)
+    await audit(actor, AUDIT.DELETE, folder, `Deleted folder "${clean(folder.name)}"`)
   },
 }

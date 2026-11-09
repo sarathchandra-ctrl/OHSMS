@@ -1,11 +1,11 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // Per-organization module entitlements.
 //
-// The registry says which modules the product HAS. This says which of them a
-// given organization may see and use. One document per org, at
-// /moduleEntitlements/{orgId}, written only by the platform operator (see the
-// matching block in firestore.rules) and read by every approved member so the
-// shell knows which tiles to draw and which routes to refuse.
+// The registry says which modules the product HAS. This says which of them
+// this organization uses. One document, /moduleEntitlements/organization,
+// written by an administrator (Settings → Modules; stack/schema.sql allows
+// admins only) and read by every approved member so the shell knows which
+// tiles to draw and which routes to refuse.
 //
 // ABSENT MEANS ENABLED, in two places and for two different reasons:
 //
@@ -21,7 +21,6 @@
 // makes that true everywhere rather than at each call site.
 // ─────────────────────────────────────────────────────────────────────────────
 import {
-  collection,
   deleteDoc,
   doc,
   onSnapshot,
@@ -33,7 +32,9 @@ import { MODULES, ADDONS, OPT_IN_KEYS } from './registry'
 
 export const ENTITLEMENTS_COLLECTION = 'moduleEntitlements'
 
-export const entitlementRef = (orgId) => doc(db, ENTITLEMENTS_COLLECTION, orgId)
+export const ENTITLEMENT_ID = 'organization'
+
+export const entitlementRef = () => doc(db, ENTITLEMENTS_COLLECTION, ENTITLEMENT_ID)
 
 /**
  * Every key this document governs — the modules, then the add-ons.
@@ -108,39 +109,11 @@ export function disabledKeys(map) {
  * withdrawn — must not black out the product; the safe direction here is the
  * one that matches "no document means the full product".
  */
-export function subscribeEntitlement(orgId, cb) {
-  if (!orgId) {
-    cb(normalizeEntitlement(null))
-    return () => {}
-  }
+export function subscribeEntitlement(cb) {
   return onSnapshot(
-    entitlementRef(orgId),
+    entitlementRef(),
     (snap) => cb(normalizeEntitlement(snap.exists() ? snap.data() : null)),
     () => cb(normalizeEntitlement(null))
-  )
-}
-
-/**
- * Live entitlements for EVERY organization — the platform console's view.
- *
- * Emits `{ [orgId]: { map, raw, exists } }`. `exists` is kept because "this org
- * has never been configured" and "this org was configured with everything on"
- * are the same map but not the same fact, and the console says so.
- *
- * Listing this collection is refused to everyone but a platform operator, so
- * this subscription is only ever mounted behind that guard.
- */
-export function subscribeAllEntitlements(cb, onError) {
-  return onSnapshot(
-    collection(db, ENTITLEMENTS_COLLECTION),
-    (snap) => {
-      const out = {}
-      snap.forEach((d) => {
-        out[d.id] = { exists: true, raw: d.data(), map: normalizeEntitlement(d.data()) }
-      })
-      cb(out)
-    },
-    (err) => onError?.(err)
   )
 }
 
@@ -153,9 +126,9 @@ export function subscribeAllEntitlements(cb, onError) {
  * did not exist when the operator last looked" — and that difference is what
  * the console shows an operator who is deciding what to change.
  */
-export async function saveEntitlement(orgId, map, actor) {
+export async function saveEntitlement(map, actor) {
   const modules = Object.fromEntries(ALL_MODULE_KEYS.map((key) => [key, map?.[key] !== false]))
-  await setDoc(entitlementRef(orgId), {
+  await setDoc(entitlementRef(), {
     modules,
     updatedAt: serverTimestamp(),
     updatedBy: actor?.uid || '',
@@ -165,6 +138,6 @@ export async function saveEntitlement(orgId, map, actor) {
 }
 
 /** Drop the document, returning the organization to the default: everything on. */
-export async function resetEntitlement(orgId) {
-  await deleteDoc(entitlementRef(orgId))
+export async function resetEntitlement() {
+  await deleteDoc(entitlementRef())
 }

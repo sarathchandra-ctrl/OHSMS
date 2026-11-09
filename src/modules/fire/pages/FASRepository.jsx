@@ -68,7 +68,7 @@ function DateCell({ value }) {
 }
 
 export default function FASRepository() {
-  const { orgId, orgName, profile, isAdmin, isManager } = useAuth()
+  const { orgName, profile, isAdmin, isManager } = useAuth()
   const { fas, sites, siteInventory, loading, incomplete } = useFleet()
   const navigate = useNavigate()
   const siteMeta = useSiteMeta()
@@ -109,7 +109,7 @@ export default function FASRepository() {
     if (!linkPlan?.linked.length) return
     setBusy(true)
     try {
-      const r = await linkFasToSites(orgId, orgName, linkPlan, { uid: profile?.uid, name: profile?.name })
+      const r = await linkFasToSites(orgName, linkPlan, { uid: profile?.uid, name: profile?.name })
       toast.success(`${r.linked} linked · ${r.nameChanges} renamed · ${r.entityChanges} entity value(s) corrected`)
       setLinkOpen(false)
     } catch (e) {
@@ -122,7 +122,7 @@ export default function FASRepository() {
   // and that number goes on the QR label.
   const openAdd = async () => {
     try {
-      const [deviceId] = await reserveAssetIds(orgId, 'fas', 'FAS', {
+      const [deviceId] = await reserveAssetIds('fas', 'FAS', {
         floor: highestAssetSeq('FAS', fas, 'deviceId'),
       })
       setEditing({ ...EMPTY, deviceId })
@@ -139,12 +139,12 @@ export default function FASRepository() {
     try {
       // The whole block reserved at once, so another operator adding a panel
       // mid-batch cannot land inside it.
-      const ids = await reserveAssetIds(orgId, 'fas', 'FAS', {
+      const ids = await reserveAssetIds('fas', 'FAS', {
         count: missingSites.length,
         floor: highestAssetSeq('FAS', fas, 'deviceId'),
       })
       const rows = missingSites.map((s, i) => ({ deviceId: ids[i], centerName: s, region: siteMeta[s]?.region || '', entity: siteMeta[s]?.entity || '', deviceType: 'Control Panel', status: FAS_STATUS.OPERATIONAL }))
-      const res = await bulkAddFas(orgId, orgName, rows, { uid: profile?.uid, name: profile?.name })
+      const res = await bulkAddFas(orgName, rows, { uid: profile?.uid, name: profile?.name })
       toast.success(`Generated ${res.created} FAS panel(s) with QR codes`)
     } catch (e) { toastCaught(e) } finally { setBusy(false) }
   }
@@ -209,7 +209,7 @@ export default function FASRepository() {
     const items = deletable.map((a) => ({ id: a.id, qrToken: a.qrToken }))
     setBusy(true)
     try {
-      await bulkDeleteFas(orgId, items, { uid: profile?.uid, name: profile?.name })
+      await bulkDeleteFas(items, { uid: profile?.uid, name: profile?.name })
       const skipped = selectedItems.length - deletable.length
       toast.success(
         skipped
@@ -229,10 +229,10 @@ export default function FASRepository() {
       const actor = { uid: profile?.uid, name: profile?.name }
       if (editing.id) {
         const hadQr = Boolean(String(editing.qrToken || '').trim())
-        const token = await updateFas(orgId, orgName, editing.id, editing, actor)
+        const token = await updateFas(orgName, editing.id, editing, actor)
         toast.success(!hadQr && token ? 'FAS device updated — QR code generated' : 'FAS device updated')
       } else {
-        const created = await addFas(orgId, orgName, editing, actor)
+        const created = await addFas(orgName, editing, actor)
         toast.success(created.qrToken ? 'FAS panel added — QR code ready' : 'FAS device added')
         setEditing(null)
         if (created.qrToken) navigate(`/equipment/fas/${created.id}`)
@@ -243,7 +243,7 @@ export default function FASRepository() {
   }
   const confirmDelete = async () => {
     try {
-      await deleteFas(orgId, removing.id, removing.qrToken, { uid: profile?.uid, name: profile?.name }, `${removing.deviceId || removing.deviceType} @ ${removing.centerName}`)
+      await deleteFas(removing.id, removing.qrToken, { uid: profile?.uid, name: profile?.name }, `${removing.deviceId || removing.deviceType} @ ${removing.centerName}`)
       toast.success('Moved to Recently deleted')
     } catch (err) { toastCaught(err) } finally { setRemoving(null) }
   }
@@ -256,7 +256,7 @@ export default function FASRepository() {
     if (!isAdmin) { toast.error('Only an admin can generate QR codes'); return }
     setBusy(true)
     try {
-      const token = await generateFasQr(orgId, orgName, a, { uid: profile?.uid, name: profile?.name })
+      const token = await generateFasQr(orgName, a, { uid: profile?.uid, name: profile?.name })
       setQrFor({ ...a, qrToken: token })
       toast.success('QR code generated')
     } catch (e) { toastCaught(e) } finally { setBusy(false) }
@@ -265,7 +265,7 @@ export default function FASRepository() {
   const confirmService = async () => {
     setBusy(true)
     try {
-      await serviceFas(orgId, orgName, serviceFor, nextDate, { uid: profile?.uid, name: profile?.name })
+      await serviceFas(orgName, serviceFor, nextDate, { uid: profile?.uid, name: profile?.name })
       toast.success('Service logged')
       setServiceFor(null)
     } catch (err) { toastCaught(err) } finally { setBusy(false) }
@@ -284,7 +284,7 @@ export default function FASRepository() {
   const doBackfillQr = async () => {
     setBusy(true)
     try {
-      const r = await backfillFasPanelQr(orgId, orgName, { uid: profile?.uid, name: profile?.name })
+      const r = await backfillFasPanelQr(orgName, { uid: profile?.uid, name: profile?.name })
       toast.success(
         r.assigned
           ? `QR codes generated for ${r.assigned} control panel${r.assigned === 1 ? '' : 's'}`

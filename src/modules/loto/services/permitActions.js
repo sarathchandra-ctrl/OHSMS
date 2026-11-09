@@ -50,16 +50,16 @@ import {
 import { publicBody, publicRef } from './procedures'
 import { assertClaimsFree, readClaims, releaseClaims, takeClaims } from './lockClaims'
 
-const permitRef = (orgId, permitNo) => doc(db, 'organizations', orgId, PERMIT_COLLECTION, permitNo)
-const eventRef = (orgId, permitNo) =>
-  doc(collection(db, 'organizations', orgId, PERMIT_COLLECTION, permitNo, 'events'))
+const permitRef = (permitNo) => doc(db, PERMIT_COLLECTION, permitNo)
+const eventRef = (permitNo) =>
+  doc(collection(db, PERMIT_COLLECTION, permitNo, 'events'))
 const procRefOf = (id) => doc(db, 'procedures', id)
 
 const clean = (v) => (typeof v === 'string' ? v.trim() : '')
 
 /** One timeline entry. Sealed like the permit: it carries a name and a note. */
-function eventBody(orgId, user, type, { note = '', meta = null } = {}) {
-  return sealDoc(orgId, `${PERMIT_COLLECTION}/events`, {
+function eventBody(user, type, { note = '', meta = null } = {}) {
+  return sealDoc(`${PERMIT_COLLECTION}/events`, {
     type,
     by: user.id,
     byName: user.displayName || '',
@@ -72,7 +72,6 @@ function eventBody(orgId, user, type, { note = '', meta = null } = {}) {
 /** The activity-log row (lotoEvents) a lock or unlock has always written. */
 function lotoEvent(procedure, permit, point, action, user, extra = {}) {
   return {
-    orgId: procedure.orgId,
     procedureId: procedure.id,
     equipment: procedure.equipment || '',
     site: procedure.site || '',
@@ -91,8 +90,8 @@ function lotoEvent(procedure, permit, point, action, user, extra = {}) {
   }
 }
 
-async function readHeld(tx, permitId, orgId) {
-  const snap = await tx.get(permitRef(orgId, permitId))
+async function readHeld(tx, permitId) {
+  const snap = await tx.get(permitRef(permitId))
   if (!snap.exists()) throw new Error('The permit no longer exists.')
   const raw = { id: snap.id, ...snap.data() }
   let procedure = null
@@ -114,7 +113,7 @@ const first = (list) => {
  * should not be the requester; when there is no other administrator the
  * approver says so, and that reason is stored with the approval.
  */
-export async function decidePermit({ orgId, permit, user, approve, note = '', selfApprovalReason = '' }) {
+export async function decidePermit({ permit, user, approve, note = '', selfApprovalReason = '' }) {
   const own = permit.requestedBy === user.id
   const namedCrew = (permit.personnelUids || []).includes(user.id) && !own
   if (namedCrew) {
@@ -135,17 +134,17 @@ export async function decidePermit({ orgId, permit, user, approve, note = '', se
     ...(clean(note) ? { note: clean(note) } : {}),
     ...(own && approve ? { selfApproved: true, selfApprovalReason: reason } : {}),
   }
-  const patch = await sealDoc(orgId, PERMIT_COLLECTION, {
+  const patch = await sealDoc(PERMIT_COLLECTION, {
     status,
     approval,
     ...(approve ? {} : { closedAt: serverTimestamp() }),
     updatedAt: serverTimestamp(),
   })
   const batch = writeBatch(db)
-  batch.update(permitRef(orgId, permit.id), patch)
+  batch.update(permitRef(permit.id), patch)
   batch.set(
-    eventRef(orgId, permit.id),
-    await eventBody(orgId, user, approve ? EVENT_TYPES.APPROVED : EVENT_TYPES.REJECTED, {
+    eventRef(permit.id),
+    await eventBody(user, approve ? EVENT_TYPES.APPROVED : EVENT_TYPES.REJECTED, {
       note,
       meta: own && approve ? { selfApproved: true } : null,
     }),
@@ -154,27 +153,27 @@ export async function decidePermit({ orgId, permit, user, approve, note = '', se
 }
 
 /** An Admin asks for another live photo. Start waits until the new one is later. */
-export async function requestNewLockPhoto({ orgId, permit, user, note }) {
+export async function requestNewLockPhoto({ permit, user, note }) {
   const why = clean(note)
   if (!why) throw new Error('Say what is wrong with the photo.')
-  await updateDoc(permitRef(orgId, permit.id), {
+  await updateDoc(permitRef(permit.id), {
     photoRedo: { by: user.id, at: serverTimestamp(), note: why },
     updatedAt: serverTimestamp(),
   })
 }
 
 /** A group member takes off only their own lock. The primary closes the permit instead. */
-export async function releaseOwnLock({ orgId, permit, user }) {
+export async function releaseOwnLock({ permit, user }) {
   const decision = canRemoveOwnLock(permit.groupLock, permit.removedUids || [], user.id)
   if (!decision.ok) throw new Error(decision.reason)
   if (decision.closes) throw new Error('You are the last lock. Return the permit to close it.')
   await runTransaction(db, async (tx) => {
-    const snap = await tx.get(permitRef(orgId, permit.id))
+    const snap = await tx.get(permitRef(permit.id))
     if (!snap.exists()) throw new Error('The permit no longer exists.')
     const raw = snap.data()
     const again = canRemoveOwnLock(raw.groupLock, raw.removedUids || [], user.id)
     if (!again.ok || again.closes) throw new Error(again.reason || 'Return the permit to close it.')
-    tx.update(permitRef(orgId, permit.id), {
+    tx.update(permitRef(permit.id), {
       removedUids: [...(raw.removedUids || []), user.id],
       updatedAt: serverTimestamp(),
     })
@@ -182,8 +181,8 @@ export async function releaseOwnLock({ orgId, permit, user }) {
 }
 
 /** Withdraw before work starts. The requester or an Admin. */
-export async function withdrawPermit({ orgId, permit, user, note = '' }) {
-  const patch = await sealDoc(orgId, PERMIT_COLLECTION, {
+export async function withdrawPermit({ permit, user, note = '' }) {
+  const patch = await sealDoc(PERMIT_COLLECTION, {
     status: PERMIT_STATUS.WITHDRAWN,
     closure: {
       by: user.id,
@@ -195,13 +194,13 @@ export async function withdrawPermit({ orgId, permit, user, note = '' }) {
     updatedAt: serverTimestamp(),
   })
   const batch = writeBatch(db)
-  batch.update(permitRef(orgId, permit.id), patch)
+  batch.update(permitRef(permit.id), patch)
   if (permit.groupLock?.groupNo) {
-    batch.update(doc(db, 'organizations', orgId, 'lotoGroupNumbers', permit.groupLock.groupNo), {
+    batch.update(doc(db, 'lotoGroupNumbers', permit.groupLock.groupNo), {
       openPermitId: '',
     })
   }
-  batch.set(eventRef(orgId, permit.id), await eventBody(orgId, user, EVENT_TYPES.WITHDRAWN, { note }))
+  batch.set(eventRef(permit.id), await eventBody(user, EVENT_TYPES.WITHDRAWN, { note }))
   await batch.commit()
 }
 
@@ -212,21 +211,21 @@ export async function withdrawPermit({ orgId, permit, user, note = '' }) {
  * entry for EVERY isolation point. The camera/manual distinction is kept so an
  * audit can see how many tags were read by hand.
  */
-export async function startIsolation({ orgId, permit, scans, user, tryout, lockPhoto }) {
+export async function startIsolation({ permit, scans, user, tryout, lockPhoto }) {
   await runTransaction(db, async (tx) => {
-    const { raw, procedure } = await readHeld(tx, permit.id, orgId)
+    const { raw, procedure } = await readHeld(tx, permit.id)
     const lockNos = permitLockNos(raw)
     // Claims are read before any write, for the same reason setPointLock does.
-    const held = procedure ? await readClaims(tx, orgId, lockNos) : []
+    const held = procedure ? await readClaims(tx, lockNos) : []
 
     first(startProblems({ permit: raw, procedure, scans, tryout, lockPhoto, nowMs: Date.now() }))
     if (procedure) assertClaimsFree(held, procedure.id)
 
     // Names are sealed on the permit; the procedure's lockState holds plain
     // text (the long-standing shape), so the plan is read through openDoc.
-    const plan = await openDoc(orgId, PERMIT_COLLECTION, raw)
+    const plan = await openDoc(PERMIT_COLLECTION, raw)
 
-    const patch = await sealDoc(orgId, PERMIT_COLLECTION, {
+    const patch = await sealDoc(PERMIT_COLLECTION, {
       status: PERMIT_STATUS.ACTIVE,
       startedAt: serverTimestamp(),
       isolation: {
@@ -248,7 +247,7 @@ export async function startIsolation({ orgId, permit, scans, user, tryout, lockP
       },
       updatedAt: serverTimestamp(),
     })
-    tx.update(permitRef(orgId, raw.id), patch)
+    tx.update(permitRef(raw.id), patch)
 
     if (procedure) {
       const atIso = new Date().toISOString()
@@ -267,7 +266,6 @@ export async function startIsolation({ orgId, permit, scans, user, tryout, lockP
         takeClaims(
           tx,
           {
-            orgId,
             procedureId: procedure.id,
             procedureCode: procedure.procedureCode,
             equipment: procedure.equipment,
@@ -291,8 +289,8 @@ export async function startIsolation({ orgId, permit, scans, user, tryout, lockP
       }
     }
     tx.set(
-      eventRef(orgId, raw.id),
-      await eventBody(orgId, user, EVENT_TYPES.STARTED, { meta: { points: (raw.pointKeys || []).length } }),
+      eventRef(raw.id),
+      await eventBody(user, EVENT_TYPES.STARTED, { meta: { points: (raw.pointKeys || []).length } }),
     )
   })
 }
@@ -300,12 +298,12 @@ export async function startIsolation({ orgId, permit, scans, user, tryout, lockP
 // ── Extend ───────────────────────────────────────────────────────────────────
 
 /** Admin only: move the window end later, with a reason. Never earlier. */
-export async function extendPermit({ orgId, permit, user, newEndMs, reason }) {
+export async function extendPermit({ permit, user, newEndMs, reason }) {
   if (clean(reason).length < MIN_REASON_LENGTH) {
     throw new Error(`Say why more time is needed (at least ${MIN_REASON_LENGTH} characters).`)
   }
   await runTransaction(db, async (tx) => {
-    const snap = await tx.get(permitRef(orgId, permit.id))
+    const snap = await tx.get(permitRef(permit.id))
     if (!snap.exists()) throw new Error('The permit no longer exists.')
     const raw = snap.data()
     if (raw.status !== PERMIT_STATUS.ACTIVE) throw new Error(`This permit is ${raw.status}, not active.`)
@@ -316,7 +314,7 @@ export async function extendPermit({ orgId, permit, user, newEndMs, reason }) {
     }
     // Seal the NEW entry alone and append it to what is stored: the existing
     // entries are already sealed, and sealing them again would double-wrap.
-    const sealed = await sealDoc(orgId, PERMIT_COLLECTION, {
+    const sealed = await sealDoc(PERMIT_COLLECTION, {
       extensions: [
         {
           at: Date.now(),
@@ -328,29 +326,29 @@ export async function extendPermit({ orgId, permit, user, newEndMs, reason }) {
         },
       ],
     })
-    tx.update(permitRef(orgId, permit.id), {
+    tx.update(permitRef(permit.id), {
       windowEnd: Timestamp.fromMillis(newEndMs),
       extensions: [...(raw.extensions || []), ...sealed.extensions],
       updatedAt: serverTimestamp(),
     })
     tx.set(
-      eventRef(orgId, permit.id),
-      await eventBody(orgId, user, EVENT_TYPES.EXTENDED, { note: reason, meta: { from: oldEnd, to: newEndMs } }),
+      eventRef(permit.id),
+      await eventBody(user, EVENT_TYPES.EXTENDED, { note: reason, meta: { from: oldEnd, to: newEndMs } }),
     )
   })
 }
 
 // ── Return / emergency removal: every lock off + permit closed, ONE transaction
 
-async function releaseAndClose({ orgId, permit, user, problems, closing, eventType, note, emergency }) {
+async function releaseAndClose({ permit, user, problems, closing, eventType, note, emergency }) {
   await runTransaction(db, async (tx) => {
-    const { raw, procedure } = await readHeld(tx, permit.id, orgId)
+    const { raw, procedure } = await readHeld(tx, permit.id)
     const groupNo = raw.groupLock?.groupNo
-    const groupRef = groupNo ? doc(db, 'organizations', orgId, 'lotoGroupNumbers', groupNo) : null
+    const groupRef = groupNo ? doc(db, 'lotoGroupNumbers', groupNo) : null
     const groupSnap = groupRef ? await tx.get(groupRef) : null
     first(problems({ raw, procedure }))
 
-    tx.update(permitRef(orgId, raw.id), await closing(raw))
+    tx.update(permitRef(raw.id), await closing(raw))
     if (groupSnap && groupSnap.exists()) tx.update(groupRef, { openPermitId: '' })
 
     if (procedure) {
@@ -382,7 +380,7 @@ async function releaseAndClose({ orgId, permit, user, problems, closing, eventTy
       )
       // Claims for what actually hung on the equipment AND what the plan named:
       // a delete of an absent claim is a no-op, a missed one strands a padlock.
-      releaseClaims(tx, orgId, [...out.released, ...permitLockNos(raw)])
+      releaseClaims(tx, [...out.released, ...permitLockNos(raw)])
       const idOf = new Map((raw.isolationPoints || []).map((p) => [p.key, p.pointId]))
       for (const point of out.points) {
         const was = (procedure.isolationPoints || []).find((p) => p.key === point.key)
@@ -401,7 +399,7 @@ async function releaseAndClose({ orgId, permit, user, problems, closing, eventTy
         }
       }
     }
-    tx.set(eventRef(orgId, raw.id), await eventBody(orgId, user, eventType, { note, meta: emergency ? { emergency: true } : null }))
+    tx.set(eventRef(raw.id), await eventBody(user, eventType, { note, meta: emergency ? { emergency: true } : null }))
   })
 }
 
@@ -410,9 +408,8 @@ async function releaseAndClose({ orgId, permit, user, problems, closing, eventTy
  * confirmed removed (`confirmed` lists the point keys), then every lock off and
  * the permit returned in one commit.
  */
-export async function returnPermit({ orgId, permit, user, ticked, confirmed, note = '' }) {
+export async function returnPermit({ permit, user, ticked, confirmed, note = '' }) {
   await releaseAndClose({
-    orgId,
     permit,
     user,
     note,
@@ -420,7 +417,7 @@ export async function returnPermit({ orgId, permit, user, ticked, confirmed, not
     problems: ({ raw, procedure }) => returnProblems({ permit: raw, procedure, ticked, confirmed }),
     closing: async (raw) => {
       const lockFor = new Map((raw.locks || []).map((l) => [l.pointKey, l.lockNo]))
-      return sealDoc(orgId, PERMIT_COLLECTION, {
+      return sealDoc(PERMIT_COLLECTION, {
         status: PERMIT_STATUS.RETURNED,
         closure: {
           by: user.id,
@@ -446,9 +443,8 @@ export async function returnPermit({ orgId, permit, user, ticked, confirmed, not
  * Admin removes the locks without the lock owner: a reason and three
  * attestations are stored with the permit and its timeline.
  */
-export async function emergencyRemovePermit({ orgId, permit, user, reason, attest }) {
+export async function emergencyRemovePermit({ permit, user, reason, attest }) {
   await releaseAndClose({
-    orgId,
     permit,
     user,
     note: reason,
@@ -456,7 +452,7 @@ export async function emergencyRemovePermit({ orgId, permit, user, reason, attes
     eventType: EVENT_TYPES.EMERGENCY_REMOVED,
     problems: ({ raw, procedure }) => emergencyProblems({ permit: raw, procedure, reason, attest }),
     closing: async () =>
-      sealDoc(orgId, PERMIT_COLLECTION, {
+      sealDoc(PERMIT_COLLECTION, {
         status: PERMIT_STATUS.EMERGENCY_REMOVED,
         emergency: {
           by: user.id,

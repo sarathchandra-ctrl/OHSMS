@@ -20,7 +20,7 @@ import { todayISO } from '../../../shared/lib/dates'
  *
  * Props: open, onClose, ext, orgId, orgName, actor, onSubmitted?(hpt)
  */
-export default function SubmitHptModal({ open, onClose, ext, orgId, orgName, actor, onSubmitted }) {
+export default function SubmitHptModal({ open, onClose, ext, orgName, actor, onSubmitted }) {
   const [form, setForm] = useState({
     testedOn: '', result: HPT_RESULT.PASS, nextDueOn: '', vendor: '', ref: '', notes: '',
   })
@@ -75,7 +75,7 @@ export default function SubmitHptModal({ open, onClose, ext, orgId, orgName, act
     if (problem) return toast.error(problem)
     setBusy(true)
     try {
-      const hpt = await submitHpt(orgId, orgName, ext.id, {
+      const hpt = await submitHpt(orgName, ext.id, {
         ...form,
         // A failure has no next due date to record; the cylinder is condemned.
         nextDueOn: failed ? '' : form.nextDueOn,

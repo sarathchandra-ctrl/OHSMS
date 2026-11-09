@@ -16,7 +16,7 @@ import { todayISO } from '../../../shared/lib/dates'
  *
  * Props: open, onClose, ext, orgId, orgName, actor, onSubmitted?(quotation)
  */
-export default function SubmitQuotationModal({ open, onClose, ext, orgId, orgName, actor, onSubmitted }) {
+export default function SubmitQuotationModal({ open, onClose, ext, orgName, actor, onSubmitted }) {
   const [form, setForm] = useState({ amount: '', vendor: '', ref: '', notes: '' })
   // Attached document: { name, type, data(base64) }. null = none.
   const [file, setFile] = useState(null)
@@ -63,7 +63,7 @@ export default function SubmitQuotationModal({ open, onClose, ext, orgId, orgNam
         fileType: file?.type || '',
         fileData: file?.data || null,
       }
-      await submitQuotation(orgId, orgName, ext.id, payload, actor?.name)
+      await submitQuotation(orgName, ext.id, payload, actor?.name)
       toast.success('Quotation submitted')
       onSubmitted?.({
         amount: Number(form.amount) || 0,

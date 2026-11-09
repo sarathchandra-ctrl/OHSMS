@@ -21,7 +21,7 @@ export const LOTO_STANDARD_TITLE = 'The control of hazardous energy (lockout/tag
 /** Permit number prefix: LP-<year>-<sequence>, one sequence per org per year. */
 export const PERMIT_PREFIX = 'LP'
 
-/** The collection under organizations/{orgId}. */
+/** The collection name. */
 export const PERMIT_COLLECTION = 'lotoPermits'
 
 export const PERMIT_STATUS = {

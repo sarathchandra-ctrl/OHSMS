@@ -27,7 +27,7 @@ vi.mock('../../shared/crypto/keyring', () => ({ sealingEnabled: false }))
 // unlike its neighbours it needs the caller's org and reaches the LOTO service
 // directly. Both are mocked here — importing the real service would stand up
 // Firebase, and this page is rendered without a provider.
-vi.mock('../../shared/auth/AuthContext', () => ({ useAuth: () => ({ orgId: 'org-1' }) }))
+vi.mock('../../shared/auth/AuthContext', () => ({ useAuth: () => ({  }) }))
 vi.mock('../../modules/loto/services/procedures', () => ({
   backfillProcedureMirrors: (...a) => backfillProcedureMirrors(...a),
 }))

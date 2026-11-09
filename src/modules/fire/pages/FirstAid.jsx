@@ -63,7 +63,7 @@ const EMPTY = {
 const EMPTY_FILTERS = { search: '', regions: [], entities: [], items: [], conditions: [] }
 
 export default function FirstAid() {
-  const { orgId, orgName, profile } = useAuth()
+  const { orgName, profile } = useAuth()
   const {
     firstAid, sites, extinguishers, signages, aeds, fas, stretchers, mockDrills,
     siteInventory, incomplete, loading,
@@ -147,7 +147,7 @@ export default function FirstAid() {
     if (!linkPlan?.linked.length) return
     setBusy(true)
     try {
-      const r = await linkFirstAidToSites(orgId, orgName || '', linkPlan, { uid: profile?.uid, name: profile?.name })
+      const r = await linkFirstAidToSites(orgName || '', linkPlan, { uid: profile?.uid, name: profile?.name })
       toast.success(`${r.linked} linked · ${r.nameChanges} renamed · ${r.entityChanges} entity value(s) corrected`)
       setLinkOpen(false)
     } catch (e) {
@@ -217,10 +217,10 @@ export default function FirstAid() {
     try {
       const actor = { uid: profile?.uid, name: profile?.name }
       if (editing.id) {
-        await updateFirstAid(orgId, editing.id, payload, actor)
+        await updateFirstAid(editing.id, payload, actor)
         toast.success('First aid item updated')
       } else {
-        await addFirstAid(orgId, payload, actor)
+        await addFirstAid(payload, actor)
         toast.success('First aid item added')
       }
       setEditing(null)
@@ -233,7 +233,7 @@ export default function FirstAid() {
 
   const confirmDelete = async () => {
     try {
-      await deleteFirstAid(orgId, removing.id, { uid: profile?.uid, name: profile?.name }, `${removing.item} @ ${removing.centerName}`)
+      await deleteFirstAid(removing.id, { uid: profile?.uid, name: profile?.name }, `${removing.item} @ ${removing.centerName}`)
       toast.success('Record deleted')
     } catch (err) {
       toastCaught(err)
@@ -253,7 +253,7 @@ export default function FirstAid() {
         region: s?.region || siteRegion[r.centerName] || '',
         entity: s?.entity || siteEntity[r.centerName] || '',
       }))
-      const res = await saveFirstAidBox(orgId, stamped, removals, { uid: profile?.uid, name: profile?.name }, `First aid box @ ${checking.site}`)
+      const res = await saveFirstAidBox(stamped, removals, { uid: profile?.uid, name: profile?.name }, `First aid box @ ${checking.site}`)
       toast.success(`${res.written} item(s) recorded${res.removed ? ` · ${res.removed} removed` : ''}`)
       setChecking(null)
     } catch (err) {

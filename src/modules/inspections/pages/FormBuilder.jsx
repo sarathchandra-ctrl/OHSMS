@@ -22,7 +22,7 @@ import { downloadText } from '../../../shared/lib/download'
 export default function FormBuilder() {
   const { id } = useParams()
   const navigate = useNavigate()
-  const { profile, orgId } = useAuth()
+  const { profile } = useAuth()
   const { templates, sites } = useData()
   const [tpl, setTpl] = useState(emptyTemplate())
   const [busy, setBusy] = useState(false)
@@ -159,10 +159,10 @@ export default function FormBuilder() {
     setBusy(true)
     try {
       if (editing) {
-        await updateTemplate(orgId, id, payload, profile)
+        await updateTemplate(id, payload, profile)
         toast.success('Form updated')
       } else {
-        await addTemplate(orgId, payload, profile)
+        await addTemplate(payload, profile)
         toast.success('Form created')
       }
       navigate('/inspections/forms')

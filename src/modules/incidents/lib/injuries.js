@@ -54,8 +54,8 @@ import { sealDoc, openDoc, openSnapshots } from '../../../shared/crypto'
 /** The collection path shared/crypto/policy.js keys this collection's rules on. */
 const SEALED = 'injuries'
 
-const injuryCol = (orgId) => collection(db, 'organizations', orgId, 'injuries')
-const injuryRef = (orgId, id) => doc(db, 'organizations', orgId, 'injuries', id)
+const injuryCol = () => collection(db, 'injuries')
+const injuryRef = (id) => doc(db, 'injuries', id)
 // The clinical documents: GP letters, fit notes, discharge summaries.
 //
 // The pointer lives here, not under incidents/{id}/photos, because that
@@ -71,10 +71,10 @@ const injuryRef = (orgId, id) => doc(db, 'organizations', orgId, 'injuries', id)
 // import between them.
 const SEALED_RECORDS = 'injuries/records'
 export const MEDICAL_RECORD_STORAGE_KIND = 'medical-records'
-const recordCol = (orgId, id) => collection(db, 'organizations', orgId, 'injuries', id, 'records')
-const recordRef = (orgId, injuryId, recordId) =>
-  doc(db, 'organizations', orgId, 'injuries', injuryId, 'records', recordId)
-const incRef = (orgId, incidentId) => doc(db, 'organizations', orgId, 'incidents', incidentId)
+const recordCol = (id) => collection(db, 'injuries', id, 'records')
+const recordRef = (injuryId, recordId) =>
+  doc(db, 'injuries', injuryId, 'records', recordId)
+const incRef = (incidentId) => doc(db, 'incidents', incidentId)
 const injuryId = (incidentId, personId) => `${incidentId}__${personId}`
 
 /**
@@ -217,13 +217,13 @@ function injuryPayload(incident, report, actor) {
  * exactly what the employee portal did for as long as it wrote its injury
  * capture straight onto the incident under `name`/`uid`.
  */
-export async function syncIncidentInjuries(orgId, incident, reports = [], actor) {
+export async function syncIncidentInjuries(incident, reports = [], actor) {
   // Snapshot existing injuries for this incident so we can (a) protect VERIFIED
   // records from being overwritten and (b) clean up removed persons.
   const verified = new Set()
   let existing = []
   try {
-    const snap = await getDocs(query(injuryCol(orgId), where('incidentId', '==', incident.id)))
+    const snap = await getDocs(query(injuryCol(), where('incidentId', '==', incident.id)))
     existing = snap.docs
     for (const d of snap.docs) if (injuryStatus(d.data()) === 'verified') verified.add(d.id)
   } catch (e) {
@@ -257,8 +257,8 @@ export async function syncIncidentInjuries(orgId, incident, reports = [], actor)
   await Promise.all(
     pending.map(async ({ id, report }) => {
       await setDoc(
-        injuryRef(orgId, id),
-        await sealDoc(orgId, SEALED, injuryPayload(incident, report, actor)),
+        injuryRef(id),
+        await sealDoc(SEALED, injuryPayload(incident, report, actor)),
         { merge: true }
       )
     })
@@ -273,7 +273,7 @@ export async function syncIncidentInjuries(orgId, incident, reports = [], actor)
     // eslint-disable-next-line no-console
     console.warn('[Incident IRA] injury cleanup skipped:', e?.message || e)
   }
-  await logAudit(orgId, actor, AUDIT.INJURY_SYNC, {
+  await logAudit(actor, AUDIT.INJURY_SYNC, {
     target: 'injury',
     targetId: incident.id,
     targetLabel: incident.refNo || incident.id,
@@ -295,13 +295,13 @@ export async function syncIncidentInjuries(orgId, incident, reports = [], actor)
  * happens for incidents and illnesses. `context.injuries` still means the
  * active ones; `context.deletedInjuries` is the new half. No consumer changes.
  */
-export function subscribeInjuries(orgId, cb) {
+export function subscribeInjuries(cb) {
   // Order by updatedAt (every write stamps it); newest first.
-  const q = query(injuryCol(orgId), orderBy('updatedAt', 'desc'), limit(2000))
+  const q = query(injuryCol(), orderBy('updatedAt', 'desc'), limit(2000))
   // openSnapshots decrypts each batch and drops any that is no longer the
   // latest — a busy collection re-emits faster than two thousand records
   // decrypt, and without the guard an older list can land on top of a newer one.
-  const opened = openSnapshots(orgId, SEALED, cb)
+  const opened = openSnapshots(SEALED, cb)
   return onSnapshot(
     q,
     (snap) => opened(snap.docs.map((d) => ({ id: d.id, ...d.data() }))),
@@ -324,8 +324,8 @@ const EDITABLE = [
  * changes to the standalone injury doc, and mirrors the join key — only the join
  * key — back onto the parent incident. UI-gated to reporter/investigator/admin.
  */
-export async function updateInjury(orgId, id, fields, actor) {
-  const snap = await getDoc(injuryRef(orgId, id))
+export async function updateInjury(id, fields, actor) {
+  const snap = await getDoc(injuryRef(id))
   if (!snap.exists()) throw new Error('Injury report not found')
   // Not opened. Nothing below reads a sealed field off it — `status` and the
   // two join keys are all in the clear — and opening it here would decrypt a
@@ -338,8 +338,8 @@ export async function updateInjury(orgId, id, fields, actor) {
   // `joinable` is taken from the PLAINTEXT edit, below, before this seals it:
   // what goes back onto the incident is governed by the incident's own policy,
   // and a value sealed for /injuries would fail its AAD binding there anyway.
-  const sealed = await sealDoc(orgId, SEALED, clean)
-  await updateDoc(injuryRef(orgId, id), { ...sealed, updatedAt: serverTimestamp() })
+  const sealed = await sealDoc(SEALED, clean)
+  await updateDoc(injuryRef(id), { ...sealed, updatedAt: serverTimestamp() })
   // Mirror the join key back onto the incident. This used to spread the whole
   // edit — `{ ...r, ...clean }` — which re-wrote body parts, injury type,
   // medication and days off onto the widely-readable incident document every
@@ -350,12 +350,12 @@ export async function updateInjury(orgId, id, fields, actor) {
     const joinable = {}
     for (const k of INCIDENT_INJURY_FIELDS) if (k in clean) joinable[k] = clean[k]
     try {
-      const isnap = await getDoc(incRef(orgId, cur.incidentId))
+      const isnap = await getDoc(incRef(cur.incidentId))
       if (isnap.exists()) {
         const reports = incidentInjuryStubs(isnap.data().injuryReports).map((r) =>
           r.personId === cur.personId ? { ...r, ...joinable } : r
         )
-        await updateDoc(incRef(orgId, cur.incidentId), {
+        await updateDoc(incRef(cur.incidentId), {
           injuryReports: reports,
           updatedAt: serverTimestamp(),
         })
@@ -372,7 +372,7 @@ export async function updateInjury(orgId, id, fields, actor) {
   // into /auditLogs, which is a different audience — the same "confine the
   // fields, publish the second copy" mistake this collection was split to fix.
   // The document id and the incident reference find the record and name nobody.
-  await logAudit(orgId, actor, AUDIT.INJURY_UPDATE, {
+  await logAudit(actor, AUDIT.INJURY_UPDATE, {
     target: 'injury',
     targetId: id,
     targetLabel: cur.incidentRefNo || id,
@@ -381,15 +381,15 @@ export async function updateInjury(orgId, id, fields, actor) {
 }
 
 /** Mark an injury report verified (or revert to pending). Investigator/admin only (UI-gated). */
-export async function setInjuryVerified(orgId, id, verified, actor, label) {
-  await updateDoc(injuryRef(orgId, id), {
+export async function setInjuryVerified(id, verified, actor, label) {
+  await updateDoc(injuryRef(id), {
     status: verified ? 'verified' : 'pending',
     verifiedBy: verified ? actor?.uid || null : null,
     verifiedByName: verified ? actor?.name || '' : '',
     verifiedAt: verified ? serverTimestamp() : null,
     updatedAt: serverTimestamp(),
   })
-  await logAudit(orgId, actor, verified ? AUDIT.INJURY_VERIFY : AUDIT.INJURY_UNVERIFY, {
+  await logAudit(actor, verified ? AUDIT.INJURY_VERIFY : AUDIT.INJURY_UNVERIFY, {
     target: 'injury',
     targetId: id,
     targetLabel: label || id,
@@ -420,14 +420,14 @@ export const injuryStatus = (inj) => (inj?.status === 'verified' ? 'verified' : 
  * is the same asymmetry as the injury report itself. This function does not
  * getDoc the result.
  */
-export async function addMedicalRecord(orgId, incident, personId, file = {}) {
+export async function addMedicalRecord(incident, personId, file = {}) {
   const target = medicalAttachmentTarget(incident?.id, personId)
   if (!target)
     throw new Error('A medical record has to name the incident and the person it belongs to.')
 
   await setDoc(
-    injuryRef(orgId, target.injuryId),
-    await sealDoc(orgId, SEALED, {
+    injuryRef(target.injuryId),
+    await sealDoc(SEALED, {
       incidentId: target.incidentId,
       incidentRefNo: incident?.refNo || '',
       personId: target.personId,
@@ -437,7 +437,7 @@ export async function addMedicalRecord(orgId, incident, personId, file = {}) {
   )
 
   const up = file.dataUrl
-    ? await putFile(orgId, target.storageKind, file.dataUrl, file.name, {
+    ? await putFile(target.storageKind, file.dataUrl, file.name, {
         collection: target.collection,
       })
     : null
@@ -467,8 +467,8 @@ export async function addMedicalRecord(orgId, incident, personId, file = {}) {
     if (up.encWrapped) pointer.encWrapped = up.encWrapped
   }
   const ref = await addDoc(
-    recordCol(orgId, target.injuryId),
-    await sealDoc(orgId, SEALED_RECORDS, pointer)
+    recordCol(target.injuryId),
+    await sealDoc(SEALED_RECORDS, pointer)
   )
   return ref.id
 }
@@ -482,14 +482,14 @@ export async function addMedicalRecord(orgId, incident, personId, file = {}) {
  * handler returns an empty list, and an empty list here means "nothing was
  * uploaded", which is the wrong sentence for a permission denial.
  */
-export function subscribeInjuryRecords(orgId, id, cb) {
-  if (!orgId || !id) {
+export function subscribeInjuryRecords(id, cb) {
+  if ((!id)) {
     cb([])
     return () => {}
   }
-  const q = query(recordCol(orgId, id), orderBy('uploadedAt', 'asc'))
-  const resolve = resolveSubscription(orgId, SEALED_RECORDS, cb)
-  const opened = openSnapshots(orgId, SEALED_RECORDS, (rows) =>
+  const q = query(recordCol(id), orderBy('uploadedAt', 'asc'))
+  const resolve = resolveSubscription(SEALED_RECORDS, cb)
+  const opened = openSnapshots(SEALED_RECORDS, (rows) =>
     resolve(rows.map((r) => ({ ...r, dataUrl: r.dataUrl || r.url || '' })))
   )
   const stop = onSnapshot(
@@ -504,8 +504,8 @@ export function subscribeInjuryRecords(orgId, id, cb) {
 }
 
 /** Remove one clinical file. Rules allow this to a manager, not to the member who attached it. */
-export async function deleteMedicalRecord(orgId, id, recordId) {
-  const ref = recordRef(orgId, id, recordId)
+export async function deleteMedicalRecord(id, recordId) {
+  const ref = recordRef(id, recordId)
   try {
     const snap = await getDoc(ref)
     if (snap.data()?.path) removeFile(snap.data().path)
@@ -544,17 +544,17 @@ export async function deleteMedicalRecord(orgId, id, recordId) {
  * same mistake the injury/incident split was made to correct. Same reasoning as
  * updateInjury above.
  */
-export async function deleteInjury(orgId, id, actor) {
-  const snap = await getDoc(injuryRef(orgId, id))
+export async function deleteInjury(id, actor) {
+  const snap = await getDoc(injuryRef(id))
   if (!snap.exists()) return
   // Not opened: nothing below reads a sealed field, and decrypting a
   // colleague's record to delete it would need a key the deleter may not hold.
   const cur = snap.data()
-  await updateDoc(injuryRef(orgId, id), {
+  await updateDoc(injuryRef(id), {
     deletedAt: serverTimestamp(),
     deletedBy: actor?.name || '',
   })
-  await logAudit(orgId, actor, AUDIT.INJURY_DELETE, {
+  await logAudit(actor, AUDIT.INJURY_DELETE, {
     target: 'injury',
     targetId: id,
     targetLabel: cur.incidentRefNo || id,
@@ -563,16 +563,16 @@ export async function deleteInjury(orgId, id, actor) {
 }
 
 /** Take it back out again, with the clock cleared. */
-export async function restoreInjury(orgId, id, actor) {
-  const snap = await getDoc(injuryRef(orgId, id))
+export async function restoreInjury(id, actor) {
+  const snap = await getDoc(injuryRef(id))
   if (!snap.exists()) return
   const cur = snap.data()
-  await updateDoc(injuryRef(orgId, id), {
+  await updateDoc(injuryRef(id), {
     deletedAt: null,
     deletedBy: null,
     updatedAt: serverTimestamp(),
   })
-  await logAudit(orgId, actor, AUDIT.INJURY_RESTORE, {
+  await logAudit(actor, AUDIT.INJURY_RESTORE, {
     target: 'injury',
     targetId: id,
     targetLabel: cur.incidentRefNo || id,
@@ -595,16 +595,16 @@ export async function restoreInjury(orgId, id, actor) {
  * the path that reports a file left behind, because it is the one that runs
  * unattended and can afford to fail an invocation over it.
  */
-export async function purgeInjury(orgId, id, actor, label) {
-  const records = await getDocs(recordCol(orgId, id))
+export async function purgeInjury(id, actor, label) {
+  const records = await getDocs(recordCol(id))
   records.docs.forEach((d) => {
     if (d.data().path) removeFile(d.data().path)
   })
   const batch = writeBatch(db)
   records.docs.forEach((d) => batch.delete(d.ref))
-  batch.delete(injuryRef(orgId, id))
+  batch.delete(injuryRef(id))
   await batch.commit()
-  await logAudit(orgId, actor, AUDIT.INJURY_PURGE, {
+  await logAudit(actor, AUDIT.INJURY_PURGE, {
     target: 'injury',
     targetId: id,
     targetLabel: label || id,

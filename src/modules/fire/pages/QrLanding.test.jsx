@@ -9,11 +9,11 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, waitFor, fireEvent } from '@testing-library/react'
 
 const auth = {
-  value: { orgId: null, orgName: '', profile: null, isAdmin: false, isManager: false },
+  value: { orgName: '', profile: null, isAdmin: false, isManager: false },
 }
 const docs = { value: {} }
 
-vi.mock('firebase/firestore', () => ({
+vi.mock('../../../shared/data/client.js', () => ({
   doc: (_db, ...parts) => ({ path: parts.join('/') }),
   getDoc: (ref) => {
     const data = docs.value[ref.path]
@@ -47,7 +47,6 @@ const { default: QrLanding } = await import('./QrLanding')
 const { restoreExtinguisher } = await import('../lib/firestore')
 
 const deletedMirror = {
-  orgId: 'org-1',
   orgName: 'Acme',
   extId: 'e1',
   serialNo: 'FE-0007',
@@ -58,7 +57,7 @@ const deletedMirror = {
 beforeEach(() => {
   docs.value = {}
   restoreExtinguisher.mockClear()
-  auth.value = { orgId: null, orgName: '', profile: null, isAdmin: false, isManager: false }
+  auth.value = { orgName: '', profile: null, isAdmin: false, isManager: false }
 })
 
 describe('scanning a QR', () => {
@@ -72,7 +71,6 @@ describe('scanning a QR', () => {
   it('opens a fire-alarm control panel on its own page', async () => {
     docs.value['qr/tok-1'] = {
       assetKind: 'fas',
-      orgId: 'org-1',
       orgName: 'Acme',
       assetRefId: 'p1',
       token: 'tok-1',
@@ -94,7 +92,6 @@ describe('scanning a QR', () => {
 
   it('still offers a defect report for a unit that is in service', async () => {
     docs.value['qr/tok-1'] = {
-      orgId: 'org-1',
       extId: 'e1',
       serialNo: 'FE-0001',
       type: 'ABC',
@@ -129,14 +126,12 @@ describe('scanning a QR', () => {
       qrToken: 'tok-1',
     }
     auth.value = {
-      orgId: 'org-1',
       orgName: 'Acme',
       isAdmin: false,
       isManager: true,
       profile: {
         uid: 'm1',
         name: 'Site lead',
-        orgId: 'org-1',
         siteId: 'site-a',
         access: { sites: ['site-a'] },
       },
@@ -162,7 +157,6 @@ describe('scanning a QR', () => {
       deletedAt: new Date(),
     }
     auth.value = {
-      orgId: 'org-1',
       orgName: 'Acme',
       isAdmin: false,
       isManager: true,

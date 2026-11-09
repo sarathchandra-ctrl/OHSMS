@@ -44,7 +44,7 @@ function scoreOf(checks, checklist) {
 }
 
 export default function MockDrills() {
-  const { orgId, profile } = useAuth()
+  const { profile } = useAuth()
   const { mockDrills, sites, siteInventory, users, org, incomplete, loading } = useFleet()
   // Org-configured departments UNION those actually on people, same as the
   // shared DeptPersonPicker — otherwise back-filling a person's department
@@ -124,8 +124,8 @@ export default function MockDrills() {
   // The site's CM from the Emergency Response Plan is the Incident Commander by
   // default — auto-filled when a site is picked, and freely editable afterwards.
   useEffect(() => {
-    if (!orgId || !form.siteId) return undefined
-    return subscribeErpContacts(orgId, (list) => {
+    if ((!form.siteId)) return undefined
+    return subscribeErpContacts((list) => {
       const cm = list.find(
         (c) => c.kind === 'internal' && c.siteId === form.siteId && (c.role || '').toUpperCase() === 'CM'
       ) || list.find(
@@ -140,7 +140,7 @@ export default function MockDrills() {
         return [name]
       })
     })
-  }, [orgId, form.siteId])
+  }, [form.siteId])
 
   // commanders
   const addCommander = (src) => {
@@ -199,7 +199,7 @@ export default function MockDrills() {
         })),
         photos: photos.map((p) => p.dataUrl),
       }
-      const saved = await addMockDrill(orgId, record, { uid: profile?.uid, name: profile?.name })
+      const saved = await addMockDrill(record, { uid: profile?.uid, name: profile?.name })
       // A drill saved with four of five photographs is still a success, and
       // still something the person who took them needs to hear about while they
       // are standing where they took them.
@@ -222,7 +222,7 @@ export default function MockDrills() {
 
   const confirmDelete = async () => {
     try {
-      await deleteMockDrill(orgId, removing.id, { uid: profile?.uid, name: profile?.name }, `${removing.scenario} @ ${removing.centerName}`)
+      await deleteMockDrill(removing.id, { uid: profile?.uid, name: profile?.name }, `${removing.scenario} @ ${removing.centerName}`)
       toast.success('Record deleted')
     } catch (err) { toastCaught(err) } finally { setRemoving(null) }
   }
@@ -255,7 +255,7 @@ export default function MockDrills() {
     setViewing(d); setViewPhotos([])
     if (d.photoCount > 0) {
       setViewPhotosLoading(true)
-      try { setViewPhotos(await getMockDrillPhotos(orgId, d.id)) }
+      try { setViewPhotos(await getMockDrillPhotos(d.id)) }
       catch { /* non-fatal */ }
       finally { setViewPhotosLoading(false) }
     }
@@ -265,7 +265,7 @@ export default function MockDrills() {
   const downloadPdf = async (d) => {
     let photoUrls = []
     if (d.photoCount > 0) {
-      try { photoUrls = (await getMockDrillPhotos(orgId, d.id)).map((p) => p.dataUrl) }
+      try { photoUrls = (await getMockDrillPhotos(d.id)).map((p) => p.dataUrl) }
       catch { /* non-fatal — print without photos */ }
     }
     setPrintRecord({ ...d, photos: photoUrls })

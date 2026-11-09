@@ -14,7 +14,7 @@ const store = vi.hoisted(() => ({ writes: [] }))
 vi.mock('../functions', () => ({ getDataKeys: async () => keysMock.current }))
 vi.mock('../monitoring', () => ({ reportError: vi.fn() }))
 vi.mock('../firebase', () => ({ db: {} }))
-vi.mock('firebase/firestore', () => ({
+vi.mock('../data/client.js', () => ({
   collection: (...p) => ({ path: p.slice(1).join('/') }),
   doc: (...p) => ({ path: p.slice(1).join('/') }),
   getDocs: async () => ({ docs: [] }),
@@ -98,7 +98,7 @@ describe('the LOTO targets', () => {
   })
 
   it('seals a permit’s people and free text, and leaves its join keys and lock numbers readable', async () => {
-    const sealed = await sealDoc(ORG, 'lotoPermits', {
+    const sealed = await sealDoc('lotoPermits', {
       status: 'active', requestedBy: 'u1', personnelUids: ['u2'],
       reason: 'Replace bearing', requestedByName: 'A. Requester',
       internalPersonnel: [{ uid: 'u2', name: 'B. Crew' }],
@@ -117,7 +117,7 @@ describe('the LOTO targets', () => {
   })
 
   it('seals a technician’s name and contact', async () => {
-    const sealed = await sealDoc(ORG, 'technicians', { orgId: ORG, name: 'A. Tech', contact: '555', lockNo: 'P-1' })
+    const sealed = await sealDoc('technicians', { name: 'A. Tech', contact: '555', lockNo: 'P-1' })
     expect(sealed.name).toMatch(/^enc:/)
     expect(sealed.contact).toMatch(/^enc:/)
     expect(sealed.lockNo).toBe('P-1')
@@ -130,11 +130,11 @@ describe('needsSealing', () => {
   })
 
   it('is false once every covered field is sealed', async () => {
-    expect(needsSealing('injuries', await sealDoc(ORG, 'injuries', INJURY))).toBe(false)
+    expect(needsSealing('injuries', await sealDoc('injuries', INJURY))).toBe(false)
   })
 
   it('is true for a half-sealed document', async () => {
-    const half = { ...await sealDoc(ORG, 'injuries', { medication: 'x' }), injuryType: 'laceration' }
+    const half = { ...await sealDoc('injuries', { medication: 'x' }), injuryType: 'laceration' }
     expect(needsSealing('injuries', half)).toBe(true)
   })
 
@@ -147,8 +147,8 @@ describe('needsSealing', () => {
   })
 
   it('recognises both schemes as sealed', async () => {
-    const general = await sealDoc(ORG, 'incidents', { narrative: 'x' })
-    const medical = await sealDoc(ORG, 'injuries', { medication: 'x' })
+    const general = await sealDoc('incidents', { narrative: 'x' })
+    const medical = await sealDoc('injuries', { medication: 'x' })
     expect(needsSealing('incidents', general)).toBe(false)
     expect(needsSealing('injuries', medical)).toBe(false)
   })
@@ -174,9 +174,9 @@ describe('writableFields', () => {
 
 describe('the safety check', () => {
   it('accepts a document that opens back to what went in', async () => {
-    const sealed = await sealDoc(ORG, 'injuries', INJURY)
+    const sealed = await sealDoc('injuries', INJURY)
     const { openDoc } = await import('./index')
-    expect(opensBackIntact('injuries', INJURY, await openDoc(ORG, 'injuries', sealed))).toBe(true)
+    expect(opensBackIntact('injuries', INJURY, await openDoc('injuries', sealed))).toBe(true)
   })
 
   it('refuses when a covered value came back different', () => {
@@ -204,7 +204,7 @@ describe('the safety check', () => {
 
 describe('sealAndVerify', () => {
   it('produces a partial update carrying only the sealed fields', async () => {
-    const { update, ok, reason } = await sealAndVerify(ORG, 'injuries', INJURY)
+    const { update, ok, reason } = await sealAndVerify('injuries', INJURY)
     expect(ok).toBe(true)
     expect(reason).toBe('sealed')
     expect(Object.keys(update).sort()).toEqual(['bodyParts', 'daysToReturnToWork', 'medication', 'personName'])
@@ -215,13 +215,13 @@ describe('sealAndVerify', () => {
   })
 
   it('never writes the local id handle back into the document', async () => {
-    const { update } = await sealAndVerify(ORG, 'injuries', INJURY)
+    const { update } = await sealAndVerify('injuries', INJURY)
     expect('id' in update).toBe(false)
   })
 
   it('does nothing for an already-sealed document', async () => {
-    const sealed = await sealDoc(ORG, 'injuries', INJURY)
-    const r = await sealAndVerify(ORG, 'injuries', sealed)
+    const sealed = await sealDoc('injuries', INJURY)
+    const r = await sealAndVerify('injuries', sealed)
     expect(r.update).toBe(null)
     expect(r.reason).toBe('already-sealed')
   })
@@ -231,7 +231,7 @@ describe('sealAndVerify', () => {
     // record and cannot open one, so verification fails and the plaintext is
     // left alone rather than replaced by something nothing will ever decrypt.
     signIn(MEMBER)
-    const r = await sealAndVerify(ORG, 'injuries', INJURY)
+    const r = await sealAndVerify('injuries', INJURY)
     expect(r.ok).toBe(false)
     expect(r.update).toBe(null)
     expect(r.reason).toBe('failed-round-trip')
@@ -239,7 +239,7 @@ describe('sealAndVerify', () => {
 
   it('still seals general-class records for a member', async () => {
     signIn(MEMBER)
-    const r = await sealAndVerify(ORG, 'incidents', { narrative: 'Fell from step' })
+    const r = await sealAndVerify('incidents', { narrative: 'Fell from step' })
     expect(r.ok).toBe(true)
     expect(r.update.narrative).toMatch(/^enc:/)
   })
@@ -250,7 +250,7 @@ describe('backfillAll', () => {
     vi.stubEnv('VITE_ENCRYPTION', 'off')
     vi.resetModules()
     const fresh = await import('./backfill')
-    await expect(fresh.backfillAll(ORG)).rejects.toThrow(/switched off/)
+    await expect(fresh.backfillAll()).rejects.toThrow(/switched off/)
     vi.stubEnv('VITE_ENCRYPTION', 'on')
     vi.resetModules()
   })
@@ -260,22 +260,19 @@ describe('backfillAll', () => {
     // as blocked — which reads as a broken migration rather than as the wrong
     // person having started it.
     signIn(MEMBER)
-    await expect(backfillAll(ORG)).rejects.toThrow(/administrator/)
+    await expect(backfillAll()).rejects.toThrow(/administrator/)
   })
 
-  it('refuses without an organization', async () => {
-    await expect(backfillAll('')).rejects.toThrow(/organization/)
-  })
 
   it('writes nothing on a dry run', async () => {
-    const r = await backfillAll(ORG, { dryRun: true })
+    const r = await backfillAll({ dryRun: true })
     expect(store.writes).toHaveLength(0)
     expect(r.dryRun).toBe(true)
     expect(r.results.map((x) => x.collection)).toEqual(TARGETS.map((t) => t.collection))
   })
 
   it('reports a total for every collection it visited', async () => {
-    const r = await backfillAll(ORG, { dryRun: true })
+    const r = await backfillAll({ dryRun: true })
     expect(r.scannedTotal).toBe(0) // the stubbed Firestore returns no documents
     expect(r.blockedTotal).toBe(0)
     expect(r.remainingTotal).toBe(0)
@@ -284,7 +281,7 @@ describe('backfillAll', () => {
   it('caps a run across the whole estate, not per collection', async () => {
     // Nine independent caps would let one run write nine times the cap.
     expect(MAX_SEALS_PER_RUN).toBeGreaterThan(0)
-    const r = await backfillAll(ORG, { dryRun: true, cap: 1 })
+    const r = await backfillAll({ dryRun: true, cap: 1 })
     expect(r.sealedTotal).toBeLessThanOrEqual(1)
   })
 })

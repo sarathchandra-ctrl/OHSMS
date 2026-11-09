@@ -56,7 +56,7 @@ export async function adminOf(engine, uid) {
   if (!uid) return null
   const profile = await engine.get(WORKER, 'users', uid)
   if (!profile || profile.status !== 'approved' || profile.mustChangePassword === true) return null
-  if (profile.role !== 'admin' || typeof profile.orgId !== 'string' || !profile.orgId) return null
+  if (profile.role !== 'admin') return null
   return profile
 }
 
@@ -77,8 +77,8 @@ export async function inviteMember(
   if (!INVITE_ROLES.includes(role)) return refuse('role')
   const label = cleanName(name) || address
 
-  // Already a member, of this organization or any other on this host: their
-  // role is changed on the Employees page, not by a second invite.
+  // Already a member: their role is changed on the Employees page, not by a
+  // second invite.
   const member = await asWorker(
     db,
     `SELECT 1 FROM documents WHERE path = 'users' AND lower(data->>'email') = $1 LIMIT 1`,
@@ -86,36 +86,24 @@ export async function inviteMember(
   )
   if (member.rows.length) return refuse('already-member')
 
-  // An address pending for another organization is not this admin's to
-  // redirect: the ON CONFLICT below would otherwise move it, and that person's
-  // first sign-in would land them, and their records, in the wrong tenant.
-  const pending = await asWorker(db, 'SELECT org_id FROM invites WHERE email = $1', [address])
-  if (pending.rows[0] && pending.rows[0].org_id !== admin.orgId) return refuse('taken')
+  const pending = await asWorker(db, 'SELECT 1 FROM invites WHERE email = $1', [address])
   if (!pending.rows[0]) {
-    const count = await asWorker(db, 'SELECT count(*)::int AS n FROM invites WHERE org_id = $1', [
-      admin.orgId,
-    ])
+    const count = await asWorker(db, 'SELECT count(*)::int AS n FROM invites')
     if ((count.rows[0]?.n ?? 0) >= MAX_PENDING_INVITES) return refuse('too-many')
   }
 
-  // The check above and this write are separate statements. If another
-  // organization invited the same address in between, the WHERE skips the
-  // update and RETURNING comes back empty: report that rather than claim an
-  // invite this admin does not hold.
-  const written = await asWorker(
+  // Re-inviting a pending address updates its role and name.
+  await asWorker(
     db,
-    `INSERT INTO invites (email, org_id, role, name) VALUES ($1, $2, $3, $4)
-     ON CONFLICT (email) DO UPDATE SET role = EXCLUDED.role, name = EXCLUDED.name
-     WHERE invites.org_id = EXCLUDED.org_id
-     RETURNING email`,
-    [address, admin.orgId, role, label]
+    `INSERT INTO invites (email, role, name) VALUES ($1, $2, $3)
+     ON CONFLICT (email) DO UPDATE SET role = EXCLUDED.role, name = EXCLUDED.name`,
+    [address, role, label]
   )
-  if (!written.rows.length) return refuse('taken')
 
   let emailed = false
   if (typeof mail === 'function') {
     const where = origin ? ` at ${origin}` : ''
-    const orgDoc = await engine.get(WORKER, 'organizations', admin.orgId)
+    const orgDoc = await engine.get(WORKER, 'organization', 'profile')
     const org = cleanName(orgDoc?.name) || 'your organization'
     const sent = await mail({
       to: address,
@@ -132,30 +120,25 @@ export async function inviteMember(
   return { ok: true, email: address, role, emailed }
 }
 
-/** The caller's organization's pending invites, in address order. */
+/** The pending invites, in address order. */
 export async function listInvites(engine, db, { uid }) {
   const admin = await adminOf(engine, uid)
   if (!admin) return refuse('not-admin')
   const rows = await asWorker(
     db,
-    'SELECT email, role, name FROM invites WHERE org_id = $1 ORDER BY email LIMIT $2',
-    [admin.orgId, MAX_PENDING_INVITES]
+    'SELECT email, role, name FROM invites ORDER BY email LIMIT $1',
+    [MAX_PENDING_INVITES]
   )
   return { ok: true, invites: rows.rows }
 }
 
-/** Withdraw a pending invite in the caller's organization. Idempotent. */
+/** Withdraw a pending invite. Idempotent. */
 export async function revokeInvite(engine, db, { uid, email }) {
   const admin = await adminOf(engine, uid)
   if (!admin) return refuse('not-admin')
   const address = normalizeEmail(email)
   if (!address) return refuse('email')
-  // org_id in the WHERE: an admin cannot withdraw another tenant's invite by
-  // guessing the address.
-  const res = await asWorker(db, 'DELETE FROM invites WHERE email = $1 AND org_id = $2', [
-    address,
-    admin.orgId,
-  ])
+  const res = await asWorker(db, 'DELETE FROM invites WHERE email = $1', [address])
   return { ok: true, removed: res.affectedRows > 0 }
 }
 
@@ -191,7 +174,7 @@ export function cleanAutoJoin(value) {
 export async function getAutoJoin(engine, db, { uid }) {
   const admin = await adminOf(engine, uid)
   if (!admin) return refuse('not-admin')
-  const org = await engine.get(WORKER, 'organizations', admin.orgId)
+  const org = await engine.get(WORKER, 'organization', 'profile')
   return { ok: true, autoJoin: cleanAutoJoin(org?.autoJoin) }
 }
 
@@ -217,7 +200,7 @@ export async function setAutoJoin(engine, db, { uid, domains, role }) {
     }
   }
   await engine.commit(WORKER, [
-    { type: 'update', path: 'organizations', id: admin.orgId, data: { autoJoin: next } },
+    { type: 'update', path: 'organization', id: 'profile', data: { autoJoin: next } },
   ])
   return { ok: true, autoJoin: next }
 }
@@ -235,11 +218,11 @@ export async function autoJoinFor(db, email) {
   if (!domain) return null
   const rows = await asWorker(
     db,
-    `SELECT id, data->'autoJoin' AS auto FROM documents WHERE path = 'organizations' AND data ? 'autoJoin'`
+    `SELECT id, data->'autoJoin' AS auto FROM documents WHERE path = 'organization' AND id = 'profile' AND data ? 'autoJoin'`
   )
   for (const row of rows.rows) {
     const auto = cleanAutoJoin(typeof row.auto === 'string' ? JSON.parse(row.auto) : row.auto)
-    if (auto && auto.domains.includes(domain)) return { orgId: row.id, role: auto.role }
+    if (auto && auto.domains.includes(domain)) return { role: auto.role }
   }
   return null
 }

@@ -100,33 +100,33 @@ describe('the constants both sides duplicate', () => {
 
 describe('server seals, client opens', () => {
   it('round-trips a general-class object', async () => {
-    const sealed = await sealObjectBytes(serverKeys, ORG, GENERAL, PDF)
+    const sealed = await sealObjectBytes(serverKeys, GENERAL, PDF)
     const opened = await openBytes(
-      clientGeneral, ORG, clientFileLabel(GENERAL),
+      clientGeneral, clientFileLabel(GENERAL),
       { scheme: sealed.encScheme, iv: sealed.encIv }, sealed.bytes,
     )
     expect(Array.from(opened)).toEqual(Array.from(PDF))
   })
 
   it('round-trips a medical-class object', async () => {
-    const sealed = await sealObjectBytes(serverKeys, ORG, MEDICAL, PDF)
+    const sealed = await sealObjectBytes(serverKeys, MEDICAL, PDF)
     const opened = await openBytes(
-      clientPrivate, ORG, clientFileLabel(MEDICAL),
+      clientPrivate, clientFileLabel(MEDICAL),
       { scheme: sealed.encScheme, iv: sealed.encIv, wrapped: sealed.encWrapped }, sealed.bytes,
     )
     expect(Array.from(opened)).toEqual(Array.from(PDF))
   })
 
   it('produces the scheme tags the client parser expects', async () => {
-    expect((await sealObjectBytes(serverKeys, ORG, GENERAL, PDF)).encScheme).toBe('enc')
-    expect((await sealObjectBytes(serverKeys, ORG, MEDICAL, PDF)).encScheme).toBe('enk')
+    expect((await sealObjectBytes(serverKeys, GENERAL, PDF)).encScheme).toBe('enc')
+    expect((await sealObjectBytes(serverKeys, MEDICAL, PDF)).encScheme).toBe('enk')
   })
 
   it('produces pointer fields under the names the client reads', async () => {
     // isSealedFile() tests encIv and encKeyId; fileUrl() reads encScheme and
     // encWrapped. A renamed field means the app treats a sealed object as
     // plaintext and hands ciphertext to an <img>.
-    const update = pointerUpdate(await sealObjectBytes(serverKeys, ORG, MEDICAL, PDF), 'orgs/o/k/f.enc')
+    const update = pointerUpdate(await sealObjectBytes(serverKeys, MEDICAL, PDF), 'orgs/o/k/f.enc')
     expect(Object.keys(update).sort()).toEqual(
       ['encIv', 'encKeyId', 'encScheme', 'encWrapped', 'path', 'url'],
     )
@@ -137,7 +137,7 @@ describe('server seals, client opens', () => {
     // The old value is a permanent bearer link to the PLAINTEXT object. Sealing
     // the bytes while leaving that string on the document would confine the
     // file and leave the door.
-    expect(pointerUpdate(await sealObjectBytes(serverKeys, ORG, GENERAL, PDF), 'p').url).toBe('')
+    expect(pointerUpdate(await sealObjectBytes(serverKeys, GENERAL, PDF), 'p').url).toBe('')
   })
 })
 
@@ -145,15 +145,15 @@ describe('client seals, server opens', () => {
   // The other direction matters because both write: the app seals new uploads,
   // this job seals the history, and a manager reads both without knowing which.
   it('round-trips a general-class object', async () => {
-    const sealed = await sealBytes(clientGeneral, 'general.1', ORG, clientFileLabel(GENERAL), PDF)
-    const opened = await openObjectBytes(serverKeys, ORG, GENERAL, { encScheme: 'enc', encIv: sealed.iv }, sealed.bytes)
+    const sealed = await sealBytes(clientGeneral, 'general.1', clientFileLabel(GENERAL), PDF)
+    const opened = await openObjectBytes(serverKeys, GENERAL, { encScheme: 'enc', encIv: sealed.iv }, sealed.bytes)
     expect(Array.from(opened)).toEqual(Array.from(PDF))
   })
 
   it('round-trips a medical-class object', async () => {
-    const sealed = await sealHybridBytes(clientPublic, 'medical.1', ORG, clientFileLabel(MEDICAL), PDF)
+    const sealed = await sealHybridBytes(clientPublic, 'medical.1', clientFileLabel(MEDICAL), PDF)
     const opened = await openObjectBytes(
-      serverKeys, ORG, MEDICAL,
+      serverKeys, MEDICAL,
       { encScheme: 'enk', encIv: sealed.iv, encWrapped: sealed.wrapped }, sealed.bytes,
     )
     expect(Array.from(opened)).toEqual(Array.from(PDF))
@@ -164,25 +164,18 @@ describe('what the binding refuses', () => {
   it('refuses an object replayed under the other key class', async () => {
     // The one binding the per-class label buys: a medical record's bytes moved
     // to a general-class collection stay shut.
-    const sealed = await sealObjectBytes(serverKeys, ORG, MEDICAL, PDF)
+    const sealed = await sealObjectBytes(serverKeys, MEDICAL, PDF)
     await expect(openBytes(
-      clientPrivate, ORG, clientFileLabel(GENERAL),
+      clientPrivate, clientFileLabel(GENERAL),
       { scheme: 'enk', iv: sealed.encIv, wrapped: sealed.encWrapped }, sealed.bytes,
     )).rejects.toBeTruthy()
   })
 
-  it('refuses an object replayed into another organization', async () => {
-    const sealed = await sealObjectBytes(serverKeys, ORG, GENERAL, PDF)
-    await expect(openBytes(
-      clientGeneral, 'org-beta', clientFileLabel(GENERAL),
-      { scheme: 'enc', iv: sealed.encIv }, sealed.bytes,
-    )).rejects.toBeTruthy()
-  })
 
   it('refuses a medical object to a reader holding only the general key', async () => {
-    const sealed = await sealObjectBytes(serverKeys, ORG, MEDICAL, PDF)
+    const sealed = await sealObjectBytes(serverKeys, MEDICAL, PDF)
     await expect(openBytes(
-      clientGeneral, ORG, clientFileLabel(MEDICAL),
+      clientGeneral, clientFileLabel(MEDICAL),
       { scheme: 'enk', iv: sealed.encIv, wrapped: sealed.encWrapped }, sealed.bytes,
     )).rejects.toBeTruthy()
   })
@@ -190,24 +183,17 @@ describe('what the binding refuses', () => {
 
 describe('sealedPath', () => {
   it('is deterministic, so an interrupted run resumes instead of duplicating', () => {
-    const once = sealedPath('orgs/org-alpha/incident-photos/ab12-x.jpg', ORG)
-    expect(once).toBe(`orgs/org-alpha/incident-photos/ab12-x.jpg${SEALED_SUFFIX}`)
-    expect(sealedPath(once, ORG)).toBe(once)
+    const once = sealedPath('files/incident-photos/ab12-x.jpg')
+    expect(once).toBe(`files/incident-photos/ab12-x.jpg${SEALED_SUFFIX}`)
+    expect(sealedPath(once)).toBe(once)
   })
 
-  it('refuses another tenant’s object', () => {
-    // `path` is client-writable and this runs with Admin privileges that never
-    // consult storage.rules — a pointer naming another tenant would otherwise
-    // have this job copy that object here and delete the original.
-    expect(sealedPath('orgs/org-beta/incident-photos/x.jpg', ORG)).toBe(null)
-  })
 
   it('refuses traversal and malformed paths', () => {
-    expect(sealedPath('orgs/org-alpha/../org-beta/k/x.jpg', ORG)).toBe(null)
-    expect(sealedPath('orgs/org-alpha/x.jpg', ORG)).toBe(null)       // too few segments
-    expect(sealedPath('orgs/org-alpha/k/sub/x.jpg', ORG)).toBe(null) // too many
-    expect(sealedPath('', ORG)).toBe(null)
-    expect(sealedPath('orgs/org-alpha/k/x.jpg', '')).toBe(null)
+    expect(sealedPath('files/../other/k/x.jpg')).toBe(null)
+    expect(sealedPath('files/x.jpg')).toBe(null)       // too few segments
+    expect(sealedPath('files/k/sub/x.jpg')).toBe(null) // too many
+    expect(sealedPath('')).toBe(null)
   })
 })
 
@@ -215,8 +201,8 @@ describe('needsObjectSealing', () => {
   it('agrees with the client about what counts as sealed', () => {
     // isSealedFile() on the client tests encIv, so anything the app treats as
     // sealed is skipped here by construction.
-    expect(needsObjectSealing({ path: 'orgs/a/k/x.jpg' })).toBe(true)
-    expect(needsObjectSealing({ path: 'orgs/a/k/x.jpg', encIv: 'AAAAAAAAAAAAAAAA' })).toBe(false)
+    expect(needsObjectSealing({ path: 'files/k/x.jpg' })).toBe(true)
+    expect(needsObjectSealing({ path: 'files/k/x.jpg', encIv: 'AAAAAAAAAAAAAAAA' })).toBe(false)
   })
 
   it('skips the inline fallback, which the FIELD policy owns', () => {

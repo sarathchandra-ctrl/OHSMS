@@ -29,7 +29,7 @@ const CFG = {
 }
 
 export default function AssetBulkUpload() {
-  const { orgId, orgName, profile } = useAuth()
+  const { orgName, profile } = useAuth()
   const location = useLocation()
   const inputRef = useRef(null)
   // Anything the caller does not name falls back to AED. A ternary on 'fas'
@@ -120,7 +120,7 @@ export default function AssetBulkUpload() {
       const rows = ready.map(({ row, site }) => (site
         ? { ...row, centerName: site.name, siteId: site.id, entity: site.entity || row.entity || '' }
         : row))
-      const res = await cfg.add(orgId, orgName, rows, { uid: profile?.uid, name: profile?.name })
+      const res = await cfg.add(orgName, rows, { uid: profile?.uid, name: profile?.name })
       reset(); setDone(res)
       toast.success(`${res.created} ${cfg.label} added`)
     } catch (e) { toastCaught(e, 'Could not import', { action: 'import these assets' }) } finally { setCommitting(false) }

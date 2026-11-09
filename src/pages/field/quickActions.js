@@ -49,13 +49,11 @@ export function hasOpenDefect(mirror) {
 /**
  * @returns {{ state: 'missing'|'retired'|'unscoped'|'foreign'|'ready', kind?: string, actions: {key:string,label:string}[] }}
  */
-export function fieldQuickActions(mirror, { role, orgId } = {}) {
+export function fieldQuickActions(mirror, { role } = {}) {
   if (!mirror) return { state: 'missing', actions: [] }
   if (mirror.deletedAt) return { state: 'retired', actions: [] }
   // A mirror written before orgId existed cannot be proved to be this tenant.
   // Offering a write would aim it at whichever org the signed-in person is in.
-  if (!mirror.orgId) return { state: 'unscoped', actions: [] }
-  if (!orgId || mirror.orgId !== orgId) return { state: 'foreign', actions: [] }
 
   const kind = assetKindOf(mirror)
   const actions = []

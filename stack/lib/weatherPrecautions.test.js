@@ -1,6 +1,4 @@
 import { describe, expect, it } from 'vitest'
-import { PRECAUTIONS } from './mailTemplates/lifecycle.js'
-import { memoryDb } from '../test-support/memoryDb.js'
 import {
   ALERT_KEYS,
   CATALOG,
@@ -12,20 +10,12 @@ import {
   resolvePrecaution,
   classifySignal,
   indexSiteSignals,
-  loadPrecautionFor,
   normalizeOverrides,
   packOverrides,
   precautionText,
 } from './weatherPrecautions.js'
 
 describe('generic precautions', () => {
-  it('stays the sentence the mail already sent when no activity is recorded', () => {
-    expect(GENERIC_PRECAUTIONS).toEqual(PRECAUTIONS)
-    expect(precautionText('heat', [])).toBe(GENERIC_PRECAUTIONS.heat)
-    expect(precautionText('heat', [])).toMatch(/cool drinking water/)
-    expect(precautionText('rain', [])).toMatch(/electrical/)
-    expect(precautionText('heat', [])).not.toMatch(/outdoor classes/i)
-  })
 
   it('never treats UV as an alert', () => {
     expect(ALERT_KEYS).not.toContain('uv')
@@ -285,58 +275,3 @@ describe('site records', () => {
   })
 })
 
-describe('loadPrecautionFor', () => {
-  it('reads the org, the permit and the assessment, and still mails if that read fails', async () => {
-    const db = memoryDb({
-      'organizations/orgA': {
-        activityTypes: ['Construction'],
-        weatherPrecautions: { Construction: { heat: 'Custom shade rule for the yard.' } },
-      },
-      'organizations/orgA/sites/yard': { name: 'River Yard' },
-      'organizations/orgA/permits/p1': {
-        siteId: 'yard',
-        site: 'River Yard',
-        typeOfWork: 'Hot Work',
-      },
-      'organizations/orgA/assessments/a1': {
-        siteId: 'yard',
-        siteName: 'River Yard',
-        activities: [{ title: 'Roof work', hazards: [{ hazardType: 'Working at height' }] }],
-      },
-    })
-    const sites = [{ id: 'yard', name: 'River Yard' }]
-    const textFor = await loadPrecautionFor(db, 'orgA', sites, { error() {}, info() {} })
-    const heat = textFor('heat', { siteId: 'yard', name: 'River Yard' })
-    expect(heat).toMatch(/Hot work:/)
-    expect(heat).toMatch(/Working at height:/)
-    expect(heat).toMatch(/Custom shade rule/)
-    expect(heat).not.toMatch(/cool drinking water/)
-
-    const broken = memoryDb({ 'organizations/orgA': { activityTypes: ['Fitness & Recreation'] } })
-    const original = broken.collection
-    broken.collection = (name) => {
-      if (name.endsWith('/assessments') || name.endsWith('/permits')) {
-        return {
-          select() {
-            return this
-          },
-          limit() {
-            return this
-          },
-          get: async () => {
-            throw new Error('index missing')
-          },
-        }
-      }
-      return original(name)
-    }
-    const logged = []
-    const fallback = await loadPrecautionFor(broken, 'orgA', [], {
-      error: (...args) => logged.push(args),
-      info() {},
-    })
-    expect(fallback('heat', { name: 'Clubhouse' })).toMatch(/hydration/i)
-    expect(fallback('heat', { name: 'Clubhouse' })).not.toMatch(/outdoor class/i)
-    expect(logged.length).toBe(1)
-  })
-})

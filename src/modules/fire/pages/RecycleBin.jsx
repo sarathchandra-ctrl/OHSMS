@@ -37,8 +37,8 @@ const KINDS = {
     code: (r) => r.serialNo || '—',
     detail: (r) => [r.type, r.capacity].filter(Boolean).join(' · '),
     restore: restoreExtinguishers,
-    purge: (orgId, row, actor) =>
-      purgeExtinguisher(orgId, row.id, row.qrToken, actor, row.serialNo || row.type),
+    purge: (row, actor) =>
+      purgeExtinguisher(row.id, row.qrToken, actor, row.serialNo || row.type),
   },
   aed: {
     label: 'AED',
@@ -46,7 +46,7 @@ const KINDS = {
     code: (r) => r.assetId || '—',
     detail: (r) => [r.brand, r.model].filter(Boolean).join(' · '),
     restore: restoreAeds,
-    purge: (orgId, row, actor) => purgeAed(orgId, row.id, row.qrToken, actor, row.assetId),
+    purge: (row, actor) => purgeAed(row.id, row.qrToken, actor, row.assetId),
   },
   fas: {
     label: 'Fire alarm',
@@ -54,8 +54,8 @@ const KINDS = {
     code: (r) => r.deviceId || r.deviceType || '—',
     detail: (r) => (r.deviceType && r.deviceId ? r.deviceType : ''),
     restore: restoreFasMany,
-    purge: (orgId, row, actor) =>
-      purgeFas(orgId, row.id, row.qrToken, actor, row.deviceId || row.deviceType),
+    purge: (row, actor) =>
+      purgeFas(row.id, row.qrToken, actor, row.deviceId || row.deviceType),
   },
 }
 
@@ -64,7 +64,7 @@ const keyOf = (row) => `${row.kind}:${row.id}`
 export default function RecycleBin() {
   const { deletedExtinguishers, deletedAeds, deletedFas, extinguishers, reports, users, org } =
     useFleet()
-  const { orgId, orgName, profile, isAdmin, isManager } = useAuth()
+  const { orgName, profile, isAdmin, isManager } = useAuth()
   const actor = { uid: profile?.uid, name: profile?.name }
   const [selected, setSelected] = useState(new Set())
   const [query, setQuery] = useState('')
@@ -130,7 +130,7 @@ export default function RecycleBin() {
     try {
       for (const kind of Object.keys(KINDS)) {
         const ids = chosen.filter((r) => r.kind === kind).map((r) => r.id)
-        if (ids.length) await KINDS[kind].restore(orgId, org?.name || orgName, ids, actor)
+        if (ids.length) await KINDS[kind].restore(org?.name || orgName, ids, actor)
       }
       toast.success(chosen.length === 1 ? 'Restored' : `Restored ${chosen.length}`)
       setSelected((prev) => {
@@ -149,7 +149,7 @@ export default function RecycleBin() {
     if (!purgeFor) return
     setBusy(true)
     try {
-      await KINDS[purgeFor.kind].purge(orgId, purgeFor, actor)
+      await KINDS[purgeFor.kind].purge(purgeFor, actor)
       toast.success('Permanently deleted')
       setPurgeFor(null)
       setSelected((prev) => {

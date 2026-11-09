@@ -210,7 +210,7 @@ const greeting = (d = new Date()) => {
 }
 
 export default function PortalHome() {
-  const { orgId, profile, isAdmin, moduleMap } = useAuth()
+  const { profile, isAdmin, moduleMap } = useAuth()
   // The grid shows what this organization actually has. A tile leading to a
   // route that refuses to open is worse than no tile at all.
   const modules = useMemo(() => enabledModules(moduleMap), [moduleMap])
@@ -229,23 +229,22 @@ export default function PortalHome() {
   )
 
   useEffect(() => {
-    if (!orgId) return undefined
     setStore(emptyCollections(COLLECTIONS))
     setAssignments({ rows: [], status: 'pending' })
     setUsers({ rows: [], status: 'pending' })
     setActions([])
     setActionsStatus(Object.fromEntries(ACTION_COLLECTIONS.map((n) => [n, 'pending'])))
     const unsubs = [
-      subscribeCollections(orgId, COLLECTIONS, setStore),
-      subscribeAssignmentsRead(orgId, setAssignments),
-      subscribeOrgUsersRead(orgId, setUsers),
-      subscribeActions(orgId, ({ rows, status }) => {
+      subscribeCollections(COLLECTIONS, setStore),
+      subscribeAssignmentsRead(setAssignments),
+      subscribeOrgUsersRead(setUsers),
+      subscribeActions(({ rows, status }) => {
         setActions(rows)
         setActionsStatus(status)
       }),
     ]
     return () => unsubs.forEach((u) => u && u())
-  }, [orgId])
+  }, [])
 
   const {
     extinguishers,

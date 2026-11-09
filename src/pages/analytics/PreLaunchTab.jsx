@@ -74,7 +74,7 @@ function ProgressRow({ name, sub, ready, total, pct }) {
   )
 }
 
-export default function PreLaunchTab({ sites = [], orgId }) {
+export default function PreLaunchTab({ sites = [] }) {
   const { role } = useAuth()
   const [docs, setDocs] = useState(null) // null = still loading
   // A capped or failed read makes every figure on this tab too LOW, and too low
@@ -86,14 +86,12 @@ export default function PreLaunchTab({ sites = [], orgId }) {
   const viewer = useMemo(() => ({ role, sites }), [role, sites])
 
   useEffect(() => {
-    if (!orgId) return undefined
     setDocs(null)
     return documentsService.subscribe(
-      orgId,
       (rows, notice) => { setDocs(rows); setIncomplete(notice) },
       viewer
     )
-  }, [orgId, viewer])
+  }, [viewer])
 
   const opts = useMemo(() => prelaunchFacets(sites), [sites])
   const a = useMemo(() => prelaunchAnalytics(docs || [], sites, f), [docs, sites, f])

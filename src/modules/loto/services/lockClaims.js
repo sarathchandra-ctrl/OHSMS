@@ -49,16 +49,14 @@ export const CLAIMS_COL = 'lockClaims'
  * unchanged, which keeps the id readable to whoever is reading the database
  * after an incident.
  *
- * The '__' separator survives it: the rules compare only the FIRST segment
- * against the payload's orgId, and an orgId is a Firestore auto-id
- * ([A-Za-z0-9]{20}) that can never contain one.
+ * The fixed 'org__' prefix is kept so ids read the same as they always did.
  */
-export function claimId(orgId, lockNo) {
-  return `${orgId}__${encodeURIComponent(String(lockNo))}`
+export function claimId(lockNo) {
+  return `org__${encodeURIComponent(String(lockNo))}`
 }
 
-export function claimRef(orgId, lockNo) {
-  return doc(db, CLAIMS_COL, claimId(orgId, lockNo))
+export function claimRef(lockNo) {
+  return doc(db, CLAIMS_COL, claimId(lockNo))
 }
 
 /**
@@ -87,10 +85,10 @@ export function normaliseLockNos(values) {
  * a loop is one less thing to be clever about inside the only transaction in
  * this app whose failure mode is physical.
  */
-export async function readClaims(tx, orgId, lockNos) {
+export async function readClaims(tx, lockNos) {
   const held = []
   for (const lockNo of normaliseLockNos(lockNos)) {
-    const snap = await tx.get(claimRef(orgId, lockNo))
+    const snap = await tx.get(claimRef(lockNo))
     held.push({ lockNo, exists: snap.exists(), data: snap.exists() ? snap.data() : null })
   }
   return held
@@ -142,10 +140,9 @@ export function assertClaimsFree(held, procedureId) {
  * the machine nothing about which lock or where it is.
  */
 export function takeClaims(writer, context, lockNos) {
-  const { orgId, procedureId } = context
+  const { procedureId } = context
   for (const lockNo of normaliseLockNos(lockNos)) {
-    writer.set(claimRef(orgId, lockNo), {
-      orgId,
+    writer.set(claimRef(lockNo), {
       lockNo,
       procedureId,
       procedureCode: context.procedureCode || '',
@@ -170,9 +167,9 @@ export function takeClaims(writer, context, lockNos) {
  * a physical lock because its bookkeeping is missing would be the failure this
  * whole file is trying to prevent, pointed the other way.
  */
-export function releaseClaims(writer, orgId, lockNos) {
+export function releaseClaims(writer, lockNos) {
   for (const lockNo of normaliseLockNos(lockNos)) {
-    writer.delete(claimRef(orgId, lockNo))
+    writer.delete(claimRef(lockNo))
   }
 }
 
@@ -215,9 +212,9 @@ export function lockNosHeldBy(procedure) {
  * `dryRun` reports without writing, because the honest thing before a bulk
  * write is to say what it will touch.
  */
-export async function backfillLockClaims(orgId, { dryRun = true, max = COLLECTION_READ_CAP } = {}) {
+export async function backfillLockClaims({ dryRun = true, max = COLLECTION_READ_CAP } = {}) {
   const snap = await getDocs(
-    query(collection(db, 'procedures'), where('orgId', '==', orgId), limit(max)),
+    query(collection(db, 'procedures'), limit(max)),
   )
   const procedures = snap.docs.map((d) => ({ id: d.id, ...d.data() }))
 
@@ -232,7 +229,7 @@ export async function backfillLockClaims(orgId, { dryRun = true, max = COLLECTIO
   const missing = []
   const clashes = []
   for (const w of wanted) {
-    const existing = await getDoc(claimRef(orgId, w.lockNo))
+    const existing = await getDoc(claimRef(w.lockNo))
     if (!existing.exists()) missing.push(w)
     else if (existing.data()?.procedureId === w.procedure.id) present += 1
     else clashes.push(`${w.lockNo} — claimed by ${existing.data()?.equipment || existing.data()?.procedureId}, also recorded on ${w.procedure.equipment || w.procedure.id}`)
@@ -258,7 +255,6 @@ export async function backfillLockClaims(orgId, { dryRun = true, max = COLLECTIO
       takeClaims(
         batch,
         {
-          orgId,
           procedureId: m.procedure.id,
           procedureCode: m.procedure.procedureCode,
           equipment: m.procedure.equipment,

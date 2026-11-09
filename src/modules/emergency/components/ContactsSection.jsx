@@ -108,7 +108,7 @@ function ContactRow({ c, tone, isManager, onEdit, onDelete, roleLabels }) {
  */
 export default function ContactsSection({ site, contacts, users }) {
   const roleLabels = useErpRoleLabels()
-  const { orgId, actor, isManager } = useAuth()
+  const { actor, isManager } = useAuth()
   const [editing, setEditing] = useState(null) // 'new' | contact | null
   const [form, setForm] = useState(EMPTY)
   const [busy, setBusy] = useState(false)
@@ -175,10 +175,10 @@ export default function ContactsSection({ site, contacts, users }) {
         distanceKm: nameChanged ? null : (editing?.distanceKm ?? null),
       }
       if (editing === 'new') {
-        await addContact(orgId, payload, actor)
+        await addContact(payload, actor)
         toast.success('Contact added')
       } else {
-        await updateContact(orgId, editing.id, payload, actor)
+        await updateContact(editing.id, payload, actor)
         toast.success('Contact updated')
       }
       setEditing(null)
@@ -192,7 +192,7 @@ export default function ContactsSection({ site, contacts, users }) {
   const remove = async (c) => {
     if (!window.confirm(`Remove ${c.role} contact "${c.name}"?`)) return
     try {
-      await deleteContact(orgId, c.id, actor, `${c.role} · ${c.name}`)
+      await deleteContact(c.id, actor, `${c.role} · ${c.name}`)
       toast.success('Contact removed')
     } catch (err) {
       toastCaught(err, 'Failed')
@@ -221,7 +221,6 @@ export default function ContactsSection({ site, contacts, users }) {
     setAutoBusy(true)
     try {
       const { added, updated, skipped, withoutNumber } = await autofillSite(
-        orgId,
         site,
         contacts,
         actor,

@@ -70,7 +70,7 @@ export function AuthProvider({ children }) {
       setOrg(null)
       return undefined
     }
-    return subscribeOrg(setOrg)
+    return subscribeOrg()
   }, [approved])
 
   // Only an APPROVED member may read the setting, so a pending or disabled
@@ -82,10 +82,7 @@ export function AuthProvider({ children }) {
       return undefined
     }
     setModulesReady(false)
-    return subscribeEntitlement((map) => {
-      setModuleMap(map)
-      setModulesReady(true)
-    })
+    return subscribeEntitlement()
   }, [approved])
 
   /** @returns {{ status: 'signed-in' | 'redirecting', user? }} */

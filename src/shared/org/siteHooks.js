@@ -41,12 +41,12 @@ export function onSiteCreated(name, fn) {
  * Hooks run in parallel and are independent: one module failing must not stop
  * another from running, and neither may reach the caller.
  */
-export async function notifySiteCreated(orgId, sites = [], actor) {
-  if (!orgId || !sites.length || hooks.size === 0) return
+export async function notifySiteCreated(sites = [], actor) {
+  if (!sites.length || hooks.size === 0) return
   await Promise.all(
     [...hooks.entries()].map(async ([name, fn]) => {
       try {
-        await fn(orgId, sites, actor)
+        await fn(sites, actor)
       } catch (e) {
         // eslint-disable-next-line no-console
         console.warn(`[site hook: ${name}] failed, site creation is unaffected:`, e?.message || e)

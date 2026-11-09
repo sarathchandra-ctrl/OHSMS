@@ -112,8 +112,8 @@ export function safeFileName(name) {
  * This layout is backend-neutral on purpose: on S3 the same `orgs/<orgId>/…`
  * prefix is what the presign endpoint authorises against.
  */
-export function storagePath(orgId, kind, fileName, rand = defaultRand) {
-  if (!orgId || !kind) throw new Error('storagePath needs an orgId and a kind')
+export function storagePath(kind, fileName, rand = defaultRand) {
+  if (!kind) throw new Error('storagePath needs a kind')
   // Every segment is sanitised, not only the filename. orgId is a Firestore
   // auto-id and kind a literal today, but a path builder that trusts its inputs
   // is one refactor away from a traversal — and the org segment is what the
@@ -123,7 +123,7 @@ export function storagePath(orgId, kind, fileName, rand = defaultRand) {
     if (!/[A-Za-z0-9]/.test(s)) throw new Error('storagePath segment carries no information')
     return s
   }
-  return `orgs/${seg(orgId)}/${seg(kind)}/${rand()}-${safeFileName(fileName)}`
+  return `files/${seg(kind)}/${rand()}-${safeFileName(fileName)}`
 }
 
 function defaultRand() {
@@ -156,7 +156,7 @@ export function dataUrlToBlob(dataUrl) {
  * `{ url, path, size, contentType, name }` — or null, meaning "store it the
  * old way instead".
  */
-export async function putFile(orgId, kind, file, fileName, { collection } = {}) {
+export async function putFile(kind, file, fileName, { collection } = {}) {
   try {
     const blob = typeof file === 'string' ? dataUrlToBlob(file) : file
     if (!blob) return null
@@ -199,7 +199,7 @@ export async function putFile(orgId, kind, file, fileName, { collection } = {}) 
     const adapter = await loadAdapter()
     if (!adapter) return null
     const name = safeFileName(fileName || file?.name)
-    const path = storagePath(orgId, kind, name)
+    const path = storagePath(kind, name)
 
     // Sealing is opt-in per collection (shared/crypto/policy.js) and returns the
     // bytes untouched with meta:null for everything else, so the common path is
@@ -209,7 +209,6 @@ export async function putFile(orgId, kind, file, fileName, { collection } = {}) 
     // collection the POINTER lives in ('injuries/records'). Guessing one from
     // the other is how a file ends up sealed under the wrong class.
     const { bytes, meta } = await sealFileBytes(
-      orgId,
       collection,
       new Uint8Array(await blob.arrayBuffer())
     )
@@ -287,7 +286,7 @@ export async function removeFile(path) {
  * URL pins its blob in memory until it is released, and a gallery that forgets
  * leaks every photo the user scrolls past.
  */
-export async function fileUrl(record, { orgId, collection } = {}) {
+export async function fileUrl(record, { collection } = {}) {
   const stored = typeof record === 'string' ? null : record?.url || null
   const path = typeof record === 'string' ? record : record?.path || null
   if (!path) return { url: stored, revoke: () => {} }
@@ -305,7 +304,6 @@ export async function fileUrl(record, { orgId, collection } = {}) {
       const blob = adapter?.resolveBlob ? await adapter.resolveBlob(path) : null
       if (!blob) return { url: null, revoke: () => {}, restricted: true }
       const plain = await openFileBytes(
-        orgId,
         collection,
         record,
         new Uint8Array(await blob.arrayBuffer())

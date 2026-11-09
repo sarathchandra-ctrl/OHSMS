@@ -25,9 +25,9 @@ import { isPermissionDenied } from '../../../shared/lib/permissionDenied'
 import { reserveDocId, reserveDocIds } from '../../../shared/docId/reserve'
 
 // ── Path helpers ─────────────────────────────────────────────────────────────
-const orgRef = (orgId) => doc(db, 'organizations', orgId)
-const assessmentCol = (orgId) => collection(db, 'organizations', orgId, 'assessments')
-const assessmentRef = (orgId, id) => doc(db, 'organizations', orgId, 'assessments', id)
+const orgRef = () => doc(db, 'organization', 'profile')
+const assessmentCol = () => collection(db, 'assessments')
+const assessmentRef = (id) => doc(db, 'assessments', id)
 
 // ── Organizations & users ─────────────────────────────────────────────────────
 
@@ -43,17 +43,16 @@ const onSnapErr = (label) => (err) => {
 export { subscribeOrgUsers } from '../../../shared/org/orgData'
 
 /** Live org document (name, address, sites, …). */
-export function subscribeOrg(orgId, cb, onError) {
-  return onSnapshot(orgRef(orgId), (snap) => cb(snap.exists() ? { id: snap.id, ...snap.data() } : null), onError || onSnapErr('org'))
+export function subscribeOrg(cb, onError) {
+  return onSnapshot(orgRef(), (snap) => cb(snap.exists() ? { id: snap.id, ...snap.data() } : null), onError || onSnapErr('org'))
 }
 
 // ── Activity log (append-only audit trail) ────────────────────────────────────
-const activityCol = (orgId) => collection(db, 'organizations', orgId, 'activity')
+const activityCol = () => collection(db, 'activity')
 
 /** Record a user action. Fire-and-forget — never blocks the main operation. */
-export function logActivity(orgId, actor, { type, message, assessmentId = null }) {
-  if (!orgId) return
-  addDoc(activityCol(orgId), {
+export function logActivity(actor, { type, message, assessmentId = null }) {
+  addDoc(activityCol(), {
     type: type || 'event',
     message: message || '',
     assessmentId,
@@ -66,8 +65,8 @@ export function logActivity(orgId, actor, { type, message, assessmentId = null }
   })
 }
 
-export function subscribeActivity(orgId, cb, onError, max = 50) {
-  const q = query(activityCol(orgId), orderBy('at', 'desc'), limit(max))
+export function subscribeActivity(cb, onError, max = 50) {
+  const q = query(activityCol(), orderBy('at', 'desc'), limit(max))
   return onSnapshot(q, (snap) => cb(snap.docs.map((d) => ({ id: d.id, ...d.data() }))), onError || onSnapErr('activity'))
 }
 
@@ -75,8 +74,8 @@ export function subscribeActivity(orgId, cb, onError, max = 50) {
 
 const ASSESSMENT_LOAD_CAP = 1000
 
-export function subscribeAssessments(orgId, cb, onError, max = ASSESSMENT_LOAD_CAP) {
-  const q = query(assessmentCol(orgId), orderBy('createdAt', 'desc'), limit(max))
+export function subscribeAssessments(cb, onError, max = ASSESSMENT_LOAD_CAP) {
+  const q = query(assessmentCol(), orderBy('createdAt', 'desc'), limit(max))
   return onSnapshot(q, (snap) => cb(snap.docs.map((d) => ({ id: d.id, ...d.data() }))), onError || onSnapErr('assessments'))
 }
 
@@ -93,10 +92,10 @@ function clean(value) {
   return value
 }
 
-export async function createAssessment(orgId, data, actor) {
-  const ref = await addDoc(assessmentCol(orgId), {
+export async function createAssessment(data, actor) {
+  const ref = await addDoc(assessmentCol(), {
     ...clean(data),
-    docId: await reserveDocId(orgId, 'hira'),
+    docId: await reserveDocId('hira'),
     createdBy: actor?.uid || null,
     createdByName: actor?.name || '',
     createdAt: serverTimestamp(),
@@ -105,8 +104,8 @@ export async function createAssessment(orgId, data, actor) {
   return ref.id
 }
 
-export async function updateAssessment(orgId, id, data) {
-  await updateDoc(assessmentRef(orgId, id), {
+export async function updateAssessment(id, data) {
+  await updateDoc(assessmentRef(id), {
     ...clean(data),
     updatedAt: serverTimestamp(),
   })
@@ -167,8 +166,8 @@ export function applyControlPatch(activities, locator, patch) {
  * than a replacement. It costs one document read per status change, which is
  * the price of not overwriting a colleague.
  */
-export async function patchAdditionalControl(orgId, id, locator, patch) {
-  const ref = assessmentRef(orgId, id)
+export async function patchAdditionalControl(id, locator, patch) {
+  const ref = assessmentRef(id)
   await runTransaction(db, async (tx) => {
     const snap = await tx.get(ref)
     if (!snap.exists()) throw new Error('That assessment no longer exists.')
@@ -179,13 +178,13 @@ export async function patchAdditionalControl(orgId, id, locator, patch) {
   })
 }
 
-export async function deleteAssessment(orgId, id) {
-  await deleteDoc(assessmentRef(orgId, id))
+export async function deleteAssessment(id) {
+  await deleteDoc(assessmentRef(id))
 }
 
 /** Bulk create assessments (from CSV import) in chunked batches. `kind` marks
  *  the imported rows as 'site' (normal) or 'baseline' (activity template). */
-export async function bulkCreateAssessments(orgId, list, actor, kind = 'site') {
+export async function bulkCreateAssessments(list, actor, kind = 'site') {
   // Every imported assessment gets a reference, exactly as createAssessment
   // gives one to every assessment raised through the form.
   //
@@ -195,13 +194,13 @@ export async function bulkCreateAssessments(orgId, list, actor, kind = 'site') {
   // bulk. One transaction for the whole import rather than one per row: two
   // hundred reservations against the same counter would each retry against the
   // last.
-  const ids = await reserveDocIds(orgId, 'hira', list.length)
+  const ids = await reserveDocIds('hira', list.length)
   let created = 0
   for (let i = 0; i < list.length; i += 200) {
     const chunk = list.slice(i, i + 200)
     const batch = writeBatch(db)
     chunk.forEach((data, j) => {
-      const ref = doc(assessmentCol(orgId))
+      const ref = doc(assessmentCol())
       batch.set(ref, {
         ...clean(data),
         docId: ids[i + j],

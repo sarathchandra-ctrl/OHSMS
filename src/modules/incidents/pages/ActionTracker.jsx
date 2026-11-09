@@ -13,7 +13,7 @@ import { ACTION_STATUS, ACTION_STATUS_BY_KEY } from '../lib/constants'
 
 export default function ActionTracker() {
   const { allActions } = useIncidents()
-  const { role, user, profile, orgId } = useAuth()
+  const { role, user, profile } = useAuth()
   const canManage = can(role, 'action.manage')
   const [status, setStatus] = useState('')
   const [mine, setMine] = useState(false)
@@ -40,7 +40,7 @@ export default function ActionTracker() {
   const changeStatus = async (action, newStatus) => {
     setBusyId(action.id)
     try {
-      await setActionStatus(orgId, action, newStatus, { uid: user.uid, name: profile.name })
+      await setActionStatus(action, newStatus, { uid: user.uid, name: profile.name })
       toast.success('Action updated')
     } catch (e) {
       toastCaught(e, 'Could not update')

@@ -12,9 +12,7 @@ export function useOrgProcedures() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    if (!profile?.orgId) return undefined
     const unsub = subscribeOrgProcedures(
-      profile.orgId,
       (items) => {
         setProcedures(items)
         setLoading(false)
@@ -22,7 +20,7 @@ export function useOrgProcedures() {
       () => setLoading(false),
     )
     return unsub
-  }, [profile?.orgId])
+  }, [])
 
   return { procedures, loading }
 }
@@ -34,9 +32,7 @@ export function useOrgEvents() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    if (!profile?.orgId) return undefined
     const unsub = subscribeOrgEvents(
-      profile.orgId,
       (items) => {
         setEvents(items)
         setLoading(false)
@@ -44,7 +40,7 @@ export function useOrgEvents() {
       () => setLoading(false),
     )
     return unsub
-  }, [profile?.orgId])
+  }, [])
 
   return { events, loading }
 }

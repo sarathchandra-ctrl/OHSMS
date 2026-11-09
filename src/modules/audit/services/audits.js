@@ -10,10 +10,10 @@ import { db } from '../../../shared/db'
 // auditFindings through services/auditModule.js. These `audits` documents are
 // still subscribed to by OrgDataContext, so the read stays; the unreachable
 // half was removed rather than left looking like a supported way in.
-const col = (orgId) => collection(db, 'organizations', orgId, 'audits')
+const col = () => collection(db, 'audits')
 
-export function subscribeAudits(orgId, callback) {
-  const q = query(col(orgId), orderBy('scheduledDate', 'asc'), limit(1000))
+export function subscribeAudits(callback) {
+  const q = query(col(), orderBy('scheduledDate', 'asc'), limit(1000))
   return onSnapshot(
     q,
     (snap) => callback(snap.docs.map((d) => ({ id: d.id, ...d.data() }))),

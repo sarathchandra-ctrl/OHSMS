@@ -44,7 +44,7 @@ function open(props = {}) {
       nodeId={ELECTRICAL_S1}
       tree={tree}
       sites={sites}
-      orgId="org1"
+     
       busy={false}
       onClose={() => {}}
       onSubmit={onSubmit}

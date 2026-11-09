@@ -107,7 +107,7 @@ function SamParts({ parts }) {
 const SUGGESTIONS = ['What is clause 5.4?', '8.2 emergency', 'How is our training compliance?', 'ISO map']
 
 export default function Sam() {
-  const { orgId, isApproved, profile } = useAuth()
+  const { isApproved, profile } = useAuth()
   const reduce = useReducedMotion()
   const [open, setOpen] = useState(false)
   const [pos, setPos] = useState(() => ({ x: maxX(), y: groundY() }))
@@ -193,7 +193,7 @@ export default function Sam() {
     setThinking(true)
     let stats = {}
     try {
-      stats = await getStats(orgId)
+      stats = await getStats()
     } catch {
       /* stats are optional */
     }

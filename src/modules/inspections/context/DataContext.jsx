@@ -14,7 +14,6 @@ const DataContext = createContext(null)
  *  the scheduled-task list for the current month and applies the active site
  *  filter to tasks + records so every consuming page is scoped consistently. */
 export function DataProvider({ children }) {
-  const { orgId } = useAuth()
   const [templates, setTemplates] = useState([])
   const [records, setRecords] = useState([])
   const [users, setUsers] = useState([])
@@ -25,19 +24,18 @@ export function DataProvider({ children }) {
   const [siteFilter, setSiteFilter] = useState('All')
 
   useEffect(() => {
-    if (!orgId) return
     setLoading(true)
     const unsubs = [
-      subscribeTemplates(orgId, (list) => {
+      subscribeTemplates((list) => {
         setTemplates(list.map((t) => ({ ...t, fields: normalizeTemplateFields(t.fields || []) })))
         setLoading(false)
       }),
-      subscribeRecords(orgId, setRecords),
-      subscribeOrgUsers(orgId, setUsers),
-      subscribeSites(orgId, setSites),
+      subscribeRecords(setRecords),
+      subscribeOrgUsers(setUsers),
+      subscribeSites(setSites),
     ]
     return () => unsubs.forEach((u) => u && u())
-  }, [orgId])
+  }, [])
 
   // If the selected site disappears (deleted), fall back to All.
   useEffect(() => {

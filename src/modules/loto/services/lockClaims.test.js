@@ -4,7 +4,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 // writer a ref, so a ref that simply records its path is enough to assert on —
 // and it keeps the padlock logic testable without an emulator, which matters
 // because this is the one control in the app whose failure mode is physical.
-vi.mock('firebase/firestore', () => ({
+vi.mock('../../../shared/data/client.js', () => ({
   collection: (_db, name) => ({ __col: name }),
   doc: (_db, col, id) => ({ __path: `${col}/${id}` }),
   getDoc: vi.fn(),
@@ -54,25 +54,25 @@ function txReading(existing) {
 
 describe('claimId', () => {
   it('puts the org first so the rules can pin the id to its payload', () => {
-    expect(claimId('org1', '12')).toBe('org1__12')
+    expect(claimId('12')).toBe('org1__12')
   })
 
   it('leaves an ordinary lock number readable', () => {
-    expect(claimId('org1', 'DEPT-045')).toBe('org1__DEPT-045')
+    expect(claimId('DEPT-045')).toBe('org1__DEPT-045')
   })
 
   it('escapes a slash rather than crashing on an illegal document id', () => {
     // A technician typing "12/A" would otherwise throw inside doc() and take
     // the lock down with it — refusing to apply a padlock over punctuation.
-    expect(claimId('org1', '12/A')).toBe('org1__12%2FA')
+    expect(claimId('12/A')).toBe('org1__12%2FA')
   })
 
   it('keeps the org recoverable as the first segment even when the lock has one', () => {
-    expect(claimId('org1', 'A__B').split('__')[0]).toBe('org1')
+    expect(claimId('A__B').split('__')[0]).toBe('org1')
   })
 
   it('accepts a number as readily as a string', () => {
-    expect(claimId('org1', 12)).toBe('org1__12')
+    expect(claimId(12)).toBe('org1__12')
   })
 })
 
@@ -151,13 +151,13 @@ describe('assertClaimsFree', () => {
 describe('readClaims', () => {
   it('reads one document per distinct lock number', async () => {
     const tx = txReading({})
-    await readClaims(tx, 'org1', ['12', '12', '13'])
+    await readClaims(tx, ['12', '12', '13'])
     expect(tx.reads).toEqual(['lockClaims/org1__12', 'lockClaims/org1__13'])
   })
 
   it('reports which are held and by whom', async () => {
     const tx = txReading({ 'lockClaims/org1__12': { procedureId: 'p2', equipment: 'Press 4' } })
-    const held = await readClaims(tx, 'org1', ['12', '13'])
+    const held = await readClaims(tx, ['12', '13'])
     expect(held).toEqual([
       { lockNo: '12', exists: true, data: { procedureId: 'p2', equipment: 'Press 4' } },
       { lockNo: '13', exists: false, data: null },
@@ -166,7 +166,7 @@ describe('readClaims', () => {
 
   it('reads nothing when there is nothing to claim', async () => {
     const tx = txReading({})
-    expect(await readClaims(tx, 'org1', [])).toEqual([])
+    expect(await readClaims(tx, [])).toEqual([])
     expect(tx.reads).toEqual([])
   })
 })
@@ -176,20 +176,20 @@ describe('takeClaims', () => {
   beforeEach(() => { writer = recorder() })
 
   it('writes one claim per lock, at the id that carries the number', () => {
-    takeClaims(writer, { orgId: 'org1', procedureId: 'p1' }, ['12', '13'])
+    takeClaims(writer, { procedureId: 'p1' }, ['12', '13'])
     expect(writer.sets.map((s) => s.path)).toEqual(['lockClaims/org1__12', 'lockClaims/org1__13'])
   })
 
   it('carries the org in the payload as well as the id, which the rules compare', () => {
-    takeClaims(writer, { orgId: 'org1', procedureId: 'p1' }, ['12'])
-    expect(writer.sets[0].data.orgId).toBe('org1')
+    takeClaims(writer, { procedureId: 'p1' }, ['12'])
+    expect().toBe('org1')
     expect(writer.sets[0].path.split('__')[0]).toBe('lockClaims/org1')
   })
 
   it('records where to go and look for the padlock', () => {
     takeClaims(
       writer,
-      { orgId: 'org1', procedureId: 'p1', equipment: 'Pump P-101', pointKey: 'pt-1', techName: 'R. Nair' },
+      { procedureId: 'p1', equipment: 'Pump P-101', pointKey: 'pt-1', techName: 'R. Nair' },
       ['12'],
     )
     expect(writer.sets[0].data).toMatchObject({
@@ -203,7 +203,7 @@ describe('takeClaims', () => {
   })
 
   it('writes nothing for an empty list', () => {
-    takeClaims(writer, { orgId: 'org1', procedureId: 'p1' }, [])
+    takeClaims(writer, { procedureId: 'p1' }, [])
     expect(writer.sets).toEqual([])
   })
 })
@@ -211,7 +211,7 @@ describe('takeClaims', () => {
 describe('releaseClaims', () => {
   it('deletes one document per lock', () => {
     const writer = recorder()
-    releaseClaims(writer, 'org1', ['12', '13'])
+    releaseClaims(writer, ['12', '13'])
     expect(writer.deletes).toEqual(['lockClaims/org1__12', 'lockClaims/org1__13'])
   })
 
@@ -220,7 +220,7 @@ describe('releaseClaims', () => {
     // to record its removal because the bookkeeping is absent would be this
     // file's own failure, pointed the other way.
     const writer = recorder()
-    releaseClaims(writer, 'org1', [null, '', undefined])
+    releaseClaims(writer, [null, '', undefined])
     expect(writer.deletes).toEqual([])
   })
 })

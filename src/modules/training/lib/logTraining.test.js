@@ -22,7 +22,7 @@ function makeBatch() {
   }
 }
 
-vi.mock('firebase/firestore', () => ({
+vi.mock('../../../shared/data/client.js', () => ({
   collection: (_db, ...p) => ({ path: p.join('/') }),
   doc: (...a) => ({ path: a.length > 1 ? a.slice(1).join('/') : 'auto' }),
   addDoc: vi.fn(async () => ({ id: 'x' })),
@@ -54,7 +54,7 @@ const assignments = (n) => Array.from({ length: n }, (_, i) => ({
 }))
 
 const run = (employees, open = []) =>
-  logTraining('org1', { course, employees, trainerName: 'T', completedOn: '2026-09-04', scope: {}, notes: '' },
+  logTraining({ course, employees, trainerName: 'T', completedOn: '2026-09-04', scope: {}, notes: '' },
     { uid: 'admin', name: 'Admin' }, open)
 
 beforeEach(() => { commits.length = 0; commitShouldFail = null })

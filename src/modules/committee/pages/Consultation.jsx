@@ -181,7 +181,7 @@ const MeetingDetailModal = ({ meeting, siteLabel, onClose, onUpdateStatus, onPri
 // ==========================================
 export default function Consultation() {
     const location = useLocation();
-    const { profile, orgId, isAdmin, org } = useAuth();
+    const { profile, isAdmin, org } = useAuth();
 
     // Whether the HSE Committee scope config still includes a Site level. When an
     // admin removes Site from this module's granularity, meetings become org-level
@@ -192,9 +192,8 @@ export default function Consultation() {
 
     // Session-like object derived from the auth profile (keeps existing references working).
     const session = useMemo(() => (profile ? {
-        name: profile.name, email: profile.email, role: profile.role, orgId,
-        department: profile.department, dept: profile.dept,
-    } : null), [profile, orgId]);
+        name: profile.name, email: profile.email, role: profile.role, department: profile.department, dept: profile.dept,
+    } : null), [profile]);
 
     // RBAC: every approved member can create/edit meetings (and CAPA actions);
     // deleting a whole meeting record stays admin-only.
@@ -256,20 +255,17 @@ export default function Consultation() {
 
     // Live org data: sites, approved users and consultation records.
     useEffect(() => {
-        if (!orgId) { setIsLoading(false); return undefined; }
         const done = () => setIsLoading(false);
         // Never get stuck on the loader — always show the dashboard once auth is ready,
         // even if a listener is slow or a read is denied (it just renders empty then).
         const safety = setTimeout(done, 5000);
-        const unsubSites = subscribeSites(orgId, (list) => setSites(list), () => {});
-        const unsubUsers = subscribeOrgUsers(orgId,
-            (list) => setUsers(list.filter(u => u.status === 'approved').map(u => ({ id: u.uid, ...u }))),
+        const unsubSites = subscribeSites((list) => setSites(list), () => {});
+        const unsubUsers = subscribeOrgUsers((list) => setUsers(list.filter(u => u.status === 'approved').map(u => ({ id: u.uid, ...u }))),
             () => {});
-        const unsubMeetings = subscribeConsultations(orgId,
-            (list) => { setMeetings([...list].sort((a, b) => (toISODate(b.date) || '').localeCompare(toISODate(a.date) || ''))); done(); },
+        const unsubMeetings = subscribeConsultations((list) => { setMeetings([...list].sort((a, b) => (toISODate(b.date) || '').localeCompare(toISODate(a.date) || ''))); done(); },
             () => done());
         return () => { clearTimeout(safety); unsubSites(); unsubUsers(); unsubMeetings(); };
-    }, [orgId]);
+    }, []);
 
     // ==========================================
     // 4. STRICT ROW-LEVEL SECURITY (RLS)
@@ -466,11 +462,11 @@ export default function Consultation() {
                 // Reserve a real one instead. Only on the update path:
                 // addConsultation reserves its own after spreading the payload,
                 // so anything sent on a create was discarded anyway.
-                payload.docId = formData.docId || await reserveDocId(orgId, 'committee');
-                await updateConsultation(orgId, firebaseKey, payload);
+                payload.docId = formData.docId || await reserveDocId('committee');
+                await updateConsultation(firebaseKey, payload);
             } else {
                 delete payload.docId;
-                await addConsultation(orgId, payload);
+                await addConsultation(payload);
             }
             toast.success("Record saved successfully!");
             // The onSnapshot subscription refreshes the list automatically.
@@ -489,7 +485,7 @@ export default function Consultation() {
                     <button
                         onClick={async () => {
                             toast.dismiss(t.id);
-                            try { await deleteConsultation(orgId, key); toast.success("Record deleted"); }
+                            try { await deleteConsultation(key); toast.success("Record deleted"); }
                             catch (e) { toastCaught(e, 'Delete failed') }
                         }}
                         className="px-3 py-1.5 rounded-lg text-xs font-bold bg-red-600 text-white hover:bg-red-500 transition-colors"
@@ -519,7 +515,7 @@ export default function Consultation() {
         // the write failed.
         const updatedActions = meeting.actions.map((a, x) =>
             (x === idx ? { ...a, status: newStatus } : a));
-        await updateConsultation(orgId, key, { actions: updatedActions });
+        await updateConsultation(key, { actions: updatedActions });
         setMeetings(meetings.map(m => m.firebaseKey === key ? { ...m, actions: updatedActions } : m));
 
         if (formData && formData.firebaseKey === key) {

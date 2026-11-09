@@ -62,14 +62,12 @@ export default function NewPermit() {
   const [newNos, setNewNos] = useState({})
 
   useEffect(() => {
-    if (!profile?.orgId) return undefined
-    return subscribeOrgUsers(profile.orgId, setUsers)
-  }, [profile?.orgId])
+    return subscribeOrgUsers(setUsers)
+  }, [])
 
   useEffect(() => {
-    if (!profile?.orgId) return undefined
-    return subscribeShiftSettings(profile.orgId, setShiftSettings)
-  }, [profile?.orgId])
+    return subscribeShiftSettings(setShiftSettings)
+  }, [])
 
   const needsEquipment = requiresEquipment(workType)
   const equipment = useMemo(() => equipmentOptions(procedures), [procedures])
@@ -202,8 +200,8 @@ export default function NewPermit() {
     if (Object.keys(errors).length) return toast.error('Fix the highlighted fields first')
     setSaving(true)
     try {
-      const permit = buildPermit({ orgId: profile.orgId, user: profile, draft, snapshot })
-      const no = await createPermit({ orgId: profile.orgId, user: profile, permit, inlineLocks: plan.inline })
+      const permit = buildPermit({ user: profile, draft, snapshot })
+      const no = await createPermit({ user: profile, permit, inlineLocks: plan.inline })
       toast.success(`Permit ${no} requested`)
       navigate(`/loto/permits/${encodeURIComponent(no)}`)
     } catch (err) {
@@ -415,7 +413,7 @@ export default function NewPermit() {
                             reader.readAsDataURL(file)
                           })
                           const { putFile } = await import('../../../../shared/storage')
-                          const up = await putFile(profile.orgId, 'loto-certificates', dataUrl, file.name)
+                          const up = await putFile('loto-certificates', dataUrl, file.name)
                           setVendor(i, { certificatePath: up?.path || '' })
                         } catch {
                           setVendor(i, { certificatePath: '' })

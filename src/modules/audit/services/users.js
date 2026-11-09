@@ -13,8 +13,8 @@ const createdMs = (u) => {
  * shared ref-counted org-users listener; this module expects `id` instead of
  * `uid` and newest-first ordering, so adapt the shared rows.
  */
-export function subscribeOrgUsers(orgId, callback) {
-  return sharedOrgUsers(orgId, (users) => {
+export function subscribeOrgUsers(callback) {
+  return sharedOrgUsers((users) => {
     const rows = users.map(({ uid, ...rest }) => ({ id: uid, ...rest }))
     rows.sort((a, b) => createdMs(b) - createdMs(a))
     callback(rows)

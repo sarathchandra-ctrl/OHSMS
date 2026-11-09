@@ -14,7 +14,7 @@ import { BASELINE_LIBRARY } from '../lib/baselineLibrary'
  * and adapt them locally — the same pattern as baseline risk assessments.
  */
 export default function BaselinePlans() {
-  const { orgId, actor, isManager } = useAuth()
+  const { actor, isManager } = useAuth()
   const [plans, setPlans] = useState(null)
   const [users, setUsers] = useState([])
   const [installOpen, setInstallOpen] = useState(false)
@@ -22,11 +22,10 @@ export default function BaselinePlans() {
   const [busy, setBusy] = useState(false)
 
   useEffect(() => {
-    if (!orgId) return undefined
-    const u1 = subscribeRescuePlans(orgId, setPlans)
-    const u2 = subscribeOrgUsers(orgId, setUsers)
+    const u1 = subscribeRescuePlans(setPlans)
+    const u2 = subscribeOrgUsers(setUsers)
     return () => { u1(); u2() }
-  }, [orgId])
+  }, [])
 
   const approvedUsers = useMemo(() => users.filter((u) => u.status === 'approved'), [users])
   const baselines = useMemo(() => (plans || []).filter((p) => p.kind === 'baseline'), [plans])
@@ -44,7 +43,7 @@ export default function BaselinePlans() {
   const install = async () => {
     setBusy(true)
     try {
-      const { added, updated } = await installBaselineLibrary(orgId, BASELINE_LIBRARY, baselines, actor, { replace })
+      const { added, updated } = await installBaselineLibrary(BASELINE_LIBRARY, baselines, actor, { replace })
       toast.success(
         added || updated
           ? `${added} plan(s) added${updated ? `, ${updated} replaced` : ''}`

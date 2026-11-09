@@ -143,7 +143,7 @@ function daysLeftLine(deletedAt) {
 
 export default function QrLanding() {
   const { token } = useParams()
-  const { orgId, orgName, profile, isAdmin, isManager } = useAuth()
+  const { orgName, profile, isAdmin, isManager } = useAuth()
   const [asset, setAsset] = useState(undefined) // undefined = loading, null = not found
   const [record, setRecord] = useState(null)
   const [reporting, setReporting] = useState(false)
@@ -168,21 +168,21 @@ export default function QrLanding() {
   const retiredKind = asset?.deletedAt ? RETIRED[asset.assetKind || 'extinguisher'] : null
   const retiredId = retiredKind && asset ? retiredKind.idOf(asset) : ''
   useEffect(() => {
-    if (!retiredKind || !retiredId || !asset?.orgId || asset.orgId !== orgId || (!isAdmin && !isManager)) {
+    if (!retiredKind || !retiredId || (!isAdmin && !isManager)) {
       setRecord(null)
       return undefined
     }
     let alive = true
     ;(async () => {
       try {
-        const snap = await getDoc(doc(db, 'organizations', asset.orgId, retiredKind.col, retiredId))
+        const snap = await getDoc(doc(db, retiredKind.col, retiredId))
         if (alive) setRecord(snap.exists() ? { id: snap.id, ...snap.data() } : null)
       } catch {
         if (alive) setRecord(null)
       }
     })()
     return () => { alive = false }
-  }, [retiredKind, retiredId, asset, orgId, isAdmin, isManager])
+  }, [retiredKind, retiredId, asset, isAdmin, isManager])
 
   if (asset === undefined) {
     return (
@@ -218,7 +218,7 @@ export default function QrLanding() {
     const restore = async () => {
       setRestoring(true)
       try {
-        await retiredKind.restore(asset.orgId, asset.orgName || orgName, retiredId, {
+        await retiredKind.restore(asset.orgName || orgName, retiredId, {
           uid: profile?.uid,
           name: profile?.name,
         })
@@ -314,7 +314,7 @@ export default function QrLanding() {
           open={reporting}
           onClose={() => setReporting(false)}
           ext={asset}
-          orgId={asset.orgId}
+         
           reporter={null}
           source="qr"
         />

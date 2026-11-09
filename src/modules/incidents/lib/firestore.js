@@ -16,10 +16,10 @@ import {
 import { db } from '../../../shared/db'
 import { onReadError } from '../../../shared/org/readError'
 import { AUDIT } from './audit'
-import { logAudit as logOrgAudit, auditCol, orgIndexRef } from '../../../shared/org/orgData'
+import { logAudit as logOrgAudit, auditCol } from '../../../shared/org/orgData'
 
 // ── Path helpers ─────────────────────────────────────────────────────────────
-export const orgRef = (orgId) => doc(db, 'organizations', orgId)
+export const orgRef = () => doc(db, 'organization', 'profile')
 export const userRef = (uid) => doc(db, 'users', uid)
 export { auditCol }
 
@@ -29,11 +29,11 @@ export { auditCol }
 // entries written through incidents.js / illnesses.js / injuries.js displayed as
 // "Core" in Admin → Audit Log — while pages/Incidents.jsx called the shared one
 // directly, so the same module was writing two different shapes.
-export const logAudit = (orgId, actor, action, details = {}) =>
-  logOrgAudit(orgId, actor, action, { module: 'incidents', target: 'incident', ...details })
+export const logAudit = (actor, action, details = {}) =>
+  logOrgAudit(actor, action, { module: 'incidents', target: 'incident', ...details })
 
-export function subscribeAuditLogs(orgId, cb) {
-  const q = query(auditCol(orgId), orderBy('at', 'desc'), limit(200))
+export function subscribeAuditLogs(cb) {
+  const q = query(auditCol(), orderBy('at', 'desc'), limit(200))
   return onSnapshot(
     q,
     (snap) => cb(snap.docs.map((d) => ({ id: d.id, ...d.data() }))),
@@ -43,35 +43,22 @@ export function subscribeAuditLogs(orgId, cb) {
 
 // ── Organizations & users ─────────────────────────────────────────────────────
 
-/** Backfill the public orgIndex entry if missing (idempotent + non-blocking). */
-export async function ensureOrgIndex(org) {
-  if (!org?.id || !org?.name) return
-  try {
-    const ref = orgIndexRef(org.name)
-    const snap = await getDoc(ref)
-    if (snap.exists()) return
-    await setDoc(ref, { orgId: org.id, name: org.name })
-  } catch (e) {
-    // eslint-disable-next-line no-console
-    console.warn('[Incident IRA] orgIndex backfill skipped:', e?.message || e)
-  }
-}
 
-// Delegated to the shared ref-counted org-users listener (one per org app-wide).
+// Delegated to the shared ref-counted users listener (one app-wide).
 export { subscribeOrgUsers } from '../../../shared/org/orgData'
 
 /** Live org document. */
-export function subscribeOrg(orgId, cb) {
+export function subscribeOrg(cb) {
   return onSnapshot(
-    orgRef(orgId),
+    orgRef(),
     (snap) => cb(snap.exists() ? { id: snap.id, ...snap.data() } : null),
     onReadError('the organization', cb, null),
   )
 }
 
-export async function setUserStatus(uid, status, orgId, actor, userLabel) {
+export async function setUserStatus(uid, status, actor, userLabel) {
   await updateDoc(userRef(uid), { status })
-  await logAudit(orgId, actor, AUDIT.USER_STATUS, {
+  await logAudit(actor, AUDIT.USER_STATUS, {
     target: 'user',
     targetId: uid,
     targetLabel: userLabel || uid,
@@ -79,9 +66,9 @@ export async function setUserStatus(uid, status, orgId, actor, userLabel) {
   })
 }
 
-export async function setUserRole(uid, role, orgId, actor, userLabel) {
+export async function setUserRole(uid, role, actor, userLabel) {
   await updateDoc(userRef(uid), { role })
-  await logAudit(orgId, actor, AUDIT.USER_ROLE, {
+  await logAudit(actor, AUDIT.USER_ROLE, {
     target: 'user',
     targetId: uid,
     targetLabel: userLabel || uid,

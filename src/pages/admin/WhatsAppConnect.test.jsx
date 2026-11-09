@@ -13,7 +13,7 @@ const fns = vi.hoisted(() => ({
 
 vi.mock('../../shared/functions', () => fns)
 vi.mock('../../shared/org/orgData', () => ({
-  subscribeOrgUsers: vi.fn((_orgId, cb) => {
+  subscribeOrgUsers: vi.fn((cb) => {
     cb([
       {
         uid: 'u1',
@@ -83,7 +83,7 @@ beforeEach(() => {
 })
 
 function renderSection() {
-  return render(<WhatsAppConnect orgId="orgA" actor={{ uid: 'admin1', name: 'Ada Admin' }} />)
+  return render(<WhatsAppConnect actor={{ uid: 'admin1', name: 'Ada Admin' }} />)
 }
 
 describe('Connect with WhatsApp', () => {

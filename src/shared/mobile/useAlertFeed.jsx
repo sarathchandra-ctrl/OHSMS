@@ -29,12 +29,12 @@ import {
 // spinning. If nothing has answered after this long, show the rows that did.
 const LISTENER_GIVE_UP_MS = 12_000
 
-function useRows(active, orgId, subscribe, { signalError = false } = {}) {
+function useRows(active, subscribe, { signalError = false } = {}) {
   const [rows, setRows] = useState([])
   const [ready, setReady] = useState(!active)
 
   useEffect(() => {
-    if (!active || !orgId) {
+    if ((!active)) {
       setRows([])
       setReady(!active)
       return undefined
@@ -51,8 +51,8 @@ function useRows(active, orgId, subscribe, { signalError = false } = {}) {
     // limit() throw and the feed never loads. Only the meeting listener
     // takes an error callback in that position.
     const unsub = signalError
-      ? subscribe(orgId, finish, () => finish([]))
-      : subscribe(orgId, finish)
+      ? subscribe(finish, () => finish([]))
+      : subscribe(finish)
     const timer = setTimeout(() => {
       if (!settled) finish([])
     }, LISTENER_GIVE_UP_MS)
@@ -60,15 +60,15 @@ function useRows(active, orgId, subscribe, { signalError = false } = {}) {
       clearTimeout(timer)
       unsub?.()
     }
-  }, [active, orgId, subscribe, signalError])
+  }, [active, subscribe, signalError])
 
   return { rows, ready }
 }
 
 function useAlertState(enabled) {
-  const { orgId, user, moduleMap, isApproved } = useAuth()
+  const { user, moduleMap, isApproved } = useAuth()
   const uid = user?.uid || ''
-  const live = Boolean(enabled && orgId && uid && isApproved)
+  const live = Boolean(enabled && uid && isApproved)
   const { sites, status: sitesStatus } = useAccessibleSitesRead()
 
   const equipment = live && isModuleEnabled(moduleMap, 'equipment')
@@ -77,14 +77,14 @@ function useAlertState(enabled) {
   const drillsOn = live && isModuleEnabled(moduleMap, 'drills')
   const weatherOn = live && isModuleEnabled(moduleMap, 'weather')
 
-  const reports = useRows(equipment, orgId, subscribeReports)
-  const extinguishers = useRows(equipment, orgId, subscribeExtinguishers)
-  const aeds = useRows(equipment, orgId, subscribeAeds)
-  const fas = useRows(equipment, orgId, subscribeFas)
-  const stretchers = useRows(equipment, orgId, subscribeStretchers)
-  const incidentRows = useRows(incidentsOn, orgId, subscribeIncidents)
-  const meetingRows = useRows(committeeOn, orgId, subscribeConsultations, { signalError: true })
-  const drillRows = useRows(drillsOn, orgId, subscribeMockDrills)
+  const reports = useRows(equipment, subscribeReports)
+  const extinguishers = useRows(equipment, subscribeExtinguishers)
+  const aeds = useRows(equipment, subscribeAeds)
+  const fas = useRows(equipment, subscribeFas)
+  const stretchers = useRows(equipment, subscribeStretchers)
+  const incidentRows = useRows(incidentsOn, subscribeIncidents)
+  const meetingRows = useRows(committeeOn, subscribeConsultations, { signalError: true })
+  const drillRows = useRows(drillsOn, subscribeMockDrills)
 
   const weather = useAllSiteWeather(weatherOn ? sites : [])
   const weatherBySiteId = useMemo(() => {
@@ -110,7 +110,7 @@ function useAlertState(enabled) {
     }
     setReadsReady(false)
     return onSnapshot(
-      doc(db, 'organizations', orgId, 'alertReads', uid),
+      doc(db, 'alertReads', uid),
       (snap) => {
         setStoredIds(snap.exists() ? snap.data()?.ids || '' : '')
         setReadsReady(true)
@@ -122,7 +122,7 @@ function useAlertState(enabled) {
         setReadsReady(true)
       }
     )
-  }, [live, orgId, uid])
+  }, [live, uid])
 
   const readIds = useMemo(() => parseReadIds(pendingIds ?? storedIds), [pendingIds, storedIds])
 
@@ -192,7 +192,7 @@ function useAlertState(enabled) {
     const serial = serializeReadIds(next)
     setPendingIds(serial)
     try {
-      await setDoc(doc(db, 'organizations', orgId, 'alertReads', uid), {
+      await setDoc(doc(db, 'alertReads', uid), {
         ids: serial,
         updatedAt: serverTimestamp(),
       })

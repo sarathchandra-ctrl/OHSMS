@@ -18,7 +18,7 @@ import { readFileAsDataUrl } from '../../../shared/lib/files'
 
 export default function InProcess() {
   const { inProcess, loading } = useFleet()
-  const { orgId, orgName, profile } = useAuth()
+  const { orgName, profile } = useAuth()
   const today = useMemo(() => new Date(), [])
   const [closing, setClosing] = useState(null) // ext being closed
   const [receiving, setReceiving] = useState(null)
@@ -83,7 +83,6 @@ export default function InProcess() {
     setBusy(true)
     try {
       await markRefilledAndClosed(
-        orgId,
         orgName,
         closing.id,
         { ...dates, certificate: hptMoved ? certificatePayload : null },
@@ -141,7 +140,7 @@ export default function InProcess() {
         open={!!receiving}
         onClose={() => setReceiving(null)}
         ext={receiving}
-        orgId={orgId}
+       
         orgName={orgName}
         actorName={profile?.name}
       />

@@ -51,7 +51,7 @@ export default function IncidentWizard() {
   const { id } = useParams()
   const navigate = useNavigate()
   const [params, setParams] = useSearchParams()
-  const { user, profile, role, orgId } = useAuth()
+  const { user, profile, role } = useAuth()
   const { users, org, injuries, sites, canReadHealth } = useIncidents()
   const actor = useMemo(() => ({ uid: user?.uid, name: profile?.name || '' }), [user, profile])
 
@@ -76,9 +76,9 @@ export default function IncidentWizard() {
 
   // Load existing incident + its photos.
   useEffect(() => {
-    if (!id || !orgId) return
+    if ((!id)) return
     let live = true
-    getIncident(orgId, id).then((inc) => {
+    getIncident(id).then((inc) => {
       if (!live || !inc) return
       setIncident(inc)
       setDraft({
@@ -95,9 +95,9 @@ export default function IncidentWizard() {
       setHorizontal(inc.horizontal || { required: null, locations: [], details: '' })
       setLoading(false)
     })
-    const unsub = subscribeIncidentPhotos(orgId, id, setPhotos)
+    const unsub = subscribeIncidentPhotos(id, setPhotos)
     return () => { live = false; unsub() }
-  }, [id, orgId])
+  }, [id])
 
   // Clinical files, for the roles who may read them. A member's listener on
   // injuries/{id}/records is permission-denied, and the error handler would
@@ -105,7 +105,7 @@ export default function IncidentWizard() {
   // attached". Do not subscribe unless the read is allowed.
   const medicalPersonKey = (incident?.affectedPersonnel || []).map((p) => p.id).filter(Boolean).join('|')
   useEffect(() => {
-    if (!canReadHealth || !orgId || !incident?.id || !medicalPersonKey) {
+    if (!canReadHealth || !incident?.id || !medicalPersonKey) {
       setMedicalRecords([])
       return
     }
@@ -115,13 +115,13 @@ export default function IncidentWizard() {
     const stops = ids.map((personId) => {
       const target = medicalAttachmentTarget(incident.id, personId)
       if (!target) return () => {}
-      return subscribeInjuryRecords(orgId, target.injuryId, (rows) => {
+      return subscribeInjuryRecords(target.injuryId, (rows) => {
         buckets.set(personId, (rows || []).map((r) => ({ ...r, personId: r.personId || personId })))
         publish()
       })
     })
     return () => { for (const stop of stops) stop() }
-  }, [canReadHealth, orgId, incident?.id, medicalPersonKey])
+  }, [canReadHealth, incident?.id, medicalPersonKey])
 
   const type = draft.type || incident?.type
   const requiresInjury = typeRequiresInjury(type)
@@ -173,22 +173,22 @@ export default function IncidentWizard() {
   // ── Photo helpers ──
   const addPhoto = async (fileObj) => {
     if (!incident) return
-    await addIncidentPhoto(orgId, incident.id, { ...fileObj, uploadedBy: actor.name, kind: 'photo' })
+    await addIncidentPhoto(incident.id, { ...fileObj, uploadedBy: actor.name, kind: 'photo' })
   }
   const removePhoto = async (photoId) => {
     if (!incident) return
-    await deleteIncidentPhoto(orgId, incident.id, photoId)
+    await deleteIncidentPhoto(incident.id, photoId)
   }
   const addRecord = async (personId, fileObj) => {
     if (!incident) return
-    await addMedicalRecord(orgId, incident, personId, { ...fileObj, uploadedBy: actor.name })
+    await addMedicalRecord(incident, personId, { ...fileObj, uploadedBy: actor.name })
     if (!canReadHealth) setFiledCounts((c) => ({ ...c, [personId]: (c[personId] || 0) + 1 }))
   }
   const removeRecord = async (personId, recordId) => {
     if (!incident || !canReadHealth) return
     const target = medicalAttachmentTarget(incident.id, personId)
     if (!target) return
-    await deleteMedicalRecord(orgId, target.injuryId, recordId)
+    await deleteMedicalRecord(target.injuryId, recordId)
   }
   const legacyMedicalCount = photos.filter((p) => p.kind === 'medical_record').length
   // Print, the mailed PDF and the diagram lookup must not receive a clinical
@@ -219,16 +219,15 @@ export default function IncidentWizard() {
     setSaving(true)
     try {
       if (!incident) {
-        const newId = await createIncident(orgId, actor, { ...draft })
-        const fresh = await getIncident(orgId, newId)
+        const newId = await createIncident(actor, { ...draft })
+        const fresh = await getIncident(newId)
         // The mail fires on the flag flip below, not on the create. The PDF
         // has to be uploaded first and named on that write.
         const reportPdfPath = await captureIncidentReport(
-          orgId,
           { ...(fresh || {}), ...draft, refNo: fresh?.refNo, docId: fresh?.docId },
           { org, photos: [] },
         )
-        await updateIncident(orgId, newId, {
+        await updateIncident(newId, {
           'stagesDone.initial': true,
           ...(reportPdfPath ? { reportPdfPath } : {}),
         }, { silent: true })
@@ -237,15 +236,15 @@ export default function IncidentWizard() {
       } else {
         const flipping = incident.stagesDone?.initial !== true
         const reportPdfPath = flipping
-          ? await captureIncidentReport(orgId, { ...incident, ...draft }, { org, photos: scenePhotos })
+          ? await captureIncidentReport({ ...incident, ...draft }, { org, photos: scenePhotos })
           : ''
-        await updateIncident(orgId, incident.id, {
+        await updateIncident(incident.id, {
           ...draft,
           'stagesDone.initial': true,
           lifecycle: incident.lifecycle === 'reporting' ? 'reporting' : incident.lifecycle,
           ...(reportPdfPath ? { reportPdfPath } : {}),
         }, { actor, summary: 'Updated initial report' })
-        const fresh = await getIncident(orgId, incident.id)
+        const fresh = await getIncident(incident.id)
         setIncident(fresh)
         toast.success('Saved')
         goStep(nextStep())
@@ -274,9 +273,9 @@ export default function IncidentWizard() {
       // sync deletes injury docs missing from the list it is given, and a member
       // cannot list /injuries, so the skip must happen before that call.
       const reportsToSync = injuryReports.filter((r) => !hiddenPersonIds.has(r.personId))
-      if (reportsToSync.length) await syncIncidentInjuries(orgId, incident, reportsToSync, actor)
-      await updateIncident(orgId, incident.id, { injuryReports }, { actor, summary: 'Updated injury reports' })
-      const fresh = await getIncident(orgId, incident.id)
+      if (reportsToSync.length) await syncIncidentInjuries(incident, reportsToSync, actor)
+      await updateIncident(incident.id, { injuryReports }, { actor, summary: 'Updated injury reports' })
+      const fresh = await getIncident(incident.id)
       if (gen === persistGen.current) setIncident(fresh)
       toast.success('Injury reports saved')
       goStep(nextStep())
@@ -295,8 +294,8 @@ export default function IncidentWizard() {
     setSaving(true)
     const gen = ++persistGen.current
     try {
-      await updateIncident(orgId, incident.id, updates, { actor, ...opts })
-      const fresh = await getIncident(orgId, incident.id)
+      await updateIncident(incident.id, updates, { actor, ...opts })
+      const fresh = await getIncident(incident.id)
       if (gen === persistGen.current) setIncident(fresh)
       toast.success('Saved')
       if (nextKey) goStep(nextKey)
@@ -324,14 +323,14 @@ export default function IncidentWizard() {
       if (active && png) {
         const bytes = dataUrlBytes(png)
         if (bytes <= MAX_FILE_BYTES) {
-          if (active.pngPhotoId) { try { await deleteIncidentPhoto(orgId, incident.id, active.pngPhotoId) } catch { /* ignore */ } }
-          const pngPhotoId = await addIncidentPhoto(orgId, incident.id, { name: 'investigation-diagram.png', type: 'image/png', size: bytes, dataUrl: png, kind: 'diagram', uploadedBy: actor.name })
+          if (active.pngPhotoId) { try { await deleteIncidentPhoto(incident.id, active.pngPhotoId) } catch { /* ignore */ } }
+          const pngPhotoId = await addIncidentPhoto(incident.id, { name: 'investigation-diagram.png', type: 'image/png', size: bytes, dataUrl: png, kind: 'diagram', uploadedBy: actor.name })
           next = investigations.map((e) => (e.id === activeId ? { ...e, pngPhotoId } : e))
         } else {
           toast('Diagram image too large to attach — saved data only.', { icon: '⚠️' })
         }
       }
-      await updateIncident(orgId, incident.id, {
+      await updateIncident(incident.id, {
         investigations: next,
         // Sorted on the way IN as well as on the way out. The editor keeps the
         // order things were typed in so it does not move a row under someone's
@@ -344,7 +343,7 @@ export default function IncidentWizard() {
         actor,
         summary: `Investigation saved (${next.map((e) => e.method).join(', ') || 'none'}) · ${chronology.length} chronology event${chronology.length === 1 ? '' : 's'}`,
       })
-      const fresh = await getIncident(orgId, incident.id)
+      const fresh = await getIncident(incident.id)
       if (gen === persistGen.current) setIncident(fresh)
       toast.success('Investigation saved')
       goStep(nextStep())
@@ -358,8 +357,8 @@ export default function IncidentWizard() {
   const saveHorizontal = async () => {
     setSaving(true)
     try {
-      await updateIncident(orgId, incident.id, { horizontal: { ...horizontal, completedAt: new Date().toISOString() } }, { actor, silent: true })
-      await closeIncident(orgId, incident.id, actor)
+      await updateIncident(incident.id, { horizontal: { ...horizontal, completedAt: new Date().toISOString() } }, { actor, silent: true })
+      await closeIncident(incident.id, actor)
       toast.success('Incident closed')
       navigate('/incidents')
     } catch (e) {

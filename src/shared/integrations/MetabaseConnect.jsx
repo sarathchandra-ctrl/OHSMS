@@ -56,7 +56,7 @@ function toForm(config) {
   return { apiKey: '', sources, maxAgeDays: config?.apiKeyMaxAgeDays ? String(config.apiKeyMaxAgeDays) : '' }
 }
 
-export default function MetabaseConnect({ orgId, actor, onSaved, compact = false }) {
+export default function MetabaseConnect({ actor, onSaved, compact = false }) {
   const [loading, setLoading] = useState(true)
   const [saved, setSaved] = useState(null)   // what the server says is stored
   const [form, setForm] = useState(() => toForm(null))
@@ -81,7 +81,7 @@ export default function MetabaseConnect({ orgId, actor, onSaved, compact = false
       })
       .finally(() => live && setLoading(false))
     return () => { live = false }
-  }, [orgId])
+  }, [])
 
   const setSource = (id, patch) =>
     setForm((f) => ({ ...f, sources: f.sources.map((s) => (s.id === id ? { ...s, ...patch } : s)) }))
@@ -146,7 +146,7 @@ export default function MetabaseConnect({ orgId, actor, onSaved, compact = false
         settings.apiKeyUpdatedAt = new Date().toISOString()
       }
       settings.apiKeyMaxAgeDays = Number(form.maxAgeDays) > 0 ? Math.floor(Number(form.maxAgeDays)) : 0
-      await saveIntegration(orgId, 'metabase', settings, actor)
+      await saveIntegration('metabase', settings, actor)
       const { config } = await metabaseSettings()
       setSaved(config)
       setForm(toForm(config))
@@ -172,7 +172,7 @@ export default function MetabaseConnect({ orgId, actor, onSaved, compact = false
     if (!window.confirm('Remove the shared API key? ODIN will stop loading from every instance that relies on it.')) return
     setBusy(true)
     try {
-      await saveIntegration(orgId, 'metabase', { apiKey: '' }, actor)
+      await saveIntegration('metabase', { apiKey: '' }, actor)
       const { config } = await metabaseSettings()
       setSaved(config)
       setForm(toForm(config))

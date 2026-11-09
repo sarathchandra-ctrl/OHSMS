@@ -9,7 +9,7 @@ const TrainingContext = createContext(null)
 
 /** Live org data for the Training module: courses, records, assignments, users, sites. */
 export function TrainingProvider({ children }) {
-  const { orgId, profile, isAdmin } = useAuth()
+  const { profile, isAdmin } = useAuth()
   const [courses, setCourses] = useState(null)
   const [records, setRecords] = useState(null)
   const [assignments, setAssignments] = useState(null)
@@ -17,14 +17,13 @@ export function TrainingProvider({ children }) {
   const [allSites, setAllSites] = useState([])
 
   useEffect(() => {
-    if (!orgId) return undefined
-    const u1 = subscribeCourses(orgId, setCourses)
-    const u2 = subscribeRecords(orgId, setRecords)
-    const u3 = subscribeAssignments(orgId, setAssignments)
-    const u4 = subscribeOrgUsers(orgId, setUsers)
-    const u5 = subscribeSites(orgId, setAllSites)
+    const u1 = subscribeCourses(setCourses)
+    const u2 = subscribeRecords(setRecords)
+    const u3 = subscribeAssignments(setAssignments)
+    const u4 = subscribeOrgUsers(setUsers)
+    const u5 = subscribeSites(setAllSites)
     return () => { u1(); u2(); u3(); u4(); u5() }
-  }, [orgId])
+  }, [])
 
   const value = useMemo(() => {
     const uid = profile?.uid

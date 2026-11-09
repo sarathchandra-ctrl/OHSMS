@@ -9,15 +9,15 @@ import { Modal, Button, Field, Select, MultiSelect } from '../ui'
 // Lets an approved member request site-scoped access; the request is routed to
 // admins (who grant it from the Users page).
 export default function RequestAccessModal({ open, onClose }) {
-  const { orgId, actor, user, profile, org } = useAuth()
+  const { actor, user, profile, org } = useAuth()
   const [sites, setSites] = useState([])
   const [form, setForm] = useState({ department: '', sites: [], regions: [], entities: [] })
   const [busy, setBusy] = useState(false)
 
   useEffect(() => {
-    if (!orgId || !open) return
-    return subscribeSites(orgId, setSites)
-  }, [orgId, open])
+    if ((!open)) return
+    return subscribeSites(setSites)
+  }, [open])
 
   useEffect(() => {
     if (open) setForm((f) => ({ ...f, department: profile?.department || f.department }))
@@ -37,7 +37,7 @@ export default function RequestAccessModal({ open, onClose }) {
       await requestAccess(
         user.uid,
         { department: form.department, scope: { sites: form.sites, regions: form.regions, entities: form.entities } },
-        orgId, actor
+        actor
       )
       toast.success('Access request sent to your administrators')
       onClose()

@@ -51,7 +51,7 @@ function useRun() {
   return { busy, run }
 }
 
-function GroupPanel({ orgId, permit, user }) {
+function GroupPanel({ permit, user }) {
   const { busy, run } = useRun()
   const group = permit.groupLock
   if (!group?.active) return null
@@ -79,7 +79,7 @@ function GroupPanel({ orgId, permit, user }) {
       {mine.ok && !mine.closes && (
         <Button
           loading={busy}
-          onClick={() => run(() => releaseOwnLock({ orgId, permit, user }), 'Your lock is off', 'Could not remove your lock')}
+          onClick={() => run(() => releaseOwnLock({ permit, user }), 'Your lock is off', 'Could not remove your lock')}
         >
           Remove my lock
         </Button>
@@ -91,7 +91,7 @@ function GroupPanel({ orgId, permit, user }) {
   )
 }
 
-function Decision({ orgId, permit, user, otherAdmin }) {
+function Decision({ permit, user, otherAdmin }) {
   const { busy, run } = useRun()
   const [note, setNote] = useState('')
   const [selfReason, setSelfReason] = useState('')
@@ -122,7 +122,7 @@ function Decision({ orgId, permit, user, otherAdmin }) {
               loading={busy}
               onClick={() =>
                 run(
-                  () => decidePermit({ orgId, permit, user, approve: true, note, selfApprovalReason: selfReason }),
+                  () => decidePermit({ permit, user, approve: true, note, selfApprovalReason: selfReason }),
                   'Permit approved',
                   'Could not approve',
                 )
@@ -135,7 +135,7 @@ function Decision({ orgId, permit, user, otherAdmin }) {
               loading={busy}
               onClick={() =>
                 run(
-                  () => decidePermit({ orgId, permit, user, approve: false, note }),
+                  () => decidePermit({ permit, user, approve: false, note }),
                   'Permit rejected',
                   'Could not reject',
                 )
@@ -150,7 +150,7 @@ function Decision({ orgId, permit, user, otherAdmin }) {
   )
 }
 
-function Withdraw({ orgId, permit, user }) {
+function Withdraw({ permit, user }) {
   const { busy, run } = useRun()
   return (
     <div className="mt-4">
@@ -159,7 +159,7 @@ function Withdraw({ orgId, permit, user }) {
         loading={busy}
         onClick={() => {
           if (!window.confirm('Withdraw this permit? It cannot be reopened.')) return
-          run(() => withdrawPermit({ orgId, permit, user }), 'Permit withdrawn', 'Could not withdraw')
+          run(() => withdrawPermit({ permit, user }), 'Permit withdrawn', 'Could not withdraw')
         }}
       >
         Withdraw permit
@@ -168,7 +168,7 @@ function Withdraw({ orgId, permit, user }) {
   )
 }
 
-function RequestPhoto({ orgId, permit, user }) {
+function RequestPhoto({ permit, user }) {
   const { busy, run } = useRun()
   const [note, setNote] = useState('')
   return (
@@ -179,7 +179,7 @@ function RequestPhoto({ orgId, permit, user }) {
       <Button
         variant="steel"
         loading={busy}
-        onClick={() => run(() => requestNewLockPhoto({ orgId, permit, user, note }), 'A new photo was requested', 'Could not request a photo')}
+        onClick={() => run(() => requestNewLockPhoto({ permit, user, note }), 'A new photo was requested', 'Could not request a photo')}
       >
         Request a new photo
       </Button>
@@ -187,7 +187,7 @@ function RequestPhoto({ orgId, permit, user }) {
   )
 }
 
-function Isolation({ orgId, permit, user }) {
+function Isolation({ permit, user }) {
   const { busy, run } = useRun()
   const [scans, setScans] = useState({})
   const [tryout, setTryout] = useState('')
@@ -251,7 +251,7 @@ function Isolation({ orgId, permit, user }) {
         onPhoto={async (shot) => {
           try {
             const { storeLockPhoto } = await import('../../services/lockPhoto')
-            const stored = await storeLockPhoto({ orgId, permit, dataUrl: shot.dataUrl })
+            const stored = await storeLockPhoto({ permit, dataUrl: shot.dataUrl })
             setShot(stored)
           } catch (err) {
             toast.error(err?.message || 'Could not store the lock photo.')
@@ -264,7 +264,7 @@ function Isolation({ orgId, permit, user }) {
         onClick={() =>
           run(
             () => startIsolation({
-              orgId, permit, scans, user,
+              permit, scans, user,
               tryout: { zeroEnergy: true },
               lockPhoto: shot,
             }),
@@ -284,7 +284,7 @@ function Isolation({ orgId, permit, user }) {
   )
 }
 
-function Return({ orgId, permit, user }) {
+function Return({ permit, user }) {
   const { busy, run } = useRun()
   const [ticked, setTicked] = useState({})
   const [confirmed, setConfirmed] = useState([])
@@ -326,7 +326,7 @@ function Return({ orgId, permit, user }) {
         disabled={!ready}
         onClick={() =>
           run(
-            () => returnPermit({ orgId, permit, user, ticked, confirmed }),
+            () => returnPermit({ permit, user, ticked, confirmed }),
             'Equipment returned — permit closed',
             'Could not return',
           )
@@ -338,7 +338,7 @@ function Return({ orgId, permit, user }) {
   )
 }
 
-function Extend({ orgId, permit, user }) {
+function Extend({ permit, user }) {
   const { busy, run } = useRun()
   const [hours, setHours] = useState('1')
   const [reason, setReason] = useState('')
@@ -367,7 +367,6 @@ function Extend({ orgId, permit, user }) {
           run(
             () =>
               extendPermit({
-                orgId,
                 permit,
                 user,
                 newEndMs: toMs(permit.windowEnd) + Math.round(add * 3600 * 1000),
@@ -384,7 +383,7 @@ function Extend({ orgId, permit, user }) {
   )
 }
 
-function Emergency({ orgId, permit, user }) {
+function Emergency({ permit, user }) {
   const { busy, run } = useRun()
   const [reason, setReason] = useState('')
   const [attest, setAttest] = useState({})
@@ -418,7 +417,7 @@ function Emergency({ orgId, permit, user }) {
         onClick={() => {
           if (!window.confirm('Remove all locks under this permit now?')) return
           run(
-            () => emergencyRemovePermit({ orgId, permit, user, reason, attest }),
+            () => emergencyRemovePermit({ permit, user, reason, attest }),
             'Locks removed — permit closed',
             'Could not remove',
           )
@@ -434,32 +433,32 @@ function Emergency({ orgId, permit, user }) {
  * The buttons a permit offers THIS person right now. What they can actually do
  * is decided by firestore.rules; this only decides what to show.
  */
-export default function PermitActions({ orgId, permit, user, isAdmin, isParty, otherAdmin, canWrite, canDecide = isAdmin }) {
+export default function PermitActions({ permit, user, isAdmin, isParty, otherAdmin, canWrite, canDecide = isAdmin }) {
   if (!canWrite) return null
   const requester = permit.requestedBy === user.id
   switch (permit.status) {
     case PERMIT_STATUS.REQUESTED:
       return (
         <>
-          {canDecide && <Decision orgId={orgId} permit={permit} user={user} otherAdmin={otherAdmin} />}
-          {(requester || isAdmin) && <Withdraw orgId={orgId} permit={permit} user={user} />}
+          {canDecide && <Decision permit={permit} user={user} otherAdmin={otherAdmin} />}
+          {(requester || isAdmin) && <Withdraw permit={permit} user={user} />}
         </>
       )
     case PERMIT_STATUS.APPROVED:
       return (
         <>
-          {isParty && <Isolation orgId={orgId} permit={permit} user={user} />}
-          {isAdmin && <RequestPhoto orgId={orgId} permit={permit} user={user} />}
-          {(requester || isAdmin) && <Withdraw orgId={orgId} permit={permit} user={user} />}
+          {isParty && <Isolation permit={permit} user={user} />}
+          {isAdmin && <RequestPhoto permit={permit} user={user} />}
+          {(requester || isAdmin) && <Withdraw permit={permit} user={user} />}
         </>
       )
     case PERMIT_STATUS.ACTIVE:
       return (
         <>
-          {isParty && <Return orgId={orgId} permit={permit} user={user} />}
-          {permit.groupLock && <GroupPanel orgId={orgId} permit={permit} user={user} />}
-          {isAdmin && <Extend orgId={orgId} permit={permit} user={user} />}
-          {isAdmin && <Emergency orgId={orgId} permit={permit} user={user} />}
+          {isParty && <Return permit={permit} user={user} />}
+          {permit.groupLock && <GroupPanel permit={permit} user={user} />}
+          {isAdmin && <Extend permit={permit} user={user} />}
+          {isAdmin && <Emergency permit={permit} user={user} />}
         </>
       )
     default:

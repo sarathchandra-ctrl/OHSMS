@@ -107,7 +107,7 @@ const AuditScheduler = ({ setView, session, sites, users, locations = [], siteIn
     if (!plan.siteId || !plan.startDate || !plan.leadAuditor)
       return alert('Please fill in Site, Lead Auditor and Start Date.')
     try {
-      await createAuditPlan(session.orgId, {
+      await createAuditPlan({
         ...plan,
         matrix: rows,
         createdAt: new Date().toISOString(),
@@ -399,7 +399,7 @@ const AuditorWorkplace = ({ setView, session, isGlobalOwner, plans, findings, si
       return { ...f, id: f.id || genId(), auditeeDueDate: addDaysISO(days) }
     })
     try {
-      await createAuditFinding(session.orgId, {
+      await createAuditFinding({
         docId: docId || '', taskDetails: cleanTask, findings: cleanFindings,
         status: 'Reported', auditDate: new Date().toISOString(), auditor: session.user, siteId: cleanTask.siteId || 'GEN',
       })
@@ -411,7 +411,7 @@ const AuditorWorkplace = ({ setView, session, isGlobalOwner, plans, findings, si
   const handleVerifyClose = async () => {
     if (!currentTask.findingRecord) return
     try {
-      await updateAuditFinding(session.orgId, currentTask.findingRecord.firebaseKey, { status: 'Closed', closureDate: new Date().toISOString() })
+      await updateAuditFinding(currentTask.findingRecord.firebaseKey, { status: 'Closed', closureDate: new Date().toISOString() })
       alert('Audit verified & closed!')
       setView('hub')
     } catch (e) { alert('Error closing: ' + e.message) }
@@ -612,7 +612,7 @@ const AuditeeWorkplace = ({ session, users, findings }) => {
     if (!allDone) return alert('Please provide a response for ALL findings before submitting.')
     const updated = { ...selected, status: 'Submitted for Verification', submissionDate: new Date().toISOString() }
     try {
-      await updateAuditFinding(session.orgId, selected.firebaseKey, { findings: updated.findings, status: updated.status, submissionDate: updated.submissionDate })
+      await updateAuditFinding(selected.firebaseKey, { findings: updated.findings, status: updated.status, submissionDate: updated.submissionDate })
       alert('Audit response submitted successfully!')
       setSelected(updated)
     } catch (e) { alert('Submission failed: ' + e.message) }
@@ -1190,16 +1190,14 @@ export default function InternalAudit() {
   const [plans, setPlans] = useState([])
   const [findings, setFindings] = useState([])
 
-  const orgId = org?.id
 
   useEffect(() => {
-    if (!orgId) return undefined
     const unsubs = [
-      subscribeAuditPlans(orgId, setPlans),
-      subscribeAuditFindings(orgId, setFindings),
+      subscribeAuditPlans(setPlans),
+      subscribeAuditFindings(setFindings),
     ]
     return () => unsubs.forEach((u) => u && u())
-  }, [orgId])
+  }, [])
 
   // Let Sam's guided tour open a module tab (e.g. dispatch 'sam:view').
   useEffect(() => {
@@ -1209,8 +1207,8 @@ export default function InternalAudit() {
   }, [])
 
   const session = useMemo(
-    () => ({ orgId, user: profile?.name, name: profile?.name, email: profile?.email, role: profile?.role }),
-    [orgId, profile],
+    () => ({ user: profile?.name, name: profile?.name, email: profile?.email, role: profile?.role }),
+    [profile],
   )
   const sites = useMemo(() => rawSites.map((s) => ({ code: s.id, name: s.name })), [rawSites])
   const users = useMemo(

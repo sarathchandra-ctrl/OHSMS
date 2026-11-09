@@ -6,7 +6,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 // emulator, which matters because the guard's failure mode (two switches on one
 // site) is silent: darkSites() stops reporting the site dark and nothing
 // anywhere says why.
-vi.mock('firebase/firestore', () => ({
+vi.mock('../../../shared/data/client.js', () => ({
   collection: (_db, ...parts) => ({ __col: parts.join('/') }),
   doc: (colRef, id) => ({ __path: `${colRef.__col}/${id ?? `auto${autoId++}`}`, __auto: id == null }),
   addDoc: vi.fn(),
@@ -59,7 +59,7 @@ beforeEach(() => {
 
 describe('provisionSiteMerakis', () => {
   it('creates one document per uncovered site, addressed by that site', async () => {
-    const n = await provisionSiteMerakis('org1', [site(), site({ id: 's2', name: 'Pune' })], [], {})
+    const n = await provisionSiteMerakis([site(), site({ id: 's2', name: 'Pune' })], [], {})
     expect(n).toBe(2)
     expect(paths()).toEqual([
       'organizations/org1/cctvMeraki/site_s1',
@@ -74,7 +74,7 @@ describe('provisionSiteMerakis', () => {
   // between — from another manager, another tab, or the site-created hook.
   it('ignores a stale caller list and asks the collection instead', async () => {
     getDocsMock = collectionOf([stored()])
-    const n = await provisionSiteMerakis('org1', [site()], [], {})
+    const n = await provisionSiteMerakis([site()], [], {})
     expect(n).toBe(0)
     expect(committed).toEqual([])
   })
@@ -82,7 +82,6 @@ describe('provisionSiteMerakis', () => {
   it('still honours what the caller passes — it can only ADD coverage', async () => {
     // Nothing in Firestore yet, but the caller knows of a record for s2.
     const n = await provisionSiteMerakis(
-      'org1',
       [site(), site({ id: 's2', name: 'Pune' })],
       [{ id: 'm9', siteId: 's2' }],
       {}
@@ -96,8 +95,8 @@ describe('provisionSiteMerakis', () => {
   // write land on the first one's document instead of beside it.
   it('converges on one document when two runs race', async () => {
     await Promise.all([
-      provisionSiteMerakis('org1', [site()], [], {}),
-      provisionSiteMerakis('org1', [site()], [], {}),
+      provisionSiteMerakis([site()], [], {}),
+      provisionSiteMerakis([site()], [], {}),
     ])
     expect(paths()).toEqual([
       'organizations/org1/cctvMeraki/site_s1',
@@ -107,7 +106,7 @@ describe('provisionSiteMerakis', () => {
   })
 
   it('does not write twice for a site handed in twice in one call', async () => {
-    const n = await provisionSiteMerakis('org1', [site(), site()], [], {})
+    const n = await provisionSiteMerakis([site(), site()], [], {})
     expect(n).toBe(1)
     expect(paths()).toEqual(['organizations/org1/cctvMeraki/site_s1'])
   })
@@ -117,7 +116,7 @@ describe('provisionSiteMerakis', () => {
   // site, and writing it would clobber the very record being looked for.
   it('leaves an existing document alone even when its siteId went missing', async () => {
     getDocsMock = collectionOf([stored({ siteId: '' })])
-    const n = await provisionSiteMerakis('org1', [site()], [], {})
+    const n = await provisionSiteMerakis([site()], [], {})
     expect(n).toBe(0)
     expect(committed).toEqual([])
   })
@@ -126,13 +125,13 @@ describe('provisionSiteMerakis', () => {
   // failure the module exists to prevent, and is worse than one without the
   // extra guard.
   it('falls back to an auto-id rather than skipping an unaddressable site', async () => {
-    const n = await provisionSiteMerakis('org1', [{ id: 'a/b', name: 'Odd' }], [], {})
+    const n = await provisionSiteMerakis([{ id: 'a/b', name: 'Odd' }], [], {})
     expect(n).toBe(1)
     expect(committed[0].auto).toBe(true)
   })
 
   it('writes the standard payload, unverified rather than green', async () => {
-    await provisionSiteMerakis('org1', [site()], [], {})
+    await provisionSiteMerakis([site()], [], {})
     expect(committed[0].data).toMatchObject({
       name: 'MX-Hosur', siteId: 's1', siteName: 'Hosur', status: 'unknown',
     })
@@ -140,48 +139,48 @@ describe('provisionSiteMerakis', () => {
 
   it('audits what it actually wrote, not what it considered', async () => {
     getDocsMock = collectionOf([stored()])
-    await provisionSiteMerakis('org1', [site(), site({ id: 's2', name: 'Pune' })], [], {})
+    await provisionSiteMerakis([site(), site({ id: 's2', name: 'Pune' })], [], {})
     expect(audits).toHaveLength(1)
     expect(audits[0][3].summary).toMatch(/for 1 site\(s\)/)
   })
 
   it('logs nothing and reads nothing when there are no sites', async () => {
-    expect(await provisionSiteMerakis('org1', [], [], {})).toBe(0)
-    expect(await provisionSiteMerakis('', [site()], [], {})).toBe(0)
+    expect(await provisionSiteMerakis([], [], {})).toBe(0)
+    expect(await provisionSiteMerakis([site()], [], {})).toBe(0)
     expect(getDocsMock).not.toHaveBeenCalled()
     expect(audits).toEqual([])
   })
 
   it('leaves no audit entry behind when everything was already covered', async () => {
     getDocsMock = collectionOf([stored()])
-    await provisionSiteMerakis('org1', [site()], [], {})
+    await provisionSiteMerakis([site()], [], {})
     expect(audits).toEqual([])
   })
 
   // Firestore rejects a batch over 500 writes.
   it('chunks a large estate under the batch cap', async () => {
     const sites = Array.from({ length: 900 }, (_, i) => ({ id: `s${i}`, name: `Site ${i}` }))
-    expect(await provisionSiteMerakis('org1', sites, [], {})).toBe(900)
+    expect(await provisionSiteMerakis(sites, [], {})).toBe(900)
     expect(new Set(paths()).size).toBe(900)
   })
 })
 
 describe('provisionMerakisForNewSites', () => {
   it('provisions a newly created site', async () => {
-    expect(await provisionMerakisForNewSites('org1', [site()], {})).toBe(1)
+    expect(await provisionMerakisForNewSites([site()], {})).toBe(1)
     expect(paths()).toEqual(['organizations/org1/cctvMeraki/site_s1'])
   })
 
   // A hook fired twice, or a retried write, must not double up.
   it('is a no-op when the site already has one', async () => {
     getDocsMock = collectionOf([stored()])
-    expect(await provisionMerakisForNewSites('org1', [site()], {})).toBe(0)
+    expect(await provisionMerakisForNewSites([site()], {})).toBe(0)
     expect(committed).toEqual([])
   })
 
   it('does nothing without an org or sites', async () => {
-    expect(await provisionMerakisForNewSites('', [site()], {})).toBe(0)
-    expect(await provisionMerakisForNewSites('org1', [], {})).toBe(0)
+    expect(await provisionMerakisForNewSites([site()], {})).toBe(0)
+    expect(await provisionMerakisForNewSites([], {})).toBe(0)
     expect(getDocsMock).not.toHaveBeenCalled()
   })
 })

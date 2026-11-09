@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest'
 
 // Importing the service pulls in Firebase and storage; the guard under test is
 // a pure function, so they are stubbed to nothing.
-vi.mock('firebase/firestore', () => ({
+vi.mock('../../../shared/data/client.js', () => ({
   collection: vi.fn(), doc: vi.fn(), getDoc: vi.fn(), getDocs: vi.fn(), onSnapshot: vi.fn(),
   query: vi.fn(), runTransaction: vi.fn(), serverTimestamp: vi.fn(), where: vi.fn(),
   writeBatch: vi.fn(), limit: vi.fn(),
@@ -25,7 +25,7 @@ describe('assertNotHeldByPermit', () => {
   })
 
   it('stops a held procedure being deleted, before anything is written', async () => {
-    await expect(deleteProcedure({ id: 'p1', orgId: 'o1', activePermit: { id: 'LP-2026-0003' } }))
+    await expect(deleteProcedure({ id: 'p1', activePermit: { id: 'LP-2026-0003' } }))
       .rejects.toThrow(/Return or remove that permit first/)
   })
 })

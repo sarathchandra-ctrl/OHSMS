@@ -9,16 +9,14 @@ export function usePermits() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    if (!profile?.orgId) return undefined
     return subscribePermits(
-      profile.orgId,
       (items) => {
         setPermits(items)
         setLoading(false)
       },
       () => setLoading(false),
     )
-  }, [profile?.orgId])
+  }, [])
 
   return { permits, loading }
 }
@@ -29,14 +27,13 @@ export function usePermit(permitNo) {
   const [state, setState] = useState({ permit: undefined, loading: true })
 
   useEffect(() => {
-    if (!profile?.orgId || !permitNo) return undefined
+    if ((!permitNo)) return undefined
     return subscribePermit(
-      profile.orgId,
       permitNo,
       (permit) => setState({ permit, loading: false }),
       () => setState({ permit: null, loading: false }),
     )
-  }, [profile?.orgId, permitNo])
+  }, [permitNo])
 
   return state
 }
@@ -56,8 +53,8 @@ export function usePermitEvents(permitNo) {
   const { profile } = useAuth()
   const [events, setEvents] = useState([])
   useEffect(() => {
-    if (!profile?.orgId || !permitNo) return undefined
-    return subscribePermitEvents(profile.orgId, permitNo, setEvents, () => setEvents([]))
-  }, [profile?.orgId, permitNo])
+    if ((!permitNo)) return undefined
+    return subscribePermitEvents(permitNo, setEvents, () => setEvents([]))
+  }, [permitNo])
   return events
 }

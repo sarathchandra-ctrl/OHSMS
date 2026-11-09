@@ -44,7 +44,7 @@
 //
 // This module is pure on purpose. The SPA settings screen imports it, and the
 // functions package cannot import the SPA. Firestore reads stay in
-// loadPrecautionFor, which the digest calls. UV, visibility, wind, ice and
+// the weather digest. UV, visibility, wind, ice and
 // snow are not alerts here. Heat High remains an air temperature strictly
 // above 40°C, decided in weatherBands.js, not in this file.
 
@@ -1253,64 +1253,4 @@ export function resolvePrecaution(alertKey, org, index, area, overrides = {}) {
   return precautionText(alertKey, activitiesForArea(org, index, area), overrides)
 }
 
-async function readCapped(db, path, fields, cap) {
-  let query = db.collection(path)
-  if (typeof query.select === 'function' && fields?.length) query = query.select(...fields)
-  if (typeof query.limit === 'function') query = query.limit(cap)
-  const snap = await query.get()
-  return (snap?.docs || []).map((docSnap) => ({
-    id: docSnap.id,
-    ...(typeof docSnap.data === 'function' ? docSnap.data() || {} : {}),
-  }))
-}
 
-/**
- * `(alertKey, area) => sentence` for one org. A failed HIRA or permit read
- * leaves the org-level activities in place and still sends the mail: losing
- * the site detail is a blunter sentence, and losing the mail is a missed
- * warning. The org document itself failing is the same choice.
- */
-export async function loadPrecautionFor(db, orgId, sites, log) {
-  let org = {}
-  try {
-    const snap = await db.doc(`organizations/${orgId}`).get()
-    org = snap?.exists ? snap.data() || {} : {}
-  } catch (err) {
-    log?.error?.('weather digest org profile read failed', {
-      orgId,
-      error: err?.message || 'org-read-failed',
-    })
-  }
-  const overrides = normalizeOverrides(org.weatherPrecautions)
-  let index = indexSiteSignals({ sites })
-  try {
-    const [assessments, permits] = await Promise.all([
-      readCapped(
-        db,
-        `organizations/${orgId}/assessments`,
-        ['siteId', 'siteName', 'kind', 'activities'],
-        ASSESSMENT_CAP
-      ),
-      readCapped(
-        db,
-        `organizations/${orgId}/permits`,
-        ['siteId', 'site', 'typeOfWork', 'hazards'],
-        PERMIT_CAP
-      ),
-    ])
-    index = indexSiteSignals({ sites, assessments, permits })
-    if (assessments.length >= ASSESSMENT_CAP || permits.length >= PERMIT_CAP) {
-      log?.info?.('weather digest activity read hit its cap', {
-        orgId,
-        assessments: assessments.length,
-        permits: permits.length,
-      })
-    }
-  } catch (err) {
-    log?.error?.('weather digest activity read failed', {
-      orgId,
-      error: err?.message || 'activity-read-failed',
-    })
-  }
-  return (alertKey, area) => resolvePrecaution(alertKey, org, index, area, overrides)
-}

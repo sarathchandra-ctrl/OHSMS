@@ -416,7 +416,7 @@ function DetailsDialog({ doc, path, onClose }) {
 // ── The browser ──────────────────────────────────────────────────────────────
 
 export default function DocumentsModule() {
-  const { orgId, actor, role, isManager } = useAuth()
+  const { actor, role, isManager } = useAuth()
   const sites = useAccessibleSites()
 
   const [docs, setDocs] = useState(null) // null = loading
@@ -432,15 +432,13 @@ export default function DocumentsModule() {
   const viewer = useMemo(() => ({ role, sites }), [role, sites])
 
   useEffect(() => {
-    if (!orgId) return undefined
     setDocs(null)
-    return documentsService.subscribe(orgId, setDocs, viewer)
-  }, [orgId, viewer])
+    return documentsService.subscribe(setDocs, viewer)
+  }, [viewer])
 
   useEffect(() => {
-    if (!orgId) return undefined
-    return documentFolderService.subscribe(orgId, setFolders)
-  }, [orgId])
+    return documentFolderService.subscribe(setFolders)
+  }, [])
 
   // Memoised so the fresh [] a loading library produces cannot re-run every
   // derivation below it on every render.
@@ -559,7 +557,7 @@ export default function DocumentsModule() {
       const record = { ...payload }
       if (record.file instanceof File) {
         const stored = await putFile(
-          orgId, storageFolder(tree, record.folderId), record.file, record.file.name
+          storageFolder(tree, record.folderId), record.file, record.file.name
         )
         // putFile returns null for every failure — no bucket, rules refusal,
         // offline. Throwing here means no record is written claiming a file
@@ -571,10 +569,10 @@ export default function DocumentsModule() {
       const label = record.title || '(untitled)'
       if (docDialog.mode === 'edit') {
         const { id: _id, createdAt: _createdAt, __node: _n, ...rest } = record
-        await documentsService.update(orgId, docDialog.doc.id, rest, actor, label)
+        await documentsService.update(docDialog.doc.id, rest, actor, label)
         toast.success('Document updated')
       } else {
-        await documentsService.create(orgId, { ...record, status: 'draft' }, actor, label)
+        await documentsService.create({ ...record, status: 'draft' }, actor, label)
         toast.success('Document added')
       }
       setDocDialog(null)
@@ -589,7 +587,7 @@ export default function DocumentsModule() {
   const deleteDoc = async (doc) => {
     if (!window.confirm(`Delete "${doc.title || 'this document'}"? This cannot be undone.`)) return
     try {
-      await documentsService.remove(orgId, doc.id, actor, doc.title || '')
+      await documentsService.remove(doc.id, actor, doc.title || '')
       toast.success('Document deleted')
       setDetails(null)
     } catch (err) {
@@ -601,10 +599,10 @@ export default function DocumentsModule() {
     setBusy(true)
     try {
       if (folderDialog.mode === 'rename') {
-        await documentFolderService.rename(orgId, folderDialog.folder.stored, name, actor)
+        await documentFolderService.rename(folderDialog.folder.stored, name, actor)
         toast.success('Folder renamed')
       } else {
-        await documentFolderService.create(orgId, { name, parentId: nodeId }, actor)
+        await documentFolderService.create({ name, parentId: nodeId }, actor)
         toast.success('Folder created')
       }
       setFolderDialog(null)
@@ -633,7 +631,7 @@ export default function DocumentsModule() {
     }
     if (!window.confirm(`Delete the folder "${target.name}"?`)) return undefined
     try {
-      await documentFolderService.remove(orgId, target.stored, actor)
+      await documentFolderService.remove(target.stored, actor)
       toast.success('Folder deleted')
     } catch (err) {
       toastCaught(err, 'Delete failed')
@@ -908,7 +906,7 @@ export default function DocumentsModule() {
           nodeId={nodeId}
           tree={tree}
           sites={sites}
-          orgId={orgId}
+         
           busy={busy}
           onClose={() => setDocDialog(null)}
           onSubmit={saveDoc}

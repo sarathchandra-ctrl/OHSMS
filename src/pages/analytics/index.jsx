@@ -90,7 +90,7 @@ const COLLECTIONS = [
 ]
 
 export default function Analytics() {
-  const { orgId, isAdmin, actor, moduleEnabled } = useAuth()
+  const { isAdmin, actor, moduleEnabled } = useAuth()
 
   // The tabs this organization is licensed for. A tab with a `needs` is an
   // add-on the platform operator grants per customer — see ADDONS in the
@@ -116,9 +116,8 @@ export default function Analytics() {
   const [store, setStore] = useState(() => emptyCollections(COLLECTIONS))
 
   useEffect(() => {
-    if (!orgId) return undefined
-    return subscribeCollections(orgId, COLLECTIONS, setStore)
-  }, [orgId])
+    return subscribeCollections(COLLECTIONS, setStore)
+  }, [])
 
   // The org document is live, so an integration can be disconnected while
   // somebody is standing on the tab it feeds. Without this they keep the tab
@@ -195,7 +194,7 @@ export default function Analytics() {
           key={tab}
           view={tab === 'fls' ? 'scores' : 'tickets'}
           sites={sites}
-          orgId={orgId}
+         
           actor={actor}
           isAdmin={isAdmin}
           keepUnplaced={isAdmin}
@@ -206,7 +205,7 @@ export default function Analytics() {
         // Owns its query: the document library reads through a plan that mirrors
         // firestore.rules, and the page-wide subscribeCollections cannot — a
         // query that would return one refused row fails entirely.
-        <PreLaunchTab sites={sites} orgId={orgId} />
+        <PreLaunchTab sites={sites} />
       ) : tab === 'incidents' ? (
         <IncidentsTab incidents={incidents} sites={sites} keepUnplaced={isAdmin} />
       ) : tab === 'inspections' ? (
@@ -233,7 +232,7 @@ export default function Analytics() {
         // The one tab that owns its query: the tracker gathers actions from every
         // module through a single extractor, so there is no one collection to
         // hand it — see modules/actions/lib/sources.js.
-        <ActionsTab orgId={orgId} sites={sites} keepUnplaced={isAdmin} />
+        <ActionsTab sites={sites} keepUnplaced={isAdmin} />
       )}
     </div>
   )

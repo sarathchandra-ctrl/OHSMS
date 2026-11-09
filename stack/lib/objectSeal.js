@@ -66,8 +66,8 @@ const utf8 = new TextEncoder()
  * Verified against the client by the cross-seam test named in the header.
  */
 export const fileLabel = (keyClass) => `file:${keyClass}`
-export const fileAad = (orgId, keyClass) =>
-  utf8.encode(`ohsms:1:${String(orgId ?? '')}:${fileLabel(keyClass)}`)
+export const fileAad = (keyClass) =>
+  utf8.encode(`ohsms:1:org:${fileLabel(keyClass)}`)
 
 /** MUST match GENERAL/MEDICAL in policy.js and dataKeys.js. */
 export const GENERAL = 'general'
@@ -117,17 +117,17 @@ export const SEALED_SUFFIX = '.enc'
 /**
  * Where an object moves to, or null if it must not be touched.
  *
- * Refuses anything outside this org's own prefix and anything containing '..',
+ * Refuses anything outside the app's own files/ prefix and anything containing '..',
  * mirroring movedStoragePath in medicalRecords.js. `path` is a CLIENT-WRITABLE
  * field and this runs with Admin SDK privileges that never consult
  * storage.rules: a pointer naming another tenant's object would otherwise have
  * this job read that object, copy it into this org, and delete the original.
  * Refused, and reported.
  */
-export function sealedPath(path, orgId) {
+export function sealedPath(path) {
   const p = String(path ?? '').trim()
-  const prefix = `orgs/${String(orgId ?? '').trim()}/`
-  if (!p || !orgId || !p.startsWith(prefix) || p.includes('..')) return null
+  const prefix = 'files/'
+  if (!p || !p.startsWith(prefix) || p.includes('..')) return null
   // Exactly three segments, as storagePath() always writes. Anything deeper was
   // not written by this app and this job does not get to guess at its shape.
   const rest = p.slice(prefix.length)
@@ -173,9 +173,9 @@ async function importGeneralKey(raw) {
  * sealFileBytes() produces on the client — encScheme/encKeyId/encIv/encWrapped —
  * because the reader does not care which of the two wrote them.
  */
-export async function sealObjectBytes(keys, orgId, keyClass, bytes) {
+export async function sealObjectBytes(keys, keyClass, bytes) {
   const iv = globalThis.crypto.getRandomValues(new Uint8Array(IV_BYTES))
-  const additionalData = fileAad(orgId, keyClass)
+  const additionalData = fileAad(keyClass)
 
   if (!isHybridClass(keyClass)) {
     const entry = keys?.general
@@ -211,8 +211,8 @@ export async function sealObjectBytes(keys, orgId, keyClass, bytes) {
  * object has been downloaded back and passed through here, so a truncated
  * upload or a wrong key leaves the original exactly where it was.
  */
-export async function openObjectBytes(keys, orgId, keyClass, meta, bytes) {
-  const additionalData = fileAad(orgId, keyClass)
+export async function openObjectBytes(keys, keyClass, meta, bytes) {
+  const additionalData = fileAad(keyClass)
   const iv = fromB64u(meta.encIv)
 
   if (meta.encScheme === 'enk') {

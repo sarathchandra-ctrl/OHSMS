@@ -13,7 +13,7 @@ vi.mock('../../shared/lib/toastCaught', () => ({ toastCaught: vi.fn() }))
 vi.mock('./lib/firestore', () => ({ resolveDefects: vi.fn(), decideAssetReport: vi.fn() }))
 vi.mock('./context/FleetContext', () => ({ useFleet: () => fleet }))
 vi.mock('./context/AuthContext', () => ({
-  useAuth: () => ({ orgId: 'o', orgName: 'O', profile: { name: 'M' }, isManager: false }),
+  useAuth: () => ({ orgName: 'O', profile: { name: 'M' }, isManager: false }),
 }))
 
 const { default: DefectRepository } = await import('./DefectRepository')

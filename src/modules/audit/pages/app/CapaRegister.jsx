@@ -28,14 +28,12 @@ const isOverdue = (target, verified) => isOverdueDate(target, { closed: verified
 
 export default function CapaRegister() {
   const { org } = useAuth()
-  const orgId = org?.id
   const [records, setRecords] = useState([])
   const [filters, setFilters] = useState({ q: '', state: '' })
 
   useEffect(() => {
-    if (!orgId) return undefined
-    return subscribeAuditFindings(orgId, setRecords)
-  }, [orgId])
+    return subscribeAuditFindings(setRecords)
+  }, [])
 
   const rows = useMemo(() => {
     const out = []

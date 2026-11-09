@@ -41,7 +41,7 @@ export default function Technicians() {
     }
     setSaving(true)
     try {
-      await addTechnician({ orgId: profile.orgId, ...form }, profile)
+      await addTechnician({ ...form }, profile)
       setForm({ name: '', lockNo: '', contact: '', licenceNo: '', licenceExp: '' })
       toast.success('Technician added')
     } catch (err) {

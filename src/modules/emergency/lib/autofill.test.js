@@ -296,7 +296,7 @@ describe('autofillSite', () => {
         notes: 'gate',
       },
     ]
-    const result = await autofillSite('org', site, contacts, { uid: 'u' })
+    const result = await autofillSite(site, contacts, { uid: 'u' })
     expect(result.updated).toBe(1)
     expect(result.skipped).toBe(1)
     expect(result.added).toBe(0)

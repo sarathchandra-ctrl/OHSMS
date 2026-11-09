@@ -12,7 +12,7 @@ import { todayISO } from '../../../shared/lib/dates'
  * The next refill date is required: without it the unit returns to Active
  * and is immediately due again, which is the list it was sent out to leave.
  */
-export default function ReceiveFromVendorModal({ open, onClose, ext, orgId, orgName, actorName }) {
+export default function ReceiveFromVendorModal({ open, onClose, ext, orgName, actorName }) {
   const [receivedOn, setReceivedOn] = useState('')
   const [dateOfNextRefill, setDateOfNextRefill] = useState('')
   const [busy, setBusy] = useState(false)
@@ -32,7 +32,6 @@ export default function ReceiveFromVendorModal({ open, onClose, ext, orgId, orgN
     setBusy(true)
     try {
       await markReceivedFromVendor(
-        orgId,
         orgName,
         ext.id,
         { receivedOn, dateOfNextRefill },

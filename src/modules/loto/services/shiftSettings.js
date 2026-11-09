@@ -6,12 +6,11 @@ import { db } from '../../../shared/db'
 
 export const SHIFT_SETTINGS_ID = 'shifts'
 
-const ref = (orgId) => doc(db, 'organizations', orgId, 'lotoSettings', SHIFT_SETTINGS_ID)
+const ref = () => doc(db, 'lotoSettings', SHIFT_SETTINGS_ID)
 
-export function subscribeShiftSettings(orgId, cb) {
-  if (!orgId) return () => {}
+export function subscribeShiftSettings(cb) {
   return onSnapshot(
-    ref(orgId),
+    ref(),
     (snap) => cb(snap.exists() ? snap.data() : null),
     () => cb(null),
   )
@@ -21,7 +20,7 @@ export function subscribeShiftSettings(orgId, cb) {
  * Replace one site's shifts inside the settings document. `current` is the
  * document already loaded, so saving site A does not wipe site B.
  */
-export async function saveSiteShifts({ orgId, user, siteId, shifts, zoneOffsetMinutes, current }) {
+export async function saveSiteShifts({ user, siteId, shifts, zoneOffsetMinutes, current }) {
   const sites = { ...(current?.sites || {}) }
   const map = {}
   for (const s of shifts) {
@@ -37,7 +36,7 @@ export async function saveSiteShifts({ orgId, user, siteId, shifts, zoneOffsetMi
     zoneOffsetMinutes: Number.isInteger(zoneOffsetMinutes) ? zoneOffsetMinutes : 0,
     shifts: map,
   }
-  await setDoc(ref(orgId), {
+  await setDoc(ref(), {
     sites,
     updatedAt: serverTimestamp(),
     updatedBy: user.id,

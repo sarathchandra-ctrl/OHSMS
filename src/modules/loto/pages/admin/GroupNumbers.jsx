@@ -18,16 +18,15 @@ export default function GroupNumbers() {
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
-    if (!profile?.orgId) return undefined
-    return subscribeGroupNumbers(profile.orgId, setRows)
-  }, [profile?.orgId])
+    return subscribeGroupNumbers(setRows)
+  }, [])
 
   async function onAdd(e) {
     e.preventDefault()
     if (!isAdmin) return
     setSaving(true)
     try {
-      await addGroupNumber({ orgId: profile.orgId, no, description })
+      await addGroupNumber({ no, description })
       setNo('')
       setDescription('')
       toast.success('Group number registered')

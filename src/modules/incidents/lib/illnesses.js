@@ -44,20 +44,20 @@ import { resolveSubscription } from '../../../shared/storage/resolveFiles'
 const SEALED = 'illnesses'
 const SEALED_FILES = 'illnesses/files'
 
-const illnessCol = (orgId) => collection(db, 'organizations', orgId, 'illnesses')
-const illnessRef = (orgId, id) => doc(db, 'organizations', orgId, 'illnesses', id)
-const fileCol = (orgId, id) => collection(db, 'organizations', orgId, 'illnesses', id, 'files')
-const fileRef = (orgId, id, fid) => doc(db, 'organizations', orgId, 'illnesses', id, 'files', fid)
-const counterRef = (orgId) => doc(db, 'organizations', orgId, 'meta', 'illness')
+const illnessCol = () => collection(db, 'illnesses')
+const illnessRef = (id) => doc(db, 'illnesses', id)
+const fileCol = (id) => collection(db, 'illnesses', id, 'files')
+const fileRef = (id, fid) => doc(db, 'illnesses', id, 'files', fid)
+const counterRef = () => doc(db, 'meta', 'illness')
 
 export const ILLNESS_LOAD_CAP = 2000
 
-export async function createIllness(orgId, actor, initial = {}) {
+export async function createIllness(actor, initial = {}) {
   // Both identifiers are reserved before anything is written, so a failure to
   // issue one leaves no half-created record behind — only an unused number.
-  const refNo = await reserveRefNo(counterRef(orgId), 'ILL')
-  const docId = await reserveDocId(orgId, 'illnesses')
-  const ref = doc(illnessCol(orgId))
+  const refNo = await reserveRefNo(counterRef(), 'ILL')
+  const docId = await reserveDocId('illnesses')
+  const ref = doc(illnessCol())
   const illness = {
     // See createIncident: docId is the org-wide id, refNo is kept for records
     // and correspondence that already quote the older number.
@@ -91,8 +91,8 @@ export async function createIllness(orgId, actor, initial = {}) {
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   }
-  await setDoc(ref, await sealDoc(orgId, SEALED, illness))
-  await logAudit(orgId, actor, AUDIT.ILLNESS_CREATE, {
+  await setDoc(ref, await sealDoc(SEALED, illness))
+  await logAudit(actor, AUDIT.ILLNESS_CREATE, {
     target: 'illness',
     targetId: ref.id,
     targetLabel: illness.refNo,
@@ -101,8 +101,8 @@ export async function createIllness(orgId, actor, initial = {}) {
   return ref.id
 }
 
-export async function updateIllness(orgId, id, updates, opts = {}) {
-  const current = await getDoc(illnessRef(orgId, id))
+export async function updateIllness(id, updates, opts = {}) {
+  const current = await getDoc(illnessRef(id))
   if (!current.exists()) throw new Error('Illness not found')
   const before = current.data()
   // Same stamp as updateIncident. Illness action text is health data and is
@@ -110,11 +110,11 @@ export async function updateIllness(orgId, id, updates, opts = {}) {
   const patch = Array.isArray(updates.actions) && opts.actor?.uid
     ? { ...updates, actions: stampNewAssignees(before.actions, updates.actions, opts.actor.uid) }
     : updates
-  await updateDoc(illnessRef(orgId, id), { ...await sealDoc(orgId, SEALED, patch), updatedAt: serverTimestamp() })
+  await updateDoc(illnessRef(id), { ...await sealDoc(SEALED, patch), updatedAt: serverTimestamp() })
   if (!opts.silent) {
     const merged = { ...before }
     for (const [k, v] of Object.entries(updates)) if (!k.includes('.')) merged[k] = v
-    await logAudit(orgId, opts.actor, opts.action || AUDIT.ILLNESS_UPDATE, {
+    await logAudit(opts.actor, opts.action || AUDIT.ILLNESS_UPDATE, {
       target: 'illness',
       targetId: id,
       targetLabel: before.refNo || id,
@@ -123,14 +123,14 @@ export async function updateIllness(orgId, id, updates, opts = {}) {
   }
 }
 
-export async function getIllness(orgId, id) {
-  const snap = await getDoc(illnessRef(orgId, id))
-  return snap.exists() ? openDoc(orgId, SEALED, { id, ...snap.data() }) : null
+export async function getIllness(id) {
+  const snap = await getDoc(illnessRef(id))
+  return snap.exists() ? openDoc(SEALED, { id, ...snap.data() }) : null
 }
 
-export function subscribeIllnesses(orgId, cb, max = ILLNESS_LOAD_CAP) {
-  const q = query(illnessCol(orgId), orderBy('createdAt', 'desc'), limit(max))
-  const opened = openSnapshots(orgId, SEALED, cb)
+export function subscribeIllnesses(cb, max = ILLNESS_LOAD_CAP) {
+  const q = query(illnessCol(), orderBy('createdAt', 'desc'), limit(max))
+  const opened = openSnapshots(SEALED, cb)
   // The fallback goes to `cb`, not to `opened`: there is nothing to unseal, and
   // routing an empty list through the decryption step would report a read
   // failure as a decryption failure.
@@ -141,8 +141,8 @@ export function subscribeIllnesses(orgId, cb, max = ILLNESS_LOAD_CAP) {
   )
 }
 
-export async function closeIllness(orgId, id, actor) {
-  await updateIllness(orgId, id, {
+export async function closeIllness(id, actor) {
+  await updateIllness(id, {
     lifecycle: 'closed',
     'stagesDone.actions': true,
     closedAt: serverTimestamp(),
@@ -150,42 +150,42 @@ export async function closeIllness(orgId, id, actor) {
   }, { actor, action: AUDIT.ILLNESS_CLOSE, summary: 'Illness closed' })
 }
 
-export async function deleteIllness(orgId, id, actor) {
-  const snap = await getDoc(illnessRef(orgId, id))
+export async function deleteIllness(id, actor) {
+  const snap = await getDoc(illnessRef(id))
   if (!snap.exists()) return
   const before = snap.data()
-  await updateDoc(illnessRef(orgId, id), { deletedAt: serverTimestamp(), deletedBy: actor?.name || '' })
-  await logAudit(orgId, actor, AUDIT.ILLNESS_DELETE, { target: 'illness', targetId: id, targetLabel: before.refNo || id })
+  await updateDoc(illnessRef(id), { deletedAt: serverTimestamp(), deletedBy: actor?.name || '' })
+  await logAudit(actor, AUDIT.ILLNESS_DELETE, { target: 'illness', targetId: id, targetLabel: before.refNo || id })
 }
 
-export async function restoreIllness(orgId, id, actor) {
-  const snap = await getDoc(illnessRef(orgId, id))
+export async function restoreIllness(id, actor) {
+  const snap = await getDoc(illnessRef(id))
   if (!snap.exists()) return
   const data = snap.data()
-  await updateDoc(illnessRef(orgId, id), { deletedAt: null, deletedBy: null, updatedAt: serverTimestamp() })
-  await logAudit(orgId, actor, AUDIT.ILLNESS_RESTORE, { target: 'illness', targetId: id, targetLabel: data.refNo || id })
+  await updateDoc(illnessRef(id), { deletedAt: null, deletedBy: null, updatedAt: serverTimestamp() })
+  await logAudit(actor, AUDIT.ILLNESS_RESTORE, { target: 'illness', targetId: id, targetLabel: data.refNo || id })
 }
 
-export async function purgeIllness(orgId, id, actor, label) {
-  const files = await getDocs(fileCol(orgId, id))
+export async function purgeIllness(id, actor, label) {
+  const files = await getDocs(fileCol(id))
   files.docs.forEach((d) => { if (d.data().path) removeFile(d.data().path) })
   const batch = writeBatch(db)
   files.docs.forEach((d) => batch.delete(d.ref))
-  batch.delete(illnessRef(orgId, id))
+  batch.delete(illnessRef(id))
   await batch.commit()
-  await logAudit(orgId, actor, AUDIT.ILLNESS_PURGE, { target: 'illness', targetId: id, targetLabel: label || id })
+  await logAudit(actor, AUDIT.ILLNESS_PURGE, { target: 'illness', targetId: id, targetLabel: label || id })
 }
 
 // ── Files (base64 subcollection) ──────────────────────────────────────────────
-export async function addIllnessFile(orgId, id, file) {
+export async function addIllnessFile(id, file) {
   // Same cloud-first-with-inline-fallback contract as incident photos.
   const up = file.dataUrl
-    ? await putFile(orgId, 'illness-files', file.dataUrl, file.name, { collection: SEALED_FILES })
+    ? await putFile('illness-files', file.dataUrl, file.name, { collection: SEALED_FILES })
     : null
   if (!up && file.dataUrl && (file.size || 0) > MAX_INLINE_BYTES) {
     throw new Error(tooLargeForInline(file.name))
   }
-  const ref = await addDoc(fileCol(orgId, id), await sealDoc(orgId, SEALED_FILES, {
+  const ref = await addDoc(fileCol(id), await sealDoc(SEALED_FILES, {
     name: file.name || '',
     type: file.type || '',
     dataUrl: up ? '' : file.dataUrl,
@@ -197,17 +197,17 @@ export async function addIllnessFile(orgId, id, file) {
     uploadedAt: serverTimestamp(),
     ...(up?.encIv ? { encScheme: up.encScheme, encKeyId: up.encKeyId, encIv: up.encIv, ...(up.encWrapped ? { encWrapped: up.encWrapped } : {}) } : {}),
   }))
-  await updateDoc(illnessRef(orgId, id), { fileCount: increment(1), updatedAt: serverTimestamp() })
+  await updateDoc(illnessRef(id), { fileCount: increment(1), updatedAt: serverTimestamp() })
   return ref.id
 }
 
-export function subscribeIllnessFiles(orgId, id, cb) {
-  const q = query(fileCol(orgId, id), orderBy('uploadedAt', 'asc'))
+export function subscribeIllnessFiles(id, cb) {
+  const q = query(fileCol(id), orderBy('uploadedAt', 'asc'))
   // Opened BEFORE the dataUrl normalisation, not after: the inline copy is
   // sealed, so `data.dataUrl || data.url` run first would see an envelope, find
   // it truthy, and hand the renderer a base64 string in place of an image.
-  const resolve = resolveSubscription(orgId, SEALED_FILES, cb)
-  const opened = openSnapshots(orgId, SEALED_FILES, (rows) => resolve(
+  const resolve = resolveSubscription(SEALED_FILES, cb)
+  const opened = openSnapshots(SEALED_FILES, (rows) => resolve(
     rows.map((r) => ({ ...r, dataUrl: r.dataUrl || r.url || '' })),
   ))
   const stop = onSnapshot(
@@ -218,11 +218,11 @@ export function subscribeIllnessFiles(orgId, id, cb) {
   return () => { resolve.stop(); stop() }
 }
 
-export async function deleteIllnessFile(orgId, id, fileId) {
+export async function deleteIllnessFile(id, fileId) {
   try {
-    const snap = await getDoc(fileRef(orgId, id, fileId))
+    const snap = await getDoc(fileRef(id, fileId))
     if (snap.data()?.path) removeFile(snap.data().path)
   } catch { /* orphan tolerated */ }
-  await deleteDoc(fileRef(orgId, id, fileId))
-  await updateDoc(illnessRef(orgId, id), { fileCount: increment(-1), updatedAt: serverTimestamp() })
+  await deleteDoc(fileRef(id, fileId))
+  await updateDoc(illnessRef(id), { fileCount: increment(-1), updatedAt: serverTimestamp() })
 }

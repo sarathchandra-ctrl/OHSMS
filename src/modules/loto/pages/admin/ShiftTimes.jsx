@@ -35,17 +35,15 @@ export default function ShiftTimes() {
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
-    if (!profile?.orgId) return undefined
-    return subscribeSites(profile.orgId, setSites)
-  }, [profile?.orgId])
+    return subscribeSites(setSites)
+  }, [])
 
   useEffect(() => {
-    if (!profile?.orgId) return undefined
-    return subscribeShiftSettings(profile.orgId, (doc) => {
+    return subscribeShiftSettings((doc) => {
       setSettings(doc)
       setReady(true)
     })
-  }, [profile?.orgId])
+  }, [])
 
   useEffect(() => {
     if (!siteId && sites[0]?.id) setSiteId(sites[0].id)
@@ -86,7 +84,6 @@ export default function ShiftTimes() {
     setSaving(true)
     try {
       await saveSiteShifts({
-        orgId: profile.orgId,
         user: profile,
         siteId,
         shifts: cleaned,

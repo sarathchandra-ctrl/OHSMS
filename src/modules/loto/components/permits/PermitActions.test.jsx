@@ -28,7 +28,7 @@ const permit = (over = {}) => ({
   locks: [{ pointKey: 'k1', lockNo: 'D-1' }, { pointKey: 'k2', lockNo: 'D-2' }],
   ...over,
 })
-const base = { orgId: 'o1', user: { id: 'u1', displayName: 'Req' }, isAdmin: false, isParty: true, otherAdmin: true, canWrite: true }
+const base = { user: { id: 'u1', displayName: 'Req' }, isAdmin: false, isParty: true, otherAdmin: true, canWrite: true }
 const mount = (props) => render(<PermitActions {...base} {...props} />)
 
 beforeEach(() => { cleanup(); vi.clearAllMocks() })

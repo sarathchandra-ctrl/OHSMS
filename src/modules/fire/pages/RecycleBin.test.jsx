@@ -11,7 +11,6 @@ const fleet = { value: null }
 
 vi.mock('../context/AuthContext', () => ({
   useAuth: () => ({
-    orgId: 'org-1',
     orgName: 'Acme',
     profile: { uid: 'u1', name: 'Site lead' },
     isAdmin: true,

@@ -6,12 +6,11 @@ import { collection, doc, onSnapshot, query, setDoc, limit } from '../../../shar
 import { db } from '../../../shared/db'
 import { COLLECTION_READ_CAP } from '../../../shared/org/orgData'
 
-const col = (orgId) => collection(db, 'organizations', orgId, 'lotoGroupNumbers')
+const col = () => collection(db, 'lotoGroupNumbers')
 
-export function subscribeGroupNumbers(orgId, cb) {
-  if (!orgId) return () => {}
+export function subscribeGroupNumbers(cb) {
   return onSnapshot(
-    query(col(orgId), limit(COLLECTION_READ_CAP)),
+    query(col(), limit(COLLECTION_READ_CAP)),
     (snap) => {
       const rows = snap.docs.map((d) => ({ id: d.id, ...d.data() }))
       rows.sort((a, b) => String(a.no || a.id).localeCompare(String(b.no || b.id)))
@@ -21,11 +20,10 @@ export function subscribeGroupNumbers(orgId, cb) {
   )
 }
 
-export async function addGroupNumber({ orgId, no, description }) {
+export async function addGroupNumber({ no, description }) {
   const id = String(no || '').trim()
   if (!/^[A-Za-z0-9-]{1,40}$/.test(id)) throw new Error('Use letters, numbers and hyphens only.')
-  await setDoc(doc(db, 'organizations', orgId, 'lotoGroupNumbers', id), {
-    orgId,
+  await setDoc(doc(db, 'lotoGroupNumbers', id), {
     no: id,
     description: String(description || '').trim().slice(0, 200),
     openPermitId: '',

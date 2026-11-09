@@ -7,9 +7,9 @@
 // them by hand: adding someone there should be enough to let them in with the
 // right role, and removing them there should be enough to shut them out here.
 //
-// The data API cannot reach any of this: scimUsers and scimTokens are paths
-// no browser policy in schema.sql matches, and every write here is the
-// worker's, after the checks below.
+// The data API cannot reach any of this: scimUsers, scimGroups and scimTokens
+// are server-only paths in schema.sql (server_only_path), and every write here
+// is the worker's, after the checks below.
 
 import { createHash, randomBytes } from 'node:crypto'
 import { asWorker } from './engine.mjs'
@@ -52,7 +52,7 @@ export function roleFromGroups(rules, groups) {
 export async function getGroupRoles(engine, db, { uid }) {
   const admin = await adminOf(engine, uid)
   if (!admin) return refuse('not-admin')
-  const org = await engine.get(WORKER, 'organizations', admin.orgId)
+  const org = await engine.get(WORKER, 'organization', 'profile')
   return { ok: true, rules: cleanGroupRoles(org?.groupRoles) }
 }
 
@@ -70,7 +70,7 @@ export async function setGroupRoles(engine, db, { uid, rules }) {
   const clean = cleanGroupRoles(rules)
   if (clean.length !== rules.length) return refuse('rules')
   await engine.commit(WORKER, [
-    { type: 'update', path: 'organizations', id: admin.orgId, data: { groupRoles: clean } },
+    { type: 'update', path: 'organization', id: 'profile', data: { groupRoles: clean } },
   ])
   return { ok: true, rules: clean }
 }
@@ -80,22 +80,22 @@ export async function groupJoinFor(db, groups) {
   if (!Array.isArray(groups) || !groups.length) return null
   const rows = await asWorker(
     db,
-    `SELECT id, data->'groupRoles' AS rules FROM documents WHERE path = 'organizations' AND data ? 'groupRoles'`
+    `SELECT id, data->'groupRoles' AS rules FROM documents WHERE path = 'organization' AND id = 'profile' AND data ? 'groupRoles'`
   )
   for (const row of rows.rows) {
     const rules = typeof row.rules === 'string' ? JSON.parse(row.rules) : row.rules
     const role = roleFromGroups(rules, groups)
-    if (role) return { orgId: row.id, role }
+    if (role) return { role }
   }
   return null
 }
 
-async function approvedAdmins(db, orgId) {
+async function approvedAdmins(db) {
   const res = await asWorker(
     db,
     `SELECT count(*)::int AS n FROM documents
-      WHERE path = 'users' AND data->>'orgId' = $1 AND data->>'role' = 'admin' AND data->>'status' = 'approved'`,
-    [orgId]
+      WHERE path = 'users' AND data->>'role' = 'admin' AND data->>'status' = 'approved'`,
+    []
   )
   return res.rows[0]?.n ?? 0
 }
@@ -107,11 +107,10 @@ async function approvedAdmins(db, orgId) {
  * organization's last administrator: the company could not get back in.
  */
 export async function syncRoleFromGroups(engine, db, uid, profile, groups) {
-  if (!profile?.orgId) return profile
-  const org = await engine.get(WORKER, 'organizations', profile.orgId)
+  const org = await engine.get(WORKER, 'organization', 'profile')
   const role = roleFromGroups(org?.groupRoles, groups)
   if (!role || role === profile.role) return profile
-  if (profile.role === 'admin' && (await approvedAdmins(db, profile.orgId)) <= 1) return profile
+  if (profile.role === 'admin' && (await approvedAdmins(db)) <= 1) return profile
   await engine.commit(WORKER, [
     { type: 'update', path: 'users', id: uid, data: { role, roleFrom: 'groups' } },
   ])
@@ -125,13 +124,11 @@ export async function syncRoleFromGroups(engine, db, uid, profile, groups) {
 // object IDs, also pushes each group's name with that ID as externalId, so
 // rules can be written with names.
 
-async function scimGroupRows(db, orgId) {
+async function scimGroupRows(db) {
   const res = await asWorker(
     db,
-    orgId
-      ? `SELECT id, data FROM documents WHERE path = 'scimGroups' AND data->>'orgId' = $1`
-      : `SELECT id, data FROM documents WHERE path = 'scimGroups'`,
-    orgId ? [orgId] : []
+    `SELECT id, data FROM documents WHERE path = 'scimGroups'`,
+    []
   )
   // A group deleted in the directory gives nobody anything from that moment.
   return res.rows
@@ -142,12 +139,11 @@ async function scimGroupRows(db, orgId) {
 /**
  * The groups to apply rules to: what the sign-in carried, the names of pushed
  * groups whose ID or externalId it carried (Entra), and the pushed groups the
- * person is a member of. orgId null looks across organizations (first
- * sign-in, before anyone knows which).
+ * person is a member of.
  */
-export async function expandGroups(db, orgId, email, claimGroups = []) {
+export async function expandGroups(db, email, claimGroups = []) {
   const out = new Set(Array.isArray(claimGroups) ? claimGroups.map(String) : [])
-  const rows = await scimGroupRows(db, orgId)
+  const rows = await scimGroupRows(db)
   if (!rows.length) return [...out]
   const mine = await asWorker(
     db,
@@ -164,22 +160,22 @@ export async function expandGroups(db, orgId, email, claimGroups = []) {
 }
 
 /** Apply the rules now to these directory users' accounts, after a group changed. */
-async function resyncRoles(engine, db, orgId, scimUserIds) {
+async function resyncRoles(engine, db, scimUserIds) {
   if (!scimUserIds.size) return
   const res = await asWorker(
     db,
-    `SELECT id, data->>'email' AS email FROM documents WHERE path = 'scimUsers' AND data->>'orgId' = $1`,
-    [orgId]
+    `SELECT id, data->>'email' AS email FROM documents WHERE path = 'scimUsers'`,
+    []
   )
   const emails = new Set(res.rows.filter((r) => scimUserIds.has(r.id)).map((r) => r.email))
   for (const email of emails) {
     const accounts = await asWorker(
       db,
-      `SELECT id FROM documents WHERE path = 'users' AND data->>'orgId' = $1
-         AND lower(data->>'email') = $2 AND data->>'status' = 'approved'`,
-      [orgId, email]
+      `SELECT id FROM documents WHERE path = 'users'
+         AND lower(data->>'email') = $1 AND data->>'status' = 'approved'`,
+      [email]
     )
-    const groups = await expandGroups(db, orgId, email, [])
+    const groups = await expandGroups(db, email, [])
     for (const { id } of accounts.rows) {
       const profile = await engine.get(WORKER, 'users', id)
       await syncRoleFromGroups(engine, db, id, profile, groups)
@@ -210,15 +206,15 @@ export async function deactivatedByDirectory(db, email) {
  * schema.sql), so a session still open stops working at its next request,
  * not when it expires. Active again: a disabled account is approved again.
  */
-async function applyActive(engine, db, orgId, email, active) {
+async function applyActive(engine, db, email, active) {
   const users = await asWorker(
     db,
     `SELECT id, data->>'status' AS status FROM documents
-      WHERE path = 'users' AND data->>'orgId' = $1 AND lower(data->>'email') = $2`,
-    [orgId, email]
+      WHERE path = 'users' AND lower(data->>'email') = $1`,
+    [email]
   )
   if (!active) {
-    await asWorker(db, 'DELETE FROM invites WHERE email = $1 AND org_id = $2', [email, orgId])
+    await asWorker(db, 'DELETE FROM invites WHERE email = $1', [email])
     const ops = users.rows
       .filter((u) => u.status !== 'disabled')
       .map((u) => ({
@@ -239,9 +235,9 @@ async function applyActive(engine, db, orgId, email, active) {
     // groups, if mapped, decide the role then.
     await asWorker(
       db,
-      `INSERT INTO invites (email, org_id, role, name) VALUES ($1, $2, 'member', $1)
+      `INSERT INTO invites (email, role, name) VALUES ($1, 'member', $1)
        ON CONFLICT (email) DO NOTHING`,
-      [email, orgId]
+      [email]
     )
   }
 }
@@ -251,11 +247,13 @@ async function applyActive(engine, db, orgId, email, active) {
 // creating a new one replaces the old, which stops working at once.
 
 const tokenHash = (token) => createHash('sha256').update(String(token)).digest('hex')
+// One token per installation, kept under this id.
+const SCIM_TOKEN_ID = 'current'
 
 export async function scimStatus(engine, db, { uid }) {
   const admin = await adminOf(engine, uid)
   if (!admin) return refuse('not-admin')
-  const row = await engine.get(WORKER, 'scimTokens', admin.orgId)
+  const row = await engine.get(WORKER, 'scimTokens', SCIM_TOKEN_ID)
   return { ok: true, enabled: Boolean(row?.hash), createdAt: row?.createdAt || null }
 }
 
@@ -267,7 +265,7 @@ export async function createScimToken(engine, db, { uid }) {
     {
       type: 'set',
       path: 'scimTokens',
-      id: admin.orgId,
+      id: SCIM_TOKEN_ID,
       merge: false,
       data: { hash: tokenHash(token), createdAt: new Date().toISOString(), createdBy: uid },
     },
@@ -278,19 +276,20 @@ export async function createScimToken(engine, db, { uid }) {
 export async function revokeScimToken(engine, db, { uid }) {
   const admin = await adminOf(engine, uid)
   if (!admin) return refuse('not-admin')
-  await engine.commit(WORKER, [{ type: 'remove', path: 'scimTokens', id: admin.orgId }])
+  await engine.commit(WORKER, [{ type: 'remove', path: 'scimTokens', id: SCIM_TOKEN_ID }])
   return { ok: true }
 }
 
-async function orgOfToken(db, header) {
+/** Does the request carry this organization's current SCIM token? */
+async function validScimToken(db, header) {
   const m = /^Bearer\s+(\S+)$/i.exec(String(header || ''))
-  if (!m) return null
+  if (!m) return false
   const res = await asWorker(
     db,
-    `SELECT id FROM documents WHERE path = 'scimTokens' AND data->>'hash' = $1 LIMIT 1`,
-    [tokenHash(m[1])]
+    `SELECT id FROM documents WHERE path = 'scimTokens' AND id = $1 AND data->>'hash' = $2 LIMIT 1`,
+    [SCIM_TOKEN_ID, tokenHash(m[1])]
   )
-  return res.rows[0]?.id || null
+  return res.rows.length === 1
 }
 
 // ── SCIM 2.0 (RFC 7643, 7644): Users ────────────────────────────────────────
@@ -390,8 +389,9 @@ export async function handleScim({ engine, db, origin, method, pathname, query, 
   const fail = (status, detail, scimType) =>
     reply(status, { schemas: [ERROR_SCHEMA], status: String(status), detail, scimType })
 
-  const orgId = await orgOfToken(db, headers.authorization)
-  if (!orgId) return fail(401, 'A valid SCIM token is required.')
+  if (!(await validScimToken(db, headers.authorization))) {
+    return fail(401, 'A valid SCIM token is required.')
+  }
   const rest = pathname.replace(/^\/scim\/v2/, '')
 
   if (method === 'GET' && rest === '/ServiceProviderConfig') {
@@ -438,8 +438,8 @@ export async function handleScim({ engine, db, origin, method, pathname, query, 
   const users = async () => {
     const res = await asWorker(
       db,
-      `SELECT id, data FROM documents WHERE path = 'scimUsers' AND data->>'orgId' = $1 ORDER BY id`,
-      [orgId]
+      `SELECT id, data FROM documents WHERE path = 'scimUsers' ORDER BY id`,
+      []
     )
     // Deleted in the directory: gone from SCIM's view, kept here as inactive.
     return res.rows
@@ -448,7 +448,7 @@ export async function handleScim({ engine, db, origin, method, pathname, query, 
   }
   const save = async (id, rec) =>
     engine.commit(WORKER, [
-      { type: 'set', path: 'scimUsers', id, merge: false, data: { ...rec, orgId } },
+      { type: 'set', path: 'scimUsers', id, merge: false, data: { ...rec } },
     ])
 
   if (rest === '/Users' && method === 'GET') {
@@ -497,7 +497,7 @@ export async function handleScim({ engine, db, origin, method, pathname, query, 
     rec.lastModified = now
     const id = randomBytes(12).toString('hex')
     await save(id, rec)
-    await applyActive(engine, db, orgId, rec.email, rec.active)
+    await applyActive(engine, db, rec.email, rec.active)
     return reply(201, toResource(id, rec, origin))
   }
 
@@ -519,9 +519,9 @@ export async function handleScim({ engine, db, origin, method, pathname, query, 
       next.lastModified = new Date().toISOString()
       // A changed address: the old one is no longer this person's here.
       if (next.email !== found.rec.email)
-        await applyActive(engine, db, orgId, found.rec.email, false)
+        await applyActive(engine, db, found.rec.email, false)
       await save(id, next)
-      await applyActive(engine, db, orgId, next.email, next.active)
+      await applyActive(engine, db, next.email, next.active)
       return reply(200, toResource(id, next, origin))
     }
     if (method === 'DELETE') {
@@ -534,19 +534,19 @@ export async function handleScim({ engine, db, origin, method, pathname, query, 
         lastModified: new Date().toISOString(),
       }
       await save(id, next)
-      await applyActive(engine, db, orgId, found.rec.email, false)
+      await applyActive(engine, db, found.rec.email, false)
       return reply(204, null)
     }
   }
 
   // ── Groups ──
-  const groupRows = () => scimGroupRows(db, orgId)
+  const groupRows = () => scimGroupRows(db)
   const knownUsers = async () => new Set((await users()).map((u) => u.id))
   const memberIds = (list, known) =>
     (Array.isArray(list) ? list : []).map((m) => String(m?.value || '')).filter((v) => known.has(v))
   const saveGroup = async (id, rec) =>
     engine.commit(WORKER, [
-      { type: 'set', path: 'scimGroups', id, merge: false, data: { ...rec, orgId } },
+      { type: 'set', path: 'scimGroups', id, merge: false, data: { ...rec } },
     ])
   const groupResource = (id, rec) => ({
     schemas: [GROUP_SCHEMA],
@@ -613,7 +613,7 @@ export async function handleScim({ engine, db, origin, method, pathname, query, 
     }
     const id = randomBytes(12).toString('hex')
     await saveGroup(id, rec)
-    await resyncRoles(engine, db, orgId, new Set(rec.members))
+    await resyncRoles(engine, db, new Set(rec.members))
     return reply(201, groupResource(id, rec))
   }
 
@@ -665,12 +665,12 @@ export async function handleScim({ engine, db, origin, method, pathname, query, 
       next.lastModified = new Date().toISOString()
       await saveGroup(id, next)
       const touched = new Set([...(found.rec.members || []), ...next.members])
-      await resyncRoles(engine, db, orgId, touched)
+      await resyncRoles(engine, db, touched)
       return reply(200, groupResource(id, next))
     }
     if (method === 'DELETE') {
       await saveGroup(id, { ...found.rec, deleted: true, lastModified: new Date().toISOString() })
-      await resyncRoles(engine, db, orgId, new Set(found.rec.members || []))
+      await resyncRoles(engine, db, new Set(found.rec.members || []))
       return reply(204, null)
     }
   }

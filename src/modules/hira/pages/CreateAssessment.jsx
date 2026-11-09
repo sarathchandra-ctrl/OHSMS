@@ -79,7 +79,7 @@ function Section({ n, title, subtitle, children }) {
 export default function CreateAssessment() {
   const { id } = useParams()
   const navigate = useNavigate()
-  const { orgId, profile, user } = useAuth()
+  const { profile, user } = useAuth()
   const { assessments, org, siteInventory } = useRa()
   const [form, setForm] = useState(emptyForm)
   const [busy, setBusy] = useState(false)
@@ -88,9 +88,8 @@ export default function CreateAssessment() {
   // Employee directory for the internal-member Department → Person drill-down.
   const [orgUsers, setOrgUsers] = useState([])
   useEffect(() => {
-    if (!orgId) return undefined
-    return subscribeOrgUsers(orgId, setOrgUsers)
-  }, [orgId])
+    return subscribeOrgUsers(setOrgUsers)
+  }, [])
 
   // Edit mode: hydrate form from the existing assessment once it's available.
   useEffect(() => {
@@ -218,13 +217,13 @@ export default function CreateAssessment() {
       const actor = { uid: user?.uid, name: profile?.name }
       let savedId = id
       if (id) {
-        await updateAssessment(orgId, id, payload)
+        await updateAssessment(id, payload)
         toast.success('Assessment updated')
       } else {
-        savedId = await createAssessment(orgId, payload, actor)
+        savedId = await createAssessment(payload, actor)
         toast.success('Assessment created')
       }
-      logActivity(orgId, actor, {
+      logActivity(actor, {
         type: id ? 'updated' : 'created',
         message: `${id ? 'updated' : 'created'} risk assessment “${payload.name}”`,
         assessmentId: savedId,

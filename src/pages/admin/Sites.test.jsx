@@ -10,7 +10,6 @@ const { updateSite, assignSiteType, toast } = vi.hoisted(() => ({
 
 const auth = vi.hoisted(() => ({
   value: {
-    orgId: 'org-1',
     actor: { uid: 'admin-1' },
     role: 'admin',
     org: { activityTypes: ['Cold store'], siteTypeByEntity: {} },
@@ -34,11 +33,11 @@ vi.mock('react-hot-toast', () => ({ default: toast }))
 vi.mock('../../shared/lib/toastCaught', () => ({ toastCaught: vi.fn() }))
 vi.mock('../../shared/auth/AuthContext', () => ({ useAuth: () => auth.value }))
 vi.mock('../../shared/org/orgData', () => ({
-  subscribeSites: (_orgId, cb) => {
+  subscribeSites: (cb) => {
     cb(SITES)
     return () => {}
   },
-  subscribeOrgUsers: (_orgId, cb) => {
+  subscribeOrgUsers: (cb) => {
     cb([])
     return () => {}
   },
@@ -63,7 +62,6 @@ vi.mock('../../shared/org/orgData', () => ({
 const { default: Sites } = await import('./Sites')
 
 const adminAuth = () => ({
-  orgId: 'org-1',
   actor: { uid: 'admin-1' },
   role: 'admin',
   org: { activityTypes: ['Cold store'], siteTypeByEntity: {} },

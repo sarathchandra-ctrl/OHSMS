@@ -17,7 +17,7 @@ import { BULK_COLUMNS } from '../lib/constants'
 import { toastCaught } from '../../../shared/lib/toastCaught'
 
 export default function BulkUpload() {
-  const { orgId, orgName, profile } = useAuth()
+  const { orgName, profile } = useAuth()
   const { extinguishers, deletedExtinguishers } = useFleet()
   const orgSites = useAccessibleSites()
   const inputRef = useRef(null)
@@ -106,7 +106,7 @@ export default function BulkUpload() {
     if (!plan || (!plan.creates.length && !plan.updates.length)) return
     setCommitting(true)
     try {
-      const res = await bulkUpsertExtinguishers(orgId, orgName, plan, { uid: profile?.uid, name: profile?.name })
+      const res = await bulkUpsertExtinguishers(orgName, plan, { uid: profile?.uid, name: profile?.name })
       // Carry the held-back count into the summary: `plan` is cleared below, and
       // "42 added" on a 50-row file should not be the only thing the person sees.
       setDone({ ...res, heldBack: plan.blocked.length, retiredHeld: plan.held.length })

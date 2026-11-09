@@ -51,7 +51,7 @@ const localNow = () => {
 }
 
 export default function ReportIncident() {
-  const { orgId, actor, profile } = useAuth()
+  const { actor, profile } = useAuth()
   const navigate = useNavigate()
   const [params] = useSearchParams()
 
@@ -115,7 +115,7 @@ export default function ReportIncident() {
             bodyParts: form.bodyParts,
           }
         : null
-      const id = await createIncident(orgId, actor, {
+      const id = await createIncident(actor, {
         incidentDate: date || '',
         incidentTime: time || '',
         type: form.type,
@@ -132,14 +132,14 @@ export default function ReportIncident() {
       // from the org counter (IRA-YYYY-NNNN) and that is the number the HSE team
       // will search on. Showing the id instead would hand the reporter a
       // reference nobody upstream can find, so read the real one back.
-      const saved = await getIncident(orgId, id).catch(() => null)
+      const saved = await getIncident(id).catch(() => null)
       // A report that says someone was hurt and stores nothing about the injury
       // is worse than one that refuses, so this failure is not swallowed.
-      if (injury) await syncIncidentInjuries(orgId, { id, ...(saved || {}) }, [injury], actor)
+      if (injury) await syncIncidentInjuries({ id, ...(saved || {}) }, [injury], actor)
       let photoNote = ''
       if (photo) {
         try {
-          await addIncidentPhoto(orgId, id, {
+          await addIncidentPhoto(id, {
             ...photo,
             uploadedBy: personName,
             kind: 'photo',
