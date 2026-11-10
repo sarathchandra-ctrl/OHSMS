@@ -170,6 +170,11 @@ function scopeSql(path, ctx, params) {
   if (scope === 'none') return null
   if (scope === 'all') return ''
   if (scope === 'all-but-crypto') return " AND id != 'cryptoKeys'"
+  if (scope.ownedBy) {
+    // The same two fields policy.ownedBy reads, so a list and a get agree.
+    params.push(scope.ownedBy, scope.ownedBy)
+    return " AND (json_extract(data, '$.createdBy') = ? OR json_extract(data, '$.createdByUid') = ?)"
+  }
   params.push(scope.onlyId)
   return ' AND id = ?'
 }
@@ -268,7 +273,7 @@ export function createEngine(db) {
       if (op.type === 'remove') {
         if (!current) continue
         // Not visible to this caller: nothing they could remove.
-        if (!ctx.worker && !canRead(op.path, op.id, ctx)) continue
+        if (!ctx.worker && !canRead(op.path, op.id, ctx, current.data)) continue
         const why = deleteAllowed(op.path, op.id, current.data, ctx)
         if (why)
           throw fail('permission-denied', `sqlite: delete refused at ${op.path}/${op.id} (${why})`)
@@ -288,7 +293,7 @@ export function createEngine(db) {
         touched.set(k, [op.path, op.id])
         continue
       }
-      const visible = current && (ctx.worker || canRead(op.path, op.id, ctx))
+      const visible = current && (ctx.worker || canRead(op.path, op.id, ctx, current.data))
       if (op.type === 'update' && !visible) {
         throw fail('not-found', `sqlite: no document to update at ${op.path}/${op.id}`)
       }
@@ -371,11 +376,12 @@ export function createEngine(db) {
     async get(session, path, id, opts) {
       checkRole(session)
       const { ctx } = await contextFor(session)
-      if (!ctx.worker && !canRead(path, id, ctx)) return null
+      if (!ctx.worker && readScope(path, ctx) === 'none') return null
       const row = await db
         .prepare('SELECT id, rev, data FROM documents WHERE path = ? AND id = ?')
         .bind(path, id)
         .first()
+      if (!ctx.worker && row && !canRead(path, id, ctx, parse(row.data))) return null
       return rowToDoc(row, opts)
     },
 

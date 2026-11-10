@@ -50,6 +50,90 @@ const isAuditor = (ctx) => (ctx.profile?.role || '') === 'auditor'
 const passwordOk = (ctx) => !ctx.profile || !mustChange(ctx.profile)
 const ownUser = (ctx, path, id) => path === 'users' && Boolean(ctx.uid) && id === ctx.uid
 
+// ── Module permission ───────────────────────────────────────────────────────
+// Which module each collection belongs to (keys of src/shared/modules/
+// registry.js), recovered from the map the Firestore rules carried. An
+// employee whose profile lists `access.modules` reaches only those modules'
+// collections, for reading and for writing; the app hides the rest
+// (grantedModuleKeys in src/shared/auth/access.js), and this is what stops
+// the same request sent from the console.
+//
+// Not listed, so open to every approved member: shared collections (sites,
+// users, auditLogs, meta, the QR mirrors) and trainingAssignments, which is
+// every employee's own "My training" on the portal whatever modules they have.
+export const MODULE_OF_COLLECTION = {
+  incidents: 'incidents',
+  illnesses: 'incidents',
+  injuries: 'incidents',
+  assessments: 'hira',
+  inspectionTemplates: 'inspections',
+  inspectionRecords: 'inspections',
+  audits: 'audit',
+  auditPlans: 'audit',
+  auditFindings: 'audit',
+  capas: 'audit',
+  findings: 'audit',
+  permits: 'ptw',
+  observations: 'ptw',
+  procedures: 'loto',
+  procedurePhotos: 'loto',
+  locks: 'loto',
+  technicians: 'loto',
+  lotoPermits: 'loto',
+  lotoEvents: 'loto',
+  lotoGroupNumbers: 'loto',
+  extinguishers: 'equipment',
+  aeds: 'equipment',
+  fas: 'equipment',
+  signages: 'equipment',
+  stretchers: 'equipment',
+  firstAid: 'equipment',
+  reports: 'equipment',
+  defectClosures: 'equipment',
+  mockDrills: 'drills',
+  consultations: 'committee',
+  trainingCourses: 'training',
+  trainingRecords: 'training',
+  trainingSessions: 'training',
+  trainingRequests: 'training',
+  documents: 'documents',
+  erpContacts: 'emergency',
+  erpLayouts: 'emergency',
+  erpRescuePlans: 'emergency',
+  objectives: 'objectives',
+  cctvCameras: 'cctv',
+  cctvDvrs: 'cctv',
+  cctvMeraki: 'cctv',
+  escalations: 'stakeholder',
+  legalIssues: 'stakeholder',
+}
+// Admins, managers and auditors see every module. Anyone else — the Employee
+// role, or a role this file does not know — is held to their list. A missing
+// list means every module, so profiles saved before the field existed keep
+// working; an empty list means none.
+const ALL_MODULE_ROLES = ['admin', 'manager', 'auditor']
+
+// Kept out of a module, an employee still sees what they created there, and
+// may still REPORT: every worker can raise an incident from the portal
+// whatever modules they hold, and the QR on a unit or a permit takes a
+// report from anyone, signed in or not. Reading back what they sent is how
+// the portal shows the reporter their reference number.
+const REPORTABLE = ['incidents', 'injuries']
+const publicReport = (path, d) =>
+  ['reports', 'observations'].includes(path) &&
+  d?.source === 'qr' &&
+  d?.approvalStatus === 'pending'
+
+/** Is this caller kept out of the module `path` belongs to? */
+export function moduleBlocked(path, ctx) {
+  if (ctx.worker) return false
+  const key = MODULE_OF_COLLECTION[rootOf(path)]
+  if (!key || !ctx.profile) return false
+  if (ALL_MODULE_ROLES.includes(ctx.profile.role)) return false
+  const granted = ctx.profile.access?.modules
+  return Array.isArray(granted) && !granted.includes(key)
+}
+
 // ── Reading ─────────────────────────────────────────────────────────────────
 
 /**
@@ -66,6 +150,7 @@ export function readScope(path, ctx) {
   if (ctx.worker) return 'all'
   if (serverOnly(path)) return 'none'
   if (isMedical(path) && !isManager(ctx)) return 'none'
+  if (moduleBlocked(path, ctx)) return ctx.uid ? { ownedBy: ctx.uid } : 'none'
   // gate_password: a temporary password reaches nothing but the person's own profile.
   if (!passwordOk(ctx)) return path === 'users' && ctx.uid ? { onlyId: ctx.uid } : 'none'
   if (isApproved(ctx) || PUBLIC_MIRRORS.includes(path)) {
@@ -79,13 +164,19 @@ export function readScope(path, ctx) {
   return 'none'
 }
 
-export function canRead(path, id, ctx) {
+/** `row` is the stored document, needed only for an { ownedBy } scope. */
+export function canRead(path, id, ctx, row) {
   const scope = readScope(path, ctx)
   if (scope === 'all') return true
   if (scope === 'all-but-crypto') return !isCryptoKey(path, id)
   if (scope === 'none') return false
+  if (scope.ownedBy) return ownedBy(row, scope.ownedBy)
   return id === scope.onlyId
 }
+
+/** Created by `uid`: the two creator fields the engine's SQL filter also reads. */
+export const ownedBy = (row, uid) =>
+  Boolean(uid) && (row?.createdBy === uid || row?.createdByUid === uid)
 
 // ── Restrictions every write must also pass (the RESTRICTIVE policies) ──────
 
@@ -203,6 +294,12 @@ function restrictWrite(op, path, id, ctx, { next, prev } = {}) {
   if (op === 'insert' && isAuditor(ctx) && collectionOf(path) !== 'auditLogs') return 'auditor'
   if ((op === 'update' || op === 'delete') && isAuditor(ctx)) return 'auditor'
   if ((op === 'update' || op === 'delete') && collectionOf(path) === 'auditLogs') return 'audit-log'
+  if (
+    moduleBlocked(path, ctx) &&
+    !(op === 'insert' && (REPORTABLE.includes(rootOf(path)) || publicReport(path, next)))
+  ) {
+    return 'module'
+  }
   if (MANAGER_ONLY_COLLECTIONS.includes(path) && !isManager(ctx)) return 'manager-only'
   if (
     op === 'update' &&
@@ -238,7 +335,7 @@ const text = (v) => (typeof v === 'boolean' ? String(v) : str(v))
  */
 export function insertAllowed(path, id, data, ctx, lookup) {
   if (ctx.worker) return ''
-  const restricted = restrictWrite('insert', path, id, ctx)
+  const restricted = restrictWrite('insert', path, id, ctx, { next: data })
   if (restricted) return restricted
   const d = data || {}
   const signedOut = !ctx.uid
@@ -317,7 +414,7 @@ export function insertAllowed(path, id, data, ctx, lookup) {
 /** May this caller change path/id from `prev` to `next`? (USING on prev, WITH CHECK on next.) */
 export function updateAllowed(path, id, prev, next, ctx) {
   if (ctx.worker) return ''
-  if (!canRead(path, id, ctx)) return 'not-visible'
+  if (!canRead(path, id, ctx, prev)) return 'not-visible'
   const restricted = restrictWrite('update', path, id, ctx, { next, prev })
   if (restricted) return restricted
   // update_writer
@@ -334,7 +431,7 @@ export function updateAllowed(path, id, prev, next, ctx) {
 
 export function deleteAllowed(path, id, prev, ctx) {
   if (ctx.worker) return ''
-  if (!canRead(path, id, ctx)) return 'not-visible'
+  if (!canRead(path, id, ctx, prev)) return 'not-visible'
   const restricted = restrictWrite('delete', path, id, ctx, { prev })
   if (restricted) return restricted
   // delete_member: broad on purpose; the auditor is removed by restrictWrite.

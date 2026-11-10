@@ -410,3 +410,77 @@ describe('employee: edits', () => {
     expect((await adminEngine.get(null, 'incidents', 'e-theirs')).title).toBe('Fall from height')
   })
 })
+
+// An employee given some modules reaches only those modules' collections.
+// Outside them they may still report an incident (every worker can) and see
+// what they themselves created — nothing else.
+describe('module permission', () => {
+  beforeAll(async () => {
+    await seed('users', 'hiraOnly', {
+      role: 'member',
+      status: 'approved',
+      name: 'Hana',
+      access: { modules: ['hira'] },
+    })
+    await seed('users', 'noModules', { role: 'member', status: 'approved', access: { modules: [] } })
+    await seed('users', 'mgrListed', {
+      role: 'manager',
+      status: 'approved',
+      access: { modules: ['hira'] },
+    })
+    await seed('incidents', 'm-other', { title: 'Not hers', createdBy: 'adminA' })
+    await seed('incidents', 'm-hers', { title: 'Hers', createdBy: 'hiraOnly' })
+    await seed('incidents/m-other/photos', 'mp1', { url: 'x' })
+    await seed('extinguishers', 'mx1', { status: 'ok' })
+    await seed('assessments', 'ma1', { title: 'Ladder', createdBy: 'adminA' })
+  })
+  const denied = { code: 'permission-denied' }
+
+  it('hides a module the employee was not given, list, get and sub-collections alike', async () => {
+    const h = as('hiraOnly')
+    expect(await h.get('incidents', 'm-other')).toBeNull()
+    expect(await h.get('extinguishers', 'mx1')).toBeNull()
+    expect((await h.list('incidents')).map((d) => d.id)).toEqual(['m-hers'])
+    expect(await h.list('incidents/m-other/photos')).toEqual([])
+    expect(await h.list('extinguishers')).toEqual([])
+    expect(await as('noModules').list('assessments')).toEqual([])
+  })
+
+  it('refuses writes outside the granted modules', async () => {
+    const h = as('hiraOnly')
+    await expect(h.update('extinguishers', 'mx1', { status: 'gone' })).rejects.toThrow()
+    await expect(h.set('extinguishers', 'mx2', { status: 'ok' })).rejects.toMatchObject(denied)
+    await expect(h.set('permits', 'mp-new', { status: 'draft' })).rejects.toMatchObject(denied)
+    await expect(h.update('incidents', 'm-hers', { title: 'Edited' })).rejects.toMatchObject(denied)
+    expect((await adminEngine.get(null, 'extinguishers', 'mx1')).status).toBe('ok')
+  })
+
+  it('still lets anyone report an incident and read back their own report', async () => {
+    const h = as('hiraOnly')
+    await h.set('incidents', 'm-new', { title: 'Spill', createdBy: 'hiraOnly' })
+    await h.set('incidents/m-new/photos', 'p1', { url: 'y' })
+    expect(await h.get('incidents', 'm-new')).toMatchObject({ title: 'Spill' })
+    // A report signed in from a QR is allowed exactly as an anonymous one is.
+    await h.set('reports', 'qr-1', { source: 'qr', approvalStatus: 'pending', kind: 'defect' })
+    await expect(
+      h.set('reports', 'qr-2', { source: 'qr', approvalStatus: 'approved', kind: 'defect' })
+    ).rejects.toMatchObject(denied)
+  })
+
+  it('works normally inside the granted modules', async () => {
+    const h = as('hiraOnly')
+    expect(await h.get('assessments', 'ma1')).toMatchObject({ title: 'Ladder' })
+    await h.set('assessments', 'ma2', { title: 'Mine', createdBy: 'hiraOnly' })
+  })
+
+  it('cannot grant itself a module', async () => {
+    await expect(
+      as('hiraOnly').update('users', 'hiraOnly', { access: { modules: ['hira', 'incidents'] } })
+    ).rejects.toMatchObject(denied)
+  })
+
+  it('does not apply to managers or to employees without a list', async () => {
+    expect(await as('mgrListed').get('incidents', 'm-other')).toMatchObject({ title: 'Not hers' })
+    expect(await as('memberA').get('extinguishers', 'mx1')).toMatchObject({ status: 'ok' })
+  })
+})
