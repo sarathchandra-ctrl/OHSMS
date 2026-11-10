@@ -141,13 +141,17 @@ export const MAX_WINDOW_HOURS = 24
 /** "Due" begins this long before the window end. */
 export const DUE_SOON_MINUTES = 30
 
-/** One extension can add at most this long (the rules cap it too). */
+/** One extension can add at most this long (stack/policy.mjs caps it too). */
 export const MAX_EXTENSION_HOURS = 24
 
 /** Minimum length of a free-text justification (reason, emergency, extension). */
 export const MIN_REASON_LENGTH = 10
 
-/** Bounds, mirrored in firestore.rules so a hostile client cannot exceed them. */
+/**
+ * Bounds for the form. The server enforces the outer ones (no text over 2000
+ * characters, no list over 100 entries: stack/policy.mjs), so a hostile client
+ * cannot make a permit unreadable or unprintable.
+ */
 export const LIMITS = {
   text: 2000,
   name: 120,

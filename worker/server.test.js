@@ -44,6 +44,22 @@ describe('files in R2', () => {
   // A fresh upload link for a path that already holds a file is the way to
   // swap someone's evidence for something else. Every real upload gets a new
   // random path, so the second PUT is never legitimate.
+  // Served back under the type it was uploaded with, so the type is the
+  // difference between an attachment and a page running on the app's origin.
+  it('refuses file types that could run as a page', async () => {
+    const files = createR2FileStore({ bucket: fakeBucket(), key, origin })
+    for (const type of ['text/html', 'image/svg+xml', 'application/javascript', 'text/plain', 'application/vnd.evil']) {
+      const res = await files.handle(
+        new Request(files.uploadUrl(`files/photos/t-${type.replace(/\W/g, '')}`), {
+          method: 'PUT',
+          body: 'x',
+          headers: { 'Content-Type': type, 'Content-Length': '1' },
+        })
+      )
+      expect(res.status, type).toBe(415)
+    }
+  })
+
   it('never replaces a stored file', async () => {
     const bucket = fakeBucket()
     const files = createR2FileStore({ bucket, key, origin })
@@ -52,7 +68,7 @@ describe('files in R2', () => {
         new Request(files.uploadUrl('files/photos/evidence.txt'), {
           method: 'PUT',
           body,
-          headers: { 'Content-Type': 'text/plain', 'Content-Length': String(body.length) },
+          headers: { 'Content-Type': 'application/pdf', 'Content-Length': String(body.length) },
         })
       )
     expect((await put('original')).status).toBe(200)
@@ -68,7 +84,7 @@ describe('files in R2', () => {
       new Request(files.uploadUrl('files/photos/a.txt'), {
         method: 'PUT',
         body: 'hello',
-        headers: { 'Content-Type': 'text/plain', 'Content-Length': '5' },
+        headers: { 'Content-Type': 'application/pdf', 'Content-Length': '5' },
       })
     )
     expect(put.status).toBe(200)
@@ -152,7 +168,7 @@ describe('files in R2', () => {
         new Request(files.uploadUrl('files/photos/bad.txt'), {
           method: 'PUT',
           body: 'x',
-          headers: { 'Content-Length': length },
+          headers: { 'Content-Type': 'application/pdf', 'Content-Length': length },
         })
       )
       expect(res.status).toBe(400)

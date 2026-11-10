@@ -15,11 +15,11 @@ async function store() {
 afterAll(() => Promise.all(dirs.map((d) => rm(d, { recursive: true, force: true }))))
 
 /** Drive handle() with a minimal Node-shaped request and response. */
-async function call(files, method, link, body = '') {
+async function call(files, method, link, body = '', type = 'application/pdf') {
   const url = new URL(link)
   const req = Object.assign(Readable.from(body ? [Buffer.from(body)] : []), {
     method,
-    headers: { 'content-type': 'text/plain', 'content-length': String(body.length) },
+    headers: { 'content-type': type, 'content-length': String(body.length) },
   })
   const out = { status: 0, chunks: [] }
   await new Promise((resolve) => {
@@ -69,5 +69,15 @@ describe('files on disk', () => {
     expect((await call(files, 'PUT', files.uploadUrl(path), 'swapped')).status).toBe(409)
     const got = await call(files, 'GET', files.downloadUrl(path))
     expect(got.text).toBe('original')
+  })
+})
+
+describe('file types on disk', () => {
+  it('refuses HTML and SVG, accepts a PDF and a photo', async () => {
+    const files = await store()
+    expect((await call(files, 'PUT', files.uploadUrl('files/a/page'), '<b>x</b>', 'text/html')).status).toBe(415)
+    expect((await call(files, 'PUT', files.uploadUrl('files/a/logo'), '<svg/>', 'image/svg+xml')).status).toBe(415)
+    expect((await call(files, 'PUT', files.uploadUrl('files/a/doc'), '%PDF', 'application/pdf')).status).toBe(200)
+    expect((await call(files, 'PUT', files.uploadUrl('files/a/photo'), 'jpg', 'image/jpeg; charset=binary')).status).toBe(200)
   })
 })

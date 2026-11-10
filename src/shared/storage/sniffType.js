@@ -4,11 +4,12 @@
 //
 // ── The gap this closes (audit finding M-6, A.8.7) ──────────────────────────
 //
-// `storage.rules` allow-lists content types, and that allow-list is genuinely
-// load-bearing: it is what stops an object being SERVED as text/html from a
-// Google-owned domain, which would make the tenant's evidence store a phishing
-// host. But it constrains `request.resource.contentType`, and that value is
-// supplied by the client. A browser sets it from the file extension; anything
+// The server allow-lists content types (allowedUploadType in
+// stack/lib/uploadLimits.js), and that allow-list is genuinely load-bearing:
+// it is what stops an object being SERVED as text/html from the app's own
+// origin, which would make the evidence store a phishing host. But it
+// constrains the declared Content-Type, and that value is supplied by the
+// client. A browser sets it from the file extension; anything
 // that is not this app sets it to whatever it likes.
 //
 // So the rule answers "may an object be served as this type", and nothing
@@ -47,7 +48,7 @@ export const SNIFF_BYTES = 64
  *
  * Executables and installers, in the formats a browser or a colleague's machine
  * will actually run. An .exe renamed to .pdf is the whole vector: the allow-list
- * in storage.rules sees `application/pdf`, the bucket stores it, and the
+ * on the server sees `application/pdf`, the store keeps it, and the
  * download is an executable sitting in somebody's Downloads folder with a
  * document's name.
  */
@@ -134,7 +135,7 @@ function looksTextual(head) {
  * @returns `{ ok, reason }` — `reason` is a sentence fit to show a person
  *
  * Unknown formats PASS. This is an allow-list of signatures, not of files: the
- * declared type is already constrained by storage.rules, and refusing anything
+ * declared type is already constrained by the server's allow-list, and refusing anything
  * whose first bytes are unfamiliar would reject legitimate documents for being
  * unusual. Only two things fail — a known-executable header, and a declared
  * type that the bytes actively contradict.

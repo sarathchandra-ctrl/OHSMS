@@ -33,9 +33,9 @@ describe('chart palettes cover their vocabularies', () => {
   })
 })
 
-// These sheets are reached from a public QR scan, so firestore.rules validates
-// what they produce: assetKind must be one of the kinds it knows how to
-// approve into, and defect must be a non-empty string of at most 200 chars.
+// These sheets are reached from a public QR scan, so the server checks what
+// they produce (stack/policy.mjs): assetKind must match the scanned code, and
+// defect must be a string of at most 200 chars.
 // A list that drifts outside those bounds fails at submit time, on a phone, for
 // a member of the public — which is the worst place to find out.
 describe('asset defect sheets stay within what the rules accept', () => {

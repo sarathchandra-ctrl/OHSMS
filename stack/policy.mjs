@@ -192,7 +192,7 @@ export const ownedBy = (row, uid) =>
 // The site register is the organization's map: every scope, picker and
 // grant resolves through it. Creating, editing and deleting sites is the
 // Sites page's job (site.manage), and that is a manager's.
-const MANAGER_ONLY_COLLECTIONS = ['sites']
+const MANAGER_ONLY_COLLECTIONS = ['sites', 'lotoSettings']
 
 // An employee creates, views and closes; deleting is a manager's. Two
 // deletes are part of an employee's own flow rather than removing a record:
@@ -354,6 +354,38 @@ function restrictWrite(op, path, id, ctx, { next, prev } = {}) {
 const str = (v) => (v === undefined || v === null ? '' : String(v))
 const text = (v) => (typeof v === 'boolean' ? String(v) : str(v))
 
+// ── The anonymous QR surface (S-14) ─────────────────────────────────────────
+// A scanned token lets a stranger write one report, one observation or one
+// defect lock. Each may carry only its own fields, every string bounded, so
+// one sticker is not a megabyte-per-write channel into the approval queue.
+// `max` is the longest each string may be; a field absent or null passes.
+const ANON_SHAPES = {
+  reports: {
+    extId: 200, extLabel: 200, kind: 40, defectType: 200, newStatus: 60, note: 500,
+    reportedBy: 40, reportedByName: 120, reporterRole: 60, source: 20, approvalStatus: 20,
+    reportedAt: 0, createdAt: 0, token: 200, assetKind: 40, assetRefId: 200, assetLabel: 200,
+    defect: 200,
+  },
+  observations: {
+    permitId: 200, permitNo: 120, docId: 120, token: 200, type: 20, note: 500, observedBy: 40,
+    observedByName: 120, observedByRole: 60, source: 20, approvalStatus: 20, at: 0,
+  },
+  defectLocks: { extId: 200, defectType: 200, createdAt: 0, token: 200 },
+}
+
+/** The first field an anonymous write may not carry, or may not carry that long, or ''. */
+export function anonShapeProblem(path, d) {
+  const shape = ANON_SHAPES[path]
+  if (!shape) return ''
+  for (const [k, v] of Object.entries(d || {})) {
+    if (!(k in shape)) return k
+    // 0: a timestamp, not text. Anything else is a string up to its cap.
+    if (shape[k] === 0 || v === null || v === undefined) continue
+    if (typeof v !== 'string' || v.length > shape[k]) return k
+  }
+  return ''
+}
+
 /**
  * May this caller create path/id with `data`? `lookup(path, id)` returns a
  * stored document (for the QR-token checks), read in the same pass.
@@ -362,6 +394,10 @@ export function insertAllowed(path, id, data, ctx, lookup) {
   if (ctx.worker) return ''
   const restricted = restrictWrite('insert', path, id, ctx, { next: data })
   if (restricted) return restricted
+  if (path === 'lotoPermits') {
+    const window = lotoWindowProblem(data, lookup)
+    if (window) return window
+  }
   const d = data || {}
   const signedOut = !ctx.uid
 
@@ -387,6 +423,9 @@ export function insertAllowed(path, id, data, ctx, lookup) {
   ) {
     return ''
   }
+  // The anonymous branches below each check their own token binding; the
+  // shape and the lengths are the same check for all three.
+  if (signedOut && anonShapeProblem(path, d)) return 'anon-shape'
   // insert_anon_report: signed out, token-bound to one asset.
   if (
     signedOut &&
@@ -591,6 +630,55 @@ export function lotoPermitProblem(prev, next, ctx) {
   return ''
 }
 
+// The permit window is a shift, not two times somebody typed
+// (src/modules/loto/utils/shiftWindow.js decides it for the form). A request
+// opens REQUEST_LEAD minutes before the shift and closes when it ends. Once an
+// Admin saves a site's shift clocks (lotoSettings/shifts), the window must
+// start and end on those clocks in the site's zone; until then the default
+// shifts' lengths apply: general 9 hours, A, B and C 8 hours.
+const REQUEST_LEAD_MS = 30 * 60 * 1000
+const DEFAULT_SHIFT_MS = { general: 9 * 3600e3, A: 8 * 3600e3, B: 8 * 3600e3, C: 8 * 3600e3 }
+const CLOCK = /^([01]\d|2[0-3]):([0-5]\d)$/
+
+function onClock(ms, offsetMin, clock) {
+  const m = CLOCK.exec(String(clock || ''))
+  if (!m) return false
+  const local = new Date(ms + offsetMin * 60000)
+  return local.getUTCHours() === Number(m[1]) && local.getUTCMinutes() === Number(m[2])
+}
+
+/** Why a new permit's window is not an open shift, or ''. */
+export function lotoWindowProblem(d, lookup = () => null, nowMs = Date.now()) {
+  const start = millis(d?.windowStart)
+  const end = millis(d?.windowEnd)
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) return 'loto-window'
+  if (start > nowMs + REQUEST_LEAD_MS || end <= nowMs) return 'loto-window-closed'
+  const site = lookup('lotoSettings', 'shifts')?.sites?.[str(d.siteId)]
+  if (site) {
+    const shift = site.shifts?.[str(d.shift)]
+    const offset = Number.isInteger(site.zoneOffsetMinutes) ? site.zoneOffsetMinutes : 0
+    if (!shift || !onClock(start, offset, shift.start) || !onClock(end, offset, shift.end)) {
+      return 'loto-window-shift'
+    }
+    return ''
+  }
+  const length = DEFAULT_SHIFT_MS[str(d.shift)]
+  return length && end - start === length ? '' : 'loto-window-shift'
+}
+
+// Bounds, as LIMITS in src/modules/loto/constants/permits.js: no text over
+// 2000 characters and no list over 100 entries anywhere on a permit, so a
+// hostile client cannot make one unreadable or unprintable.
+const LOTO_TEXT_MAX = 2000
+const LOTO_LIST_MAX = 100
+function oversized(v, depth = 0) {
+  if (depth > 6) return true
+  if (typeof v === 'string') return v.length > LOTO_TEXT_MAX
+  if (Array.isArray(v)) return v.length > LOTO_LIST_MAX || v.some((x) => oversized(x, depth + 1))
+  if (v && typeof v === 'object') return Object.values(v).some((x) => oversized(x, depth + 1))
+  return false
+}
+
 // ── What a public mirror may carry ──────────────────────────────────────────
 // qr, permitQr and procedureQr are read by anyone holding a token, without an
 // account. Each may carry only the fields its builder writes (fire/lib/data.js
@@ -676,6 +764,7 @@ export function invariantProblem(path, id, prev, next, ctx) {
   if (!ctx.worker && path === 'lotoPermits') {
     const loto = lotoPermitProblem(prev, n, ctx)
     if (loto) return loto
+    if (oversized(n)) return 'loto-bounds'
   }
   if (prev && ['meta', 'docSeq'].includes(collectionOf(path)) && id !== 'cryptoKeys') {
     for (const k of ['nextSeq', 'permitSeq', 'n']) {

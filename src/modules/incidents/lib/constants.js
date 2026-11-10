@@ -1,7 +1,9 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // Single source of truth for every enum, dropdown option, and color used across
 // forms, badges, charts, the dashboard, the body map and the printable reports.
-// Import from here only. The firestore.rules enum allow-lists mirror these.
+// Import from here only. The server does not check these values: historical
+// incidents brought in by import may carry others, and the screens fall
+// back to a neutral label for a key they do not know.
 // ─────────────────────────────────────────────────────────────────────────────
 
 // ── Incident type / classification ───────────────────────────────────────────

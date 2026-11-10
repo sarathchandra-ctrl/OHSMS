@@ -591,10 +591,47 @@ describe('LOTO permits', () => {
   })
   const denied = { code: 'permission-denied' }
 
+  // A general shift that started ten minutes ago: an open window.
+  const open = () => {
+    const start = Date.now() - 10 * 60 * 1000
+    return { shift: 'general', siteId: 's-1', windowStart: ts(start), windowEnd: ts(start + 9 * H) }
+  }
+
   it('lets an employee raise a permit only as requested', async () => {
     const m = as('memberA')
-    await m.set('lotoPermits', 'lp-new', { ...base, status: 'requested' })
-    await expect(m.set('lotoPermits', 'lp-skip', { ...base, status: 'active' })).rejects.toMatchObject(denied)
+    await m.set('lotoPermits', 'lp-new', { ...base, ...open(), status: 'requested' })
+    await expect(m.set('lotoPermits', 'lp-skip', { ...base, ...open(), status: 'active' })).rejects.toMatchObject(denied)
+  })
+
+  it('takes the window from the shift, not from whatever was typed', async () => {
+    const m = as('memberA')
+    const start = Date.now() - 10 * 60 * 1000
+    // A 30-hour "shift", one that ended yesterday, one that starts tomorrow.
+    await expect(m.set('lotoPermits', 'lp-w1', { ...base, ...open(), windowEnd: ts(start + 30 * H), status: 'requested' })).rejects.toMatchObject(denied)
+    await expect(m.set('lotoPermits', 'lp-w2', { ...base, shift: 'A', windowStart: ts(start - 32 * H), windowEnd: ts(start - 24 * H), status: 'requested' })).rejects.toMatchObject(denied)
+    await expect(m.set('lotoPermits', 'lp-w3', { ...base, shift: 'A', windowStart: ts(start + 24 * H), windowEnd: ts(start + 32 * H), status: 'requested' })).rejects.toMatchObject(denied)
+  })
+
+  it('uses a site\'s saved shift clocks once an Admin has set them, and only an Admin may', async () => {
+    const shifts = { sites: { 's-9': { zoneOffsetMinutes: 0, shifts: { day: { start: '00:00', end: '23:59' } } } } }
+    await expect(as('memberA').set('lotoSettings', 'shifts', shifts)).rejects.toMatchObject(denied)
+    await as('adminA').set('lotoSettings', 'shifts', shifts)
+    const d = new Date()
+    const start = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 0, 0)
+    const end = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 23, 59)
+    const m = as('memberA')
+    await m.set('lotoPermits', 'lp-cfg', { ...base, siteId: 's-9', shift: 'day', windowStart: ts(start), windowEnd: ts(end), status: 'requested' })
+    await expect(
+      m.set('lotoPermits', 'lp-cfg2', { ...base, siteId: 's-9', shift: 'day', windowStart: ts(start), windowEnd: ts(end - 60000), status: 'requested' })
+    ).rejects.toMatchObject(denied)
+  })
+
+  it('refuses a permit too large to read or print', async () => {
+    const m = as('memberA')
+    await expect(m.set('lotoPermits', 'lp-big', { ...base, ...open(), status: 'requested', jobDescription: 'x'.repeat(2001) })).rejects.toMatchObject(denied)
+    await expect(
+      m.set('lotoPermits', 'lp-many', { ...base, ...open(), status: 'requested', vendorWorkers: Array.from({ length: 101 }, (_, i) => ({ name: `W${i}` })) })
+    ).rejects.toMatchObject(denied)
   })
 
   it('refuses an employee approving, even their own permit', async () => {
@@ -649,5 +686,28 @@ describe('LOTO permits', () => {
     await seed('users', 'strangerC', { role: 'member', status: 'approved' })
     await seed('lotoPermits', 'lp-app2', { ...base, status: 'approved' })
     await expect(as('strangerC').update('lotoPermits', 'lp-app2', { status: 'active' })).rejects.toMatchObject(denied)
+  })
+})
+
+// S-14: a scanned token lets a stranger file one bounded report, nothing more.
+describe('anonymous QR reports are bounded', () => {
+  beforeAll(async () => {
+    await seed('qr', 'tok-anon', { extId: 'x9', token: 'tok-anon' })
+  })
+  const report = (extra = {}) => ({
+    source: 'qr', approvalStatus: 'pending', reportedBy: 'public', kind: 'defect',
+    extId: 'x9', token: 'tok-anon', note: 'Pin missing', ...extra,
+  })
+  const anon = as('')
+
+  it('accepts a report a QR form would send', async () => {
+    await anon.set('reports', 'anon-ok', report())
+  })
+
+  it('refuses an oversized note or name, and fields the form never sends', async () => {
+    await expect(anon.set('reports', 'anon-big', report({ note: 'x'.repeat(501) }))).rejects.toMatchObject({ code: 'permission-denied' })
+    await expect(anon.set('reports', 'anon-name', report({ reportedByName: 'y'.repeat(121) }))).rejects.toMatchObject({ code: 'permission-denied' })
+    await expect(anon.set('reports', 'anon-extra', report({ payload: 'anything' }))).rejects.toMatchObject({ code: 'permission-denied' })
+    await expect(anon.set('reports', 'anon-obj', report({ note: { nested: 'x' } }))).rejects.toMatchObject({ code: 'permission-denied' })
   })
 })

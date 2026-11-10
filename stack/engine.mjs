@@ -254,6 +254,8 @@ export function createEngine(db) {
         if (op.path === 'reports' || op.path === 'defectLocks') want('qr', token)
         if (op.path === 'observations') want('permitQr', token)
       }
+      // A new LOTO permit's window is judged against the site's shift clocks.
+      if (op.path === 'lotoPermits') want('lotoSettings', 'shifts')
     }
     const rows = await readRows([...keys.values()])
     const { ctx } = await contextFor(session, rows)

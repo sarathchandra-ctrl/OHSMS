@@ -22,7 +22,7 @@ import { dirname, join, normalize, sep } from 'node:path'
 import { pipeline } from 'node:stream/promises'
 import { isAppFilePath } from './lib/fileDelete.js'
 import { DOWNLOAD_HEADERS, createBlobSigner } from './blobSign.mjs'
-import { storedUploadLimit } from './lib/uploadLimits.js'
+import { allowedUploadType, storedUploadLimit } from './lib/uploadLimits.js'
 
 export { UPLOAD_TTL_MS, MAX_BLOB_BYTES, blobKeyFrom } from './blobSign.mjs'
 
@@ -68,6 +68,7 @@ export function createBlobStore({ dir, key, origin }) {
       const file = check(url, 'put', now)
       if (!file) return deny(403, 'upload link refused')
       const type = String(req.headers['content-type'] || 'application/octet-stream').slice(0, 200)
+      if (!allowedUploadType(type)) return deny(415, 'file type not accepted')
       const limit = storedUploadLimit(type)
       const declared = Number(req.headers['content-length'] || 0)
       if (declared > limit) return deny(413, 'file too large')

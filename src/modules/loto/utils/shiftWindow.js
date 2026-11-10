@@ -1,9 +1,9 @@
 // The permit window is a shift, not two times somebody typed.
 //
 // A request is open from REQUEST_LEAD_MINUTES before the shift starts until
-// the shift ends. The same rule is in firestore.rules (lotoShiftOk): without
-// a saved site configuration the rules check the default durations and the
-// lead; once an Admin saves the site's clocks they also check the hours.
+// the shift ends. The same rule is in stack/policy.mjs (lotoWindowProblem):
+// without a saved site configuration the server checks the default durations
+// and the lead; once an Admin saves the site's clocks it checks those clocks.
 import { REQUEST_LEAD_MINUTES, SHIFT_PRESETS } from '../constants/permits'
 
 const MIN = 60 * 1000

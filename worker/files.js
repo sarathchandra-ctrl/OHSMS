@@ -5,7 +5,7 @@
 // the signature before touching the bucket.
 
 import { DOWNLOAD_HEADERS, createBlobSigner } from '../stack/blobSign.mjs'
-import { storedUploadLimit } from '../stack/lib/uploadLimits.js'
+import { allowedUploadType, storedUploadLimit } from '../stack/lib/uploadLimits.js'
 
 function deny(status, message) {
   return new Response(
@@ -41,6 +41,7 @@ export function createR2FileStore({ bucket, key, origin }) {
         const type = String(
           request.headers.get('content-type') || 'application/octet-stream'
         ).slice(0, 200)
+        if (!allowedUploadType(type)) return deny(415, 'file type not accepted')
         const limit = storedUploadLimit(type)
         const declared = request.headers.get('content-length')
         if (declared !== null && !/^\d+$/.test(declared)) {

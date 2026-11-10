@@ -316,11 +316,18 @@ describe('subject access export', () => {
     })
     const sam = made.body.uid
     const commit = (ops) => s.post('/data', { op: 'commit', ops }, admin)
+    // An open general shift, as the form would set it.
+    const startMs = Date.now() - 600000
+    const shift = {
+      shift: 'general',
+      windowStart: { __ohsms: 'ts', s: Math.floor(startMs / 1000), ns: 0 },
+      windowEnd: { __ohsms: 'ts', s: Math.floor(startMs / 1000) + 9 * 3600, ns: 0 },
+    }
     await commit([
       { type: 'set', path: 'trainingAssignments', id: 't1', merge: false, data: { employeeUid: sam, courseName: 'Fire' } },
       { type: 'set', path: 'trainingAssignments', id: 't2', merge: false, data: { employeeUid: 'someone-else' } },
-      { type: 'set', path: 'lotoPermits', id: 'lp1', merge: false, data: { status: 'requested', requestedBy: sam, personnelUids: [sam] } },
-      { type: 'set', path: 'lotoPermits', id: 'lp2', merge: false, data: { status: 'requested', requestedBy: 'x', personnelUids: ['y', sam] } },
+      { type: 'set', path: 'lotoPermits', id: 'lp1', merge: false, data: { ...shift, status: 'requested', requestedBy: sam, personnelUids: [sam] } },
+      { type: 'set', path: 'lotoPermits', id: 'lp2', merge: false, data: { ...shift, status: 'requested', requestedBy: 'x', personnelUids: ['y', sam] } },
       { type: 'set', path: 'injuries', id: 'inj1', merge: false, data: { personId: 'P-7', status: 'open' } },
     ])
 
