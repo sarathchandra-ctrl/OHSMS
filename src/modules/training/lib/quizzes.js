@@ -173,7 +173,7 @@ const stamp = (v) => {
  */
 export function quizResultTable(quiz, responses = []) {
   const questions = (quiz?.questions || []).map((q, i) => `Q${i + 1}. ${q.text}`)
-  const fixed = ['Submitted', 'Employee ID', 'Name', 'Center', 'Score', 'Total', 'Percent', 'Result', 'Certificate']
+  const fixed = ['Submitted', 'Employee ID', 'Name', 'Center', 'Email', 'Score', 'Total', 'Percent', 'Result', 'Certificate', 'Certificate emailed']
   const header = [...fixed, ...(questions.length ? questions : [])]
   const rows = responses.map((r) => {
     const answers = responseAnswers(r, quiz)
@@ -181,8 +181,9 @@ export function quizResultTable(quiz, responses = []) {
     const cells = Array.from({ length: width }, (_, i) =>
       answers[i] ? `${answers[i].chosen || '—'} (${answers[i].correct ? 'correct' : 'wrong'})` : '')
     return [
-      stamp(r.submittedAt), r.employeeId, r.name, r.centerName, r.score, r.total, `${r.percent}%`,
-      r.passed ? 'Passed' : 'Not passed', r.certificateNo || '', ...cells,
+      stamp(r.submittedAt), r.employeeId, r.name, r.centerName, r.email || '', r.score, r.total, `${r.percent}%`,
+      r.passed ? 'Passed' : 'Not passed', r.certificateNo || '',
+      r.certificateEmailedAt ? stamp(r.certificateEmailedAt) : r.passed ? 'No' : '', ...cells,
     ]
   })
   return { header, rows }
@@ -216,16 +217,16 @@ export async function downloadQuizExcel(quiz, responses) {
   const { header, rows } = quizResultTable(quiz, responses)
   const wb = XLSX.utils.book_new()
   const sheet = aoaToSheet([header, ...rows])
-  sheet['!cols'] = header.map((h, i) => ({ wch: i < 9 ? Math.max(12, h.length + 2) : 32 }))
+  sheet['!cols'] = header.map((h, i) => ({ wch: i < 11 ? Math.max(12, h.length + 2) : 32 }))
   XLSX.utils.book_append_sheet(wb, sheet, 'Responses')
   XLSX.writeFile(wb, fileName(quiz?.title, 'xlsx'))
 }
 
 /** Every quiz's results as CSV, one row per response (Quiz Results tab). */
 export function responsesCsv(responses = []) {
-  const head = ['Submitted', 'Quiz', 'Employee ID', 'Name', 'Center', 'Score', 'Total', 'Percent', 'Result', 'Certificate']
+  const head = ['Submitted', 'Quiz', 'Employee ID', 'Name', 'Center', 'Email', 'Score', 'Total', 'Percent', 'Result', 'Certificate']
   const rows = responses.map((r) => [
-    stamp(r.submittedAt), r.quizTitle, r.employeeId, r.name, r.centerName,
+    stamp(r.submittedAt), r.quizTitle, r.employeeId, r.name, r.centerName, r.email || '',
     r.score, r.total, r.percent, r.passed ? 'Pass' : 'Fail', r.certificateNo || '',
   ])
   return [head, ...rows].map(csvRow).join('\r\n')

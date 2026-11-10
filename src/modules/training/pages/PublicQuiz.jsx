@@ -15,6 +15,7 @@ const REASONS = {
   'employee-id': 'Enter your employee ID.',
   name: 'Enter your name.',
   center: 'Enter your centre name.',
+  email: 'Enter a valid email ID; your certificate is sent there.',
   answers: 'Answer every question.',
   closed: 'This quiz is not accepting responses any more.',
 }
@@ -22,7 +23,7 @@ const REASONS = {
 export default function PublicQuiz() {
   const { token } = useParams()
   const [quiz, setQuiz] = useState(undefined) // undefined loading, null unavailable
-  const [taker, setTaker] = useState({ employeeId: '', name: '', centerName: '' })
+  const [taker, setTaker] = useState({ employeeId: '', name: '', centerName: '', email: '' })
   const [answers, setAnswers] = useState({})
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -71,6 +72,7 @@ export default function PublicQuiz() {
     if (!taker.employeeId.trim()) return setError(REASONS['employee-id'])
     if (!taker.name.trim()) return setError(REASONS.name)
     if (!taker.centerName.trim()) return setError(REASONS.center)
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(taker.email.trim())) return setError(REASONS.email)
     if (!answered) return setError(REASONS.answers)
     setBusy(true)
     try {
@@ -106,9 +108,16 @@ export default function PublicQuiz() {
             <p>{result.centerName}</p>
             <p className="text-ink-500">{result.quizTitle}</p>
             {result.passed ? (
-              <button type="button" className="btn-primary mt-2 w-full" onClick={() => setShowCert(true)}>
-                <Award size={16} /> View certificate
-              </button>
+              <>
+                <p className="text-ink-600">
+                  {result.certificateEmail === 'sending'
+                    ? `Your certificate is being emailed to ${result.email}. You can also save it now.`
+                    : 'Save your certificate now: it could not be emailed from here.'}
+                </p>
+                <button type="button" className="btn-primary mt-2 w-full" onClick={() => setShowCert(true)}>
+                  <Award size={16} /> View certificate
+                </button>
+              </>
             ) : (
               <>
                 <p className="text-ink-600">You need {quiz.passPercent}% to pass and earn the certificate.</p>
@@ -141,13 +150,16 @@ export default function PublicQuiz() {
             ['employeeId', 'Employee ID', 'off'],
             ['name', 'Name', 'name'],
             ['centerName', 'Center name', 'off'],
-          ].map(([key, label, auto]) => (
+            ['email', 'Email ID', 'email', 'email'],
+          ].map(([key, label, auto, type = 'text']) => (
             <div key={key}>
               <label htmlFor={`quiz-${key}`} className="label">{label} *</label>
-              <input id={`quiz-${key}`} className="input" autoComplete={auto} required maxLength={120}
+              <input id={`quiz-${key}`} className="input" type={type} autoComplete={auto} required
+                maxLength={key === 'email' ? 254 : 120} inputMode={type === 'email' ? 'email' : undefined}
                 value={taker[key]} onChange={(e) => setTaker({ ...taker, [key]: e.target.value })} />
             </div>
           ))}
+          <p className="text-xs text-ink-500">If you pass, your certificate is emailed to this address.</p>
         </div>
 
         {quiz.questions.map((q, i) => (

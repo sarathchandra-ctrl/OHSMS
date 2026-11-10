@@ -546,7 +546,7 @@ describe('a training quiz from its QR code', () => {
       { id: 'q2', text: 'Lift in a fire?', options: ['Never', 'Yes'], answer: 0 },
     ],
   }
-  const taker = { employeeId: 'E-9', name: 'Ravi', centerName: 'Indiranagar' }
+  const taker = { employeeId: 'E-9', name: 'Ravi', centerName: 'Indiranagar', email: 'ravi@example.com' }
 
   it('serves the quiz and scores it without a session, and no other job', async () => {
     const s = await start()
@@ -559,6 +559,8 @@ describe('a training quiz from its QR code', () => {
     expect((await s.rpc('', 'publicQuiz', { token: 'nosuchquiztoken123' })).status).toBe(404)
     // The other jobs still want a session.
     expect((await s.rpc('', 'exportSubjectData', { uid: 'x' })).status).toBe(401)
+    // Sending a certificate again is a manager's, never public.
+    expect((await s.rpc('', 'resendQuizCertificate', { responseId: 'x' })).status).toBe(401)
     // And a stale session does not refuse a public job.
     expect((await s.rpc('not.a.token', 'publicQuiz', { token: quiz.token })).status).toBe(200)
     await s.stop()

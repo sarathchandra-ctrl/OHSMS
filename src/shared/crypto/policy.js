@@ -73,8 +73,9 @@
 //   · Reference numbers, ids, dates, sites, regions, entities, lifecycle and
 //     status. Operational context that every list, filter and roll-up groups by,
 //     and none of it is special-category data on its own.
-//   · Training quiz responses (quizResponses): the employee ID, name and centre
-//     someone typed when answering a quiz from its QR code. The SERVER writes
+//   · Training quiz responses (quizResponses): the employee ID, name, centre and
+//     email address someone typed when answering a quiz from its QR code (the
+//     address is where a passing certificate is mailed). The SERVER writes
 //     them, for a person with no account and so no key, and the server cannot
 //     seal. Read by managers only (stack/policy.mjs MANAGER_READ_ONLY), and
 //     listed in stack/lib/subjectData.js so a person's own export finds them.

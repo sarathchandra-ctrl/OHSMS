@@ -186,12 +186,12 @@ export const SUBJECT_SOURCES = [
     why: 'A request to attend; carries no safety evidence once resolved.',
   },
   // A quiz answered from its QR code (stack/quiz.mjs). The taker has no
-  // account, so nothing joins them by uid: their employee ID, name and centre
-  // are typed text, found only by a scan. Written by the server and not sealed
+  // account, so nothing joins them by uid: their employee ID, name, centre
+  // and email address are typed text, found only by a scan. Written by the server and not sealed
   // (src/shared/crypto/policy.js says why), so a scan of it stays reliable.
   {
     path: 'quizResponses',
-    mentions: ['employeeId', 'name', 'centerName'],
+    mentions: ['employeeId', 'name', 'centerName', 'email'],
     retention: ERASABLE,
     why: 'A quiz attempt and its score; a certificate can be issued again from the person’s own details.',
   },

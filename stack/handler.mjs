@@ -11,7 +11,7 @@ import { verifySession, signSession } from './session.mjs'
 import { refreshFileLinks } from './lib/fileLinks.js'
 import { decidePresign } from './presign.mjs'
 import { notifyChanges, sendDigests } from './notify.mjs'
-import { publicQuiz, submitQuiz } from './quiz.mjs'
+import { publicQuiz, quizCertificate, resendQuizCertificate, submitQuiz } from './quiz.mjs'
 import {
   releaseDataKeys,
   deleteOrgFile,
@@ -48,7 +48,7 @@ const WORKER = { role: 'ohsms_worker', uid: '' }
 // Jobs answered for someone with no account: a training quiz opened from its
 // QR code (stack/quiz.mjs). Each decides everything itself, as the server,
 // and one address may call them only so often.
-const PUBLIC_JOBS = new Set(['publicQuiz', 'submitQuiz'])
+const PUBLIC_JOBS = new Set(['publicQuiz', 'submitQuiz', 'quizCertificate'])
 const PUBLIC_JOB_LIMIT = 60
 const PUBLIC_JOB_WINDOW_S = 10 * 60
 const ADMIN_JOBS = new Set([
@@ -455,7 +455,10 @@ export function createOwnStackHandler({
           fetchImpl,
         }),
       publicQuiz: () => publicQuiz(engine, { token: body.token }),
-      submitQuiz: () => submitQuiz(engine, { token: body.token, body }),
+      submitQuiz: () => submitQuiz(engine, { token: body.token, body, mail, origin, background }),
+      quizCertificate: () => quizCertificate(engine, { token: body.token }),
+      resendQuizCertificate: () =>
+        resendQuizCertificate(engine, { uid, responseId: body.responseId, email: body.email, mail, origin }),
     }
     const fn = table[name]
     if (!fn) {

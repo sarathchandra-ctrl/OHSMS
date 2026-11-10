@@ -16,15 +16,32 @@ import { QUIZ_PASS_PERCENT } from '../../../../stack/lib/quiz.js'
  * passing response. `result` is a response: { name, employeeId, centerName,
  * quizTitle, percent, score, total, certificateNo, submittedAt }.
  */
-export default function QuizCertificate({ result, onClose }) {
+export default function QuizCertificate({ result, onClose, standalone = false }) {
   const shown = Boolean(result?.passed || result?.percent >= QUIZ_PASS_PERCENT)
   useEffect(() => {
-    if (!shown) return undefined
+    if (!shown || standalone) return undefined
     const onKey = (e) => { if (e.key === 'Escape') onClose?.() }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [shown, onClose])
+  }, [shown, onClose, standalone])
   if (!shown) return null
+  // `standalone`: the page a certificate's email link opens (/certificate/:token),
+  // the certificate itself rather than a dialog over something else.
+  if (standalone) {
+    return (
+      <div className="min-h-screen bg-canvas px-4 py-6">
+        <div className="mx-auto w-full max-w-4xl">
+          <PrintIsolate id="quiz-certificate" landscape />
+          <div className="mb-3 flex justify-end">
+            <button type="button" className="btn-primary" onClick={() => window.print()}>
+              <Printer size={16} /> Print / Save as PDF
+            </button>
+          </div>
+          <Sheet result={result} />
+        </div>
+      </div>
+    )
+  }
   return (
     <div className="fixed inset-0 z-50 grid place-items-center overflow-y-auto p-4">
       <PrintIsolate id="quiz-certificate" landscape />
@@ -42,55 +59,62 @@ export default function QuizCertificate({ result, onClose }) {
           </button>
         </div>
 
-        <div
-          id="quiz-certificate"
-          // Landscape A4 proportions from tablet width up (and in print). On a
-          // phone the sheet grows with its text, or the bottom half is cut off.
-          className="relative overflow-hidden rounded-xl bg-white p-2 shadow-elev-lg ring-1 ring-ink-200 doc-sheet sm:aspect-[297/200]"
-        >
-          <div className="flex h-full flex-col rounded-lg ring-1 ring-ink-200">
-            {/* Header: the Cult logo. */}
-            <div className="flex items-center justify-between gap-4 bg-ink-900 px-8 py-4">
-              <div className="flex items-center gap-3">
-                <img src={publicPath('/brand/logo.svg')} alt="Cult" className="h-12 w-12 rounded-lg bg-white p-1" />
-                <div className="text-left leading-tight">
-                  <p className="text-lg font-bold tracking-tight text-white">Cult Fit</p>
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-white/80">
-                    Workplace Environment, Health &amp; Safety
-                  </p>
-                </div>
-              </div>
-              <Award size={34} className="text-amber-300" aria-hidden />
+        <Sheet result={result} />
+      </div>
+    </div>
+  )
+}
+
+/** The certificate itself: what prints. */
+function Sheet({ result }) {
+  return (
+    <div
+      id="quiz-certificate"
+      // Landscape A4 proportions from tablet width up (and in print). On a
+      // phone the sheet grows with its text, or the bottom half is cut off.
+      className="relative overflow-hidden rounded-xl bg-white p-2 shadow-elev-lg ring-1 ring-ink-200 doc-sheet sm:aspect-[297/200]"
+    >
+      <div className="flex h-full flex-col rounded-lg ring-1 ring-ink-200">
+        {/* Header: the Cult logo. */}
+        <div className="flex items-center justify-between gap-4 bg-ink-900 px-8 py-4">
+          <div className="flex items-center gap-3">
+            <img src={publicPath('/brand/logo.svg')} alt="Cult" className="h-12 w-12 rounded-lg bg-white p-1" />
+            <div className="text-left leading-tight">
+              <p className="text-lg font-bold tracking-tight text-white">Cult Fit</p>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-white/80">
+                Workplace Environment, Health &amp; Safety
+              </p>
             </div>
+          </div>
+          <Award size={34} className="text-amber-300" aria-hidden />
+        </div>
 
-            <div className="flex h-full flex-col items-center px-10 py-6 text-center">
-              <p className="doc-kicker">Training assessment</p>
-              <p className="mt-1 text-2xl font-bold tracking-tight text-ink-900">Certificate of achievement</p>
+        <div className="flex h-full flex-col items-center px-10 py-6 text-center">
+          <p className="doc-kicker">Training assessment</p>
+          <p className="mt-1 text-2xl font-bold tracking-tight text-ink-900">Certificate of achievement</p>
 
-              <p className="mt-5 text-sm text-ink-500">This certifies that</p>
-              <p className="mt-1 text-3xl font-bold tracking-tight text-ink-900">{result.name}</p>
-              <p className="mt-1 text-sm text-ink-600">
-                Employee ID {result.employeeId} · {result.centerName}
-              </p>
-              <p className="mt-4 text-sm text-ink-500">has passed the quiz</p>
-              <p className="mt-1 text-xl font-semibold text-brand-700">{result.quizTitle}</p>
-              <p className="mt-2 text-sm text-ink-700">
-                <b>Score</b> {result.score} of {result.total} ({result.percent}%)
-              </p>
+          <p className="mt-5 text-sm text-ink-500">This certifies that</p>
+          <p className="mt-1 text-3xl font-bold tracking-tight text-ink-900">{result.name}</p>
+          <p className="mt-1 text-sm text-ink-600">
+            Employee ID {result.employeeId} · {result.centerName}
+          </p>
+          <p className="mt-4 text-sm text-ink-500">has passed the quiz</p>
+          <p className="mt-1 text-xl font-semibold text-brand-700">{result.quizTitle}</p>
+          <p className="mt-2 text-sm text-ink-700">
+            <b>Score</b> {result.score} of {result.total} ({result.percent}%)
+          </p>
 
-              <div className="mt-auto flex w-full items-end justify-between pt-6">
-                <div className="text-left">
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-ink-400">Certificate no.</p>
-                  <p className="font-mono text-xs font-semibold text-ink-800">{result.certificateNo || '—'}</p>
-                  <p className="mt-1 text-[10px] text-ink-400">Issued {formatDate(result.submittedAt || new Date())}</p>
-                </div>
-                {/* No signature line: the certificate is issued by the team, not
-                    signed by a person (owner's request, 2026-11-10). */}
-                <div className="text-right">
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-ink-400">Provided by</p>
-                  <p className="text-xs font-semibold text-ink-800">Safety &amp; Security Team, Cult Fit</p>
-                </div>
-              </div>
+          <div className="mt-auto flex w-full items-end justify-between pt-6">
+            <div className="text-left">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-ink-400">Certificate no.</p>
+              <p className="font-mono text-xs font-semibold text-ink-800">{result.certificateNo || '—'}</p>
+              <p className="mt-1 text-[10px] text-ink-400">Issued {formatDate(result.submittedAt || new Date())}</p>
+            </div>
+            {/* No signature line: the certificate is issued by the team, not
+                signed by a person (owner's request, 2026-11-10). */}
+            <div className="text-right">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-ink-400">Provided by</p>
+              <p className="text-xs font-semibold text-ink-800">Safety &amp; Security Team, Cult Fit</p>
             </div>
           </div>
         </div>
