@@ -366,7 +366,7 @@ export async function purgeIncident(id, actor, label) {
 // ── Scene photos and investigation diagrams ───────────────────────────────────
 // Medical records do not belong here. This subcollection is readable by every
 // approved member and by the auditor, and its bytes sit under `incident-photos`,
-// which storage.rules hands to the same people. A GP letter filed beside a
+// which the server gives a download link to the same people. A GP letter filed beside a
 // guard-rail photo is the letter. addMedicalRecord in injuries.js is the writer.
 export async function addIncidentPhoto(id, photo) {
   if (photo?.kind === 'medical_record') {

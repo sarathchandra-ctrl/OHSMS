@@ -46,9 +46,8 @@ export const publicBody = (procedure) => ({ ...publicProcedure(procedure), updat
  * which also clears this marker, releases the padlock claims and records the
  * checklist. An unlock from the Operations screen would leave the permit
  * "active" over a machine whose locks are gone — the disagreement the permit
- * and the procedure are written in one transaction to prevent. firestore.rules
- * enforce the part that does not depend on this check (lockedCount cannot fall,
- * revision and status cannot change, the procedure cannot be deleted).
+ * and the procedure are written in one transaction to prevent. Approving a
+ * procedure is a manager's decision on the server (DECISION_STATES).
  */
 export function assertNotHeldByPermit(procedure) {
   const held = procedure?.activePermit

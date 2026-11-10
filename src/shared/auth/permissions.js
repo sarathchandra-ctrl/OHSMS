@@ -9,7 +9,7 @@
 //   member   — Employee: create, view and close in the modules and sites given
 //   auditor  — read-only across all modules incl. the audit log
 //
-// UI gates on can(role, action); Firestore rules enforce tenant + member access.
+// UI gates on can(role, action); stack/policy.mjs enforces it on the server.
 // This is the single source of truth for what each role may do.
 // ─────────────────────────────────────────────────────────────────────────────
 

@@ -12,9 +12,8 @@
 //
 // The file is not sealed. Sealing it would hand the function ciphertext, and
 // the mailer skips sealed bytes rather than attach an envelope. The plaintext
-// is the decrypted print — names, minutes, narrative — so storage.rules
-// exclude this kind from every client read. The Admin SDK the mail function
-// uses does not consult those rules. A member can create the object; they
+// is the decrypted print — names, minutes, narrative — so the server issues
+// no download link for this kind to any browser (stack/presign.mjs). A member can create the object; they
 // already hold the text they just typed.
 //
 // `MAILED_REPORT_KIND` is duplicated in stack/lib/mailAttachments.js.

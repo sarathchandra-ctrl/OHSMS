@@ -129,8 +129,7 @@ describe('dataUrlToBlob', () => {
 })
 
 // A persisted download URL is a bearer credential in a string: it works for
-// anyone holding it, signed in or not, forever, and storage.rules never sees
-// it. fileUrl exists to prefer an authenticated fetch over that — while never
+// anyone holding it, signed in or not — forever, before links began to expire. fileUrl exists to prefer an authenticated fetch over that — while never
 // letting the secure path turn a working image into a broken one.
 // 20s, not the 5s default: every case here awaits loadAdapter(), which is a
 // DYNAMIC import. Alone it resolves in well under a second; inside a full run

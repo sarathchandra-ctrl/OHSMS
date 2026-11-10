@@ -79,9 +79,9 @@
 //
 // Everything above assumes the reader and the writer are the same population.
 // For incidents, meetings and drills they are. For health records they are
-// explicitly NOT, and firestore.rules says so out loud: /injuries, its /records
-// subcollection and /illnesses are `allow read: if isManagerOf(orgId)`, while
-// the WRITE comes through the generic rule as isWriterOf — so an ordinary
+// explicitly NOT, and stack/policy.mjs says so out loud: /injuries, its
+// /records subcollection and /illnesses are readable by managers only
+// (isMedical), while the WRITE comes through the general rule as isWriter — so an ordinary
 // member fills in Step 1a of the incident wizard, files a colleague's medication
 // and days off, and cannot read any of it back. That asymmetry is the control.
 //
@@ -537,7 +537,7 @@ export async function sealBytes(key, keyId, label, bytes) {
  *
  * This is the one that medical records use: the member who attaches a
  * colleague's discharge summary uploads it and cannot open it afterwards, which
- * is what firestore.rules and storage.rules both already claim about that file
+ * is what stack/policy.mjs and stack/presign.mjs both already claim about that file
  * and could not previously enforce against anyone holding the object.
  */
 export async function sealHybridBytes(publicKey, keyId, label, bytes) {

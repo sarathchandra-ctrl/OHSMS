@@ -34,8 +34,8 @@ describe('the table itself', () => {
   })
 
   it('puts the health collections, and only those, in the medical class', () => {
-    // These are exactly the three `allow read: if isManagerOf(orgId)` matches in
-    // firestore.rules. If that list changes, this test is the reminder that the
+    // These are exactly the collections stack/policy.mjs lets only managers
+    // read (isMedical). If that list changes, this test is the reminder that the
     // key class has to move with it — a class stricter than its rule locks
     // people out, a class looser than its rule hands the data to the auditor.
     const medical = Object.entries(POLICY).filter(([, e]) => e.keyClass === MEDICAL).map(([k]) => k)

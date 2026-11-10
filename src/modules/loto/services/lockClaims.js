@@ -28,11 +28,10 @@
 // insists is in use but nobody can find is how people learn to work around the
 // system.
 //
-// The rules block for this collection (`firestore.rules`, /lockClaims) is the
-// other half. `resource == null` on create is the guarantee — without it a
-// second claimant's create succeeds by overwriting the first — and the id
-// prefix is pinned to the payload's org so a stranger cannot take out a claim
-// at another tenant's address and make a padlock permanently unusable there.
+// The server is the other half (stack/policy.mjs): a claim cannot be moved to
+// another procedure while it is held — without that, a second claimant's write
+// succeeds by overwriting the first — and any working user may release one, so
+// a lock is never stranded.
 // ─────────────────────────────────────────────────────────────────────────────
 import { collection, doc, getDoc, getDocs, limit, query, serverTimestamp, writeBatch } from '../../../shared/data/client.js'
 import { db } from '../../../shared/db'

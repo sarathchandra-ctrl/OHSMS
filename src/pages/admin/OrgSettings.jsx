@@ -248,7 +248,7 @@ export default function OrgSettings() {
     const file = e.target.files?.[0]
     e.target.value = ''
     if (!file) return
-    // Not SVG, and the message no longer offers it. storage.rules refuses that
+    // Not SVG, and the message no longer offers it. The server refuses that
     // type for every upload in the product: an SVG is a document that can carry
     // script, and a bucket object is served under the type it was stored with
     // from a permanent unauthenticated link. Refused here as well as there so

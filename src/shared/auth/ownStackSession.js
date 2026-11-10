@@ -3,7 +3,7 @@
 // It proves who signed in (the uid). It does not prove role, approval, or
 // mustChangePassword: those are read from the profile at the gateway, because
 // a claim baked into the token would stay true for the life of the token
-// after the person was suspended (storage.rules, S-19). The token is not a
+// after the person was suspended (S-19). The token is not a
 // database password and it is not a VITE_ variable.
 
 import { runtimeEnv } from '../runtimeConfig'

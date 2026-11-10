@@ -104,7 +104,7 @@ export const RECORD_CLASSES = [
     class: STATUTORY,
     proposedPeriod: NEEDS_LEGAL_SIGN_OFF,
     proposedPeriodNote:
-      'Append-only in firestore.rules. Erasing from it is not currently possible even if it were lawful.',
+      'Append-only (stack/policy.mjs). Erasing from it is not currently possible even if it were lawful.',
     livePurge: false,
     recycleBin: false,
     counselMustSign: 'Whether the audit trail may ever be truncated, and after how long.',

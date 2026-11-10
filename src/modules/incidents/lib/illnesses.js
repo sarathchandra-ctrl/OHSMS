@@ -31,10 +31,9 @@ import { AUDIT, diffSummary } from './audit'
 import { reserveRefNo } from './incidents'
 import { reserveDocId } from '../../../shared/docId/reserve'
 import { putFile, removeFile, MAX_INLINE_BYTES, tooLargeForInline } from '../../../shared/storage'
-// Sealed under the MEDICAL class — the hybrid keypair. /illnesses is
-// `allow read: if isManagerOf(orgId)` in firestore.rules. The illness match
-// lets a member file the report and keep editing it, and refuses a replacement
-// of the clinical fields by anyone else. A symmetric key
+// Sealed under the MEDICAL class — the hybrid keypair. /illnesses is readable
+// by managers only (isMedical in stack/policy.mjs), while a member may still
+// file a report. A symmetric key
 // would have had to give every writer the key that opens every record.
 import { sealDoc, openDoc, openSnapshots } from '../../../shared/crypto'
 import { stampNewAssignees } from '../../../shared/org/stampAssignee'

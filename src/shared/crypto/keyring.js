@@ -223,7 +223,7 @@ export function resolverFor() {
     if (scheme === HYBRID_SCHEME) {
       // The member's case: they hold medical.publicKey and no privateKey, so
       // this is null and the clinical fields are redacted — which is precisely
-      // what firestore.rules already says about them.
+      // what stack/policy.mjs already says about them.
       return keys.medical?.keyId === keyId ? keys.medical.privateKey || null : null
     }
     if (scheme === SCHEME) {

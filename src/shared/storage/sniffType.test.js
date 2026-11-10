@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { checkFileBytes } from './sniffType'
 
 // ─────────────────────────────────────────────────────────────────────────────
-// storage.rules allow-lists the DECLARED content type, and the client supplies
+// The server allow-lists the DECLARED content type, and the client supplies
 // it. So the rule answers "may an object be served as this type" and nothing
 // answered "are these bytes that type" — an .exe named report.pdf satisfied
 // every check the system had (audit finding M-6, A.8.7).
@@ -67,7 +67,7 @@ describe('the bytes must not contradict the declared type', () => {
 
 describe('what it deliberately lets through', () => {
   // An allow-list of SIGNATURES, not of files. The declared type is already
-  // constrained by storage.rules; refusing every unfamiliar first byte would
+  // constrained by the server's allow-list; refusing every unfamiliar first byte would
   // reject legitimate documents for being unusual.
   it('passes a format it does not recognise', () => {
     expect(checkFileBytes(bytes(0x01, 0x02, 0x03, 0x04), 'application/pdf').ok).toBe(true)

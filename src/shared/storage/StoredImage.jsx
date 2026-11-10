@@ -11,7 +11,7 @@
 // finding M-5, A.8.3 / A.5.14). That string was a permanent bearer credential
 // filed in a Firestore document readable by every member of the tenant and by
 // the external auditor, and it kept working after they left. The bytes now come
-// through an authenticated fetch that `storage.rules` actually governs.
+// through a fresh, expiring link issued to the signed-in person.
 // ─────────────────────────────────────────────────────────────────────────────
 import { safeSrc } from '../safeUrl'
 import { useFileUrl } from './useFileUrl'

@@ -61,14 +61,14 @@ const injuryRef = (id) => doc(db, 'injuries', id)
 // The pointer lives here, not under incidents/{id}/photos, because that
 // subcollection is listable by every approved member and the auditor, and rules
 // cannot filter a list by `kind`. The bytes live under the Storage prefix
-// `medical-records`, the one prefix storage.rules withholds from those same
-// roles. The collection key `injuries/records` is what shared/crypto/policy.js
+// `medical-records`, a prefix the server issues download links for to admins
+// and managers only (stack/presign.mjs). The collection key `injuries/records` is what shared/crypto/policy.js
 // seals with the MEDICAL keypair — the general key would hand the file back to
 // every member who can open an incident photo.
 //
 // MUST stay the same string as MEDICAL_RECORD_KIND in stack/lib/medicalRecords.js
-// and the literal in storage.rules. Three copies, three deployable units, no
-// import between them.
+// and the literal in stack/presign.mjs. Three copies, two packages, no import
+// between them.
 const SEALED_RECORDS = 'injuries/records'
 export const MEDICAL_RECORD_STORAGE_KIND = 'medical-records'
 const recordCol = (id) => collection(db, 'injuries', id, 'records')

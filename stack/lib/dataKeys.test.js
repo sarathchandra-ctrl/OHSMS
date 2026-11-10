@@ -128,7 +128,7 @@ describe('generateKeyset', () => {
 })
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Every case below is a copy of a line in firestore.rules. A key released on a
+// Every case below is a copy of a line in stack/policy.mjs. A key released on a
 // looser test than the documents it opens makes that rule decorative.
 // ─────────────────────────────────────────────────────────────────────────────
 describe('who gets which half', () => {
@@ -171,7 +171,7 @@ describe('who gets which half', () => {
   })
 
   it('refuses everything while a temporary password is still in force', () => {
-    // passwordIsOwn() in firestore.rules already blocks such a user from
+    // isApproved in stack/policy.mjs already blocks such a user from
     // reading anything; a key handed to them would be the one grant looser
     // than the rules it is meant to copy.
     expect(grantsFor({ ...profile('admin'), mustChangePassword: true })).toEqual({

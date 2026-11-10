@@ -3,9 +3,9 @@
 //
 // Raising is ONE transaction: the year's counter is read and bumped, the permit
 // is created under that number, and any padlock the requester registered inline
-// is created in the register. firestore.rules require the counter bump to be in
-// the same commit as the permit (getAfter), so a number cannot be chosen,
-// reused or skipped by a client that does not go through here.
+// is created in the register. The counter only moves forward (stack/policy.mjs),
+// and the permit's lifecycle and window are checked by the server
+// (lotoPermitProblem, lotoWindowProblem).
 //
 // Moving a permit on — approve, start, extend, return — is permitActions.js.
 // ─────────────────────────────────────────────────────────────────────────────

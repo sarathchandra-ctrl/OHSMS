@@ -258,7 +258,7 @@ describe('the folder decides who may see the document', () => {
     expect(c.region).toBe('North')
   })
 
-  // This is what makes firestore.rules hide the document from other sites.
+  // This is what makes the server hide the document from other sites.
   it('files a site folder and its buckets at site level, with the rule snapshot', () => {
     for (const id of [S1, S1_PRE, S1_OTHER]) {
       const c = nodeClassification(t, id, sites)

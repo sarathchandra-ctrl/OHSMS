@@ -9,10 +9,8 @@
 // ── Why this tab owns its query ──────────────────────────────────────────────
 //
 // The page reads its other collections through subscribeCollections, which asks
-// for the whole collection. Documents cannot be read that way: firestore.rules
-// restricts site-level documents, and a Firestore query that would return one
-// refused row fails ENTIRELY rather than coming back shorter. So this subscribes
-// through the library's own service, which plans its queries to match the rule
+// for the whole collection. Documents are read through the library's own
+// service instead, which plans its queries to match the site rule
 // exactly — the same call the Documents module makes, so the tab and the folder
 // can never disagree about what a site has filed.
 // ─────────────────────────────────────────────────────────────────────────────

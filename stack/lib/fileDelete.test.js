@@ -37,7 +37,7 @@ describe('who may delete a file', () => {
     expect(mayDeleteFile({ ...manager, role: 'auditor' }, P)).toEqual({ ok: false, reason: 'role' })
   })
 
-  it('keeps the role list identical to the one firestore.rules enforces', () => {
+  it('keeps the role list identical to the one stack/policy.mjs enforces', () => {
     expect(DELETING_ROLES).toEqual(['admin', 'manager'])
   })
 

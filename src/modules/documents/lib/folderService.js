@@ -5,9 +5,8 @@
 // region — are derived from the site registry on every render (see tree.js), so
 // there is nothing here to keep in step with it.
 //
-// No entry in firestore.rules. `documentFolders` is a new collection name, so
-// the generic /organizations/{orgId}/{col}/{docId} rule already covers it, and
-// covers it correctly: any approved member reads, a writer creates and renames,
+// No rule of its own in stack/policy.mjs: the general rules cover it, and
+// cover it correctly: any approved member reads, a writer creates and renames,
 // and only a MANAGER may delete. That last one is not an accident of the
 // generic rule — deleting a folder is the destructive operation here, and it is
 // the same bar the rules put on deleting any other record.
@@ -53,7 +52,7 @@ export const documentFolderService = {
    * tree.js survive, but as a wrong answer rather than a crash.
    *
    * A folder name is not sensitive in the way a document is: the DOCUMENTS are
-   * scoped on read by firestore.rules, so an empty folder is all an
+   * scoped on read by the server (stack/policy.mjs siteBlocked), so an empty folder is all an
    * out-of-region member can see inside one.
    */
   subscribe(cb) {
@@ -120,7 +119,7 @@ export const documentFolderService = {
   },
 
   /**
-   * Delete a folder. Manager-only, enforced by firestore.rules rather than
+   * Delete a folder. Manager-only, enforced by the server rather than
    * here — this call simply fails for anyone else, which is the right place for
    * that decision to live.
    *

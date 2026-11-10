@@ -188,7 +188,7 @@ describe('deciding whether a run should report failure', () => {
   })
 
   // A cross-tenant path or mirror is not a glitch — it is a member who cannot
-  // delete anything under storage.rules trying to make the Admin-SDK sweep do
+  // delete files trying to make the server's sweep do
   // it for them. It must never be filtered out as noise.
   it('treats the cross-tenant refusals as failures like any other', () => {
     const s = summarizeFailures([

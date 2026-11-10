@@ -9,7 +9,7 @@
 //
 // ── The two key classes, and why they are the two ────────────────────────────
 //
-// They are not a severity scale. Each one is a copy of a boundary firestore.rules
+// They are not a severity scale. Each one is a copy of a boundary stack/policy.mjs
 // already enforces, because a key class that does not line up with a rule either
 // locks people out of data they are entitled to or hands it to people the rules
 // refuse — and in both cases the rule and the key would have to be reasoned
@@ -23,8 +23,8 @@
 //             misconfigured bucket, a support engineer with project Viewer, and
 //             the next rule that turns out to be one `match` too wide.
 //
-//   medical   `allow read: if isManagerOf(orgId)` — /injuries, its /records
-//             subcollection, and /illnesses (firestore.rules). Members WRITE
+//   medical   readable by managers only — /injuries, its /records
+//             subcollection, and /illnesses (isMedical, stack/policy.mjs). Members WRITE
 //             these and cannot read them back, so this class is hybrid: the
 //             public half goes to writers, the private half only to admin and
 //             manager. See the header of envelope.js for why a symmetric key
@@ -57,8 +57,8 @@
 //     employeeUid, deletedAt) and every `orderBy` is on a timestamp — which is
 //     the reason this change needs no query rewrites at all. Encrypting one of
 //     them would mean a client-side scan of the whole collection instead.
-//   · Anything firestore.rules reads. `myProfile()` tests orgId, status, role
-//     and mustChangePassword on /users; rules cannot decrypt, so a sealed value
+//   · Anything the server's access rules read: status, role, access and
+//     mustChangePassword on /users; the server cannot decrypt, so a sealed value
 //     there would raise, and a rule that raises denies — locking every member
 //     out of the app at once.
 //   · The /users directory itself. Names ARE personal data and this leaves them

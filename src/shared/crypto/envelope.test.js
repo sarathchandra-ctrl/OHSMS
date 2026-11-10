@@ -235,7 +235,7 @@ describe('file bytes', () => {
 // ─────────────────────────────────────────────────────────────────────────────
 // The hybrid scheme. Every test here is really one assertion in different
 // clothes: holding the key that WRITES a health record must not let you read
-// one, because firestore.rules grants exactly that combination to every member.
+// one, because stack/policy.mjs grants exactly that combination to every member.
 // ─────────────────────────────────────────────────────────────────────────────
 const pair = await generateWrapKeyPair()
 const other = await generateWrapKeyPair()

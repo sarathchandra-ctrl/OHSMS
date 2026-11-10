@@ -1346,8 +1346,8 @@ const cleanSignage = (data) => ({
  * call, so a failed write can remove them again.
  *
  * Same route as every other photo in the app: putFile → Cloud Storage under
- * `orgs/<orgId>/signage-photos/…` (covered by the generic tenant + type + size
- * rule in storage.rules). Not sealed: signage photos show a wall sign, not
+ * `files/signage-photos/…` (the server's type and size limits apply,
+ * stack/lib/uploadLimits.js). Not sealed: signage photos show a wall sign, not
  * people, so — like inspection, LOTO and quotation photos — they take no
  * `collection` and no sealing policy. When the bucket is unavailable putFile
  * returns null and the image is kept inline, under the 700 KB Firestore ceiling.

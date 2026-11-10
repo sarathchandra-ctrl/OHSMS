@@ -22,7 +22,7 @@
 // with each other and with where the document appeared — is now one.
 //
 // That is why this file no longer renders anything. It has one job: produce the
-// fields firestore.rules reads. Levels and their storage still follow Objectives
+// fields the server's site rule reads (stack/policy.mjs siteBlocked). Levels and their storage still follow Objectives
 // (level + the thing it scopes to) and the site fields every other module writes.
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -100,8 +100,8 @@ export function classificationFields(form = {}, sites = []) {
       siteId: id,
       site: clean(known?.name) || clean(form.site),
       visibility: VISIBLE_SITE,
-      // Snapshotted for the security rule, which cannot read the site document
-      // without spending a lookup per row of the library. See firestore.rules.
+      // Snapshotted so the document still says where it applies; the server's
+      // site rule reads siteId (stack/policy.mjs siteBlocked).
       siteRegion: clean(known?.region) || clean(form.siteRegion),
       siteEntity: clean(known?.entity) || clean(form.siteEntity),
     }

@@ -41,7 +41,7 @@ const module = MODULE_BY_KEY.documents
 //
 // What makes this safe rather than merely tidy: the FOLDER decides the
 // classification. Filing into a site's Pre Launch folder makes the document
-// that site's, in the tree and in firestore.rules at the same time, from the
+// that site's, in the tree and on the server at the same time, from the
 // same fields. There is no second setting that can quietly disagree with where
 // a document appears to be.
 // ─────────────────────────────────────────────────────────────────────────────
@@ -541,7 +541,7 @@ export default function DocumentsModule() {
    *
    * The file field defers rather than uploading when it is picked, because
    * bytes in the bucket with no record pointing at them are unreachable AND
-   * undeletable — storage.rules refuses every client delete, so an abandoned
+   * unreachable from any record, so an abandoned
    * form used to strand a file permanently. Six of them accumulated in a single
    * afternoon of testing.
    *
@@ -687,7 +687,7 @@ export default function DocumentsModule() {
           label: 'Rename', icon: Pencil,
           onClick: () => setFolderDialog({ mode: 'rename', folder: child }),
         },
-        // Deleting is manager-only in firestore.rules; showing the item to
+        // Deleting is manager-only on the server; showing the item to
         // everyone would only produce a refusal.
         isManager && { label: 'Delete', icon: Trash2, danger: true, onClick: () => deleteFolder(child) },
       ]}

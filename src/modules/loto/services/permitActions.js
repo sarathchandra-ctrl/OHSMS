@@ -9,9 +9,7 @@
 // appends the audit trail — all in a single commit, or none of it. Returning or
 // removing does the reverse. There is no step at which the permit says "active"
 // and the equipment says "unlocked", or the other way round, because there is no
-// write that does one without the other. firestore.rules refuse the half-write
-// as well (getAfter on the procedure), so a client that skips this file cannot
-// reach the state either.
+// write that does one without the other.
 //
 // Every read comes before the first write (Firestore refuses a read after a
 // write), and every decision is made on documents read INSIDE the transaction,

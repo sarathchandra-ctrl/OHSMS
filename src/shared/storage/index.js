@@ -110,8 +110,8 @@ export function safeFileName(name) {
 }
 
 /**
- * Where a file lives: org-scoped so storage rules can enforce the same tenancy
- * Firestore rules do, with an entropy prefix so two "photo.jpg"s never collide.
+ * Where a file lives: under files/ (the only prefix the server will sign), with
+ * an entropy prefix so two "photo.jpg"s never collide.
  * `rand` is injectable for tests; production uses crypto randomness.
  *
  * This layout is backend-neutral on purpose: on S3 the same `orgs/<orgId>/…`
@@ -178,7 +178,7 @@ export async function putFile(kind, file, fileName, { collection } = {}) {
     // still gets stored. The first version of this sat after that guard and did
     // nothing at all when the bucket was unconfigured.
     //
-    // storage.rules allow-lists the DECLARED content type, and that value comes
+    // The server allow-lists the DECLARED content type, and that value comes
     // from the client — a browser guesses it from the extension, and anything
     // that is not this app sets it to whatever it likes. So the rule answers
     // "may an object be served as this type" and nothing answered "are these
@@ -280,11 +280,11 @@ export async function removeFile(path) {
 }
 
 /**
- * A URL for a stored file that storage.rules actually governs.
+ * A URL for a stored file, fetched fresh for the signed-in person.
  *
- * Prefers an authenticated fetch by `path`. Falls back to the persisted `url`,
- * which is a permanent unauthenticated bearer link — so the fallback is the
- * insecure path, taken only when the secure one cannot work:
+ * Prefers a fresh link by `path` (the adapter's resolve, /presign op 'get').
+ * Falls back to the persisted `url` only when that cannot work; stored links
+ * expire, so the fallback is a last resort:
  *   - records written before uploads recorded a `path`
  *   - a driver with no `resolve` (inline/data-URL storage has nothing to fetch)
  *   - the bucket has no CORS rule for this origin yet

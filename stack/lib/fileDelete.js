@@ -14,21 +14,16 @@
 // photos, drill evidence — and it leaves nothing in the audit trail, which only
 // records what the app chose to write.
 //
-// The obvious fix, a cross-service firestore.get() inside storage.rules, was
-// written and reverted: the Storage emulator does not evaluate cross-service
-// calls, so the rule could not be tested at all, in the one file that is the
-// only enforcement boundary this app has. Every refusal test passed while the
-// feature was broken, because everything was refusing.
-//
-// So the check moved here, where the profile is read LIVE on every call and the
-// decision runs under a test suite. storage.rules now refuses client deletes
-// outright; this is the only way a signed-in user can remove a file.
+// So the check lives here, where the profile is read LIVE on every call and
+// the decision runs under a test suite. /presign op 'delete' and the
+// deleteOrgFile job are the only ways a signed-in user can remove a file, and
+// both ask this.
 //
 // Pure, so every branch is exercised without the Admin SDK — which is the part
 // that cannot run in a unit test.
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Roles that may delete. Mirrors isManagerOf() in firestore.rules. */
+/** Roles that may delete. Mirrors isManager in stack/policy.mjs. */
 export const DELETING_ROLES = ['admin', 'manager']
 
 /**
@@ -54,7 +49,7 @@ export function isAppFilePath(path) {
  * the caller, because "your profile says member" and "that file belongs to
  * another organization" are both just "no" to somebody probing.
  *
- * Mirrors firestore.rules isManagerOf() in full — including the clause a claim
+ * Mirrors isManager in stack/policy.mjs in full — including the clause a claim
  * could never carry: an account still holding the password a provisioning admin
  * typed for it reaches NOTHING in Firestore, and used to be able to delete in
  * Storage regardless. That is a credential the admin knows, so an action taken

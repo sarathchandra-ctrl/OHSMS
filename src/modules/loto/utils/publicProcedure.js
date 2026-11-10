@@ -8,8 +8,8 @@
  * know who locked it.
  *
  * That last point is why this file exists rather than a rule opening
- * /procedures/{id}: Firestore rules cannot restrict which FIELDS a read
- * returns, so publishing the procedure document would publish
+ * /procedures/{id} to anyone with a scanned code: the procedure document
+ * carries names, so publishing it would publish
  * lockState.techName, groupLock.members[].name, primaryTech and the approval
  * trail along with it. This mirrors the /qr and /permitQr pattern already used
  * for the equipment and permit codes.

@@ -1,7 +1,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // Role-based capability checks. Three roles: reporter < investigator < admin.
-// UI gates on can(role, action); Firestore rules enforce tenant + member-level
-// access. Keep this the single source of truth for what each role may do.
+// UI gates on can(role, action); stack/policy.mjs enforces what each person
+// may actually read and write. Keep this the single source of truth for what each role may do.
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const ROLES = [

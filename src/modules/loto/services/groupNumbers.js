@@ -1,6 +1,6 @@
 // Group lockout numbers. organizations/{orgId}/lotoGroupNumbers/{no}
 // An Admin registers a number. A permit claims it by setting openPermitId in
-// the same commit as the permit (firestore.rules). This file only creates
+// the same commit as the permit. This file only creates
 // empty numbers and lists them.
 import { collection, doc, onSnapshot, query, setDoc, limit } from '../../../shared/data/client.js'
 import { db } from '../../../shared/db'

@@ -3,7 +3,7 @@
 //
 // Hiding a tile is presentation. This is the part that matters: a bookmark, a
 // link in an old email, or a typed URL must not walk into a module the
-// organization has not been given. Firestore rules stop the data leaving, but
+// organization has not been given. The server stops the data leaving, but
 // an unguarded route would still mount the module and show its empty shell with
 // a permission error behind it — which reads as a broken product rather than an
 // absent one.

@@ -1,6 +1,6 @@
 // Who may approve, extend or emergency-remove a permit.
 //
-// The same split as firestore.rules lotoPermitAdminOf: an Admin with no site
+// The split the LOTO module uses for its buttons: an Admin with no site
 // and no grant reaches every permit; anyone else reaches a permit only through
 // its site or its entity. A region grant does not. Being named on the permit
 // (or having raised it) is handled by the caller — this only answers scope.

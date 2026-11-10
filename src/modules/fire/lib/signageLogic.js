@@ -56,7 +56,7 @@ const positiveInt = (v) => {
  *  - FERP Signage: one per floor covered (all floors → the number of floors);
  *  - Fire Extinguisher Sign: one per extinguisher, i.e. the `quantity`;
  *  - anything else: one.
- * Never less than 1. Informational: it is not enforced on save or in firestore.rules.
+ * Never less than 1. Informational: it is not enforced on save or by the server.
  * → { count, per: 'floor' | 'extinguisher' | null }
  */
 export function requiredSignagePhotos(rec) {
@@ -129,8 +129,8 @@ const hasCheckedDate = (v) => typeof v === 'string' && v.trim() !== '' && !Numbe
  * when the status is being SET to Deployed — a new record, or a change from
  * Planned / Removed / unset. A record that was already Deployed
  * (`prev.status === 'Deployed'`) is left alone: those were saved before this rule
- * and must stay loadable and editable for their other fields. firestore.rules
- * enforces the same "on the way in only" shape.
+ * and must stay loadable and editable for their other fields. The form applies
+ * it; the server does not check it.
  *
  * @param record the form / payload about to be saved
  * @param prev   the stored record it replaces, or null/undefined for a new one

@@ -205,7 +205,7 @@ export async function metabaseQuery(dataset, { from, to } = {}) {
  * WhatsApp site lookup: the caller's own link status.
  *
  * `{ available, number, linked, masked, linkedAt }`. The waLinks collection is
- * server-only (firestore.rules), so this callable — which answers only about
+ * server-only, so this callable — which answers only about
  * the caller, with the number masked to its last four digits — is the one way
  * the app can see it.
  */

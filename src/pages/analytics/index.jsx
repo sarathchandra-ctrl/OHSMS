@@ -209,9 +209,8 @@ export default function Analytics() {
       ) : tab === 'auditors' ? (
         <AuditorsTab sites={sites} keepUnplaced={isAdmin} />
       ) : tab === 'prelaunch' ? (
-        // Owns its query: the document library reads through a plan that mirrors
-        // firestore.rules, and the page-wide subscribeCollections cannot — a
-        // query that would return one refused row fails entirely.
+        // Owns its query: the document library reads through its own plan
+        // (documents/lib/readScope.js) rather than the page-wide one.
         <PreLaunchTab sites={sites} />
       ) : tab === 'incidents' ? (
         <IncidentsTab incidents={incidents} sites={sites} keepUnplaced={isAdmin} />

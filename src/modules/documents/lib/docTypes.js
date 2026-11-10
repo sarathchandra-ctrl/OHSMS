@@ -87,9 +87,8 @@ export const FOLDER_PREFIX = 'documents'
  * level. NOT one per folder in the tree.
  *
  * The bucket layout deliberately does not mirror the tree. storagePath()
- * sanitises every path segment (a slash becomes an underscore) and storage.rules
- * matches exactly orgs/{orgId}/{kind}/{fileName}, so a nested path would be
- * silently flattened by one and refused by the other — and encoding a whole
+ * sanitises every path segment (a slash becomes an underscore) into
+ * files/{kind}/{fileName}, so a nested path would be silently flattened — and encoding a whole
  * region/entity/site/bucket chain into the single `kind` segment would produce a
  * key that changes the moment anybody renames a site. The tree lives in
  * Firestore, where it can be reorganised freely; the bytes stay where they were

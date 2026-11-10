@@ -4,7 +4,7 @@
 // Writes, audit logging and doc-id reservation are unchanged — they come
 // straight from createModuleService. Only `subscribe` is replaced, because a
 // site-scoped library cannot ask for the whole collection any more. See
-// readScope.js for why, and firestore.rules for the rule it mirrors.
+// readScope.js for why, and stack/policy.mjs (siteBlocked) for the rule.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { collection, query, where, orderBy, limit, onSnapshot } from '../../../shared/data/client.js'

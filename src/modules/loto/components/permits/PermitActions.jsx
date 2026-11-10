@@ -431,7 +431,8 @@ function Emergency({ permit, user }) {
 
 /**
  * The buttons a permit offers THIS person right now. What they can actually do
- * is decided by firestore.rules; this only decides what to show.
+ * is decided by stack/policy.mjs (lotoPermitProblem); this only decides what to
+ * show.
  */
 export default function PermitActions({ permit, user, isAdmin, isParty, otherAdmin, canWrite, canDecide = isAdmin }) {
   if (!canWrite) return null

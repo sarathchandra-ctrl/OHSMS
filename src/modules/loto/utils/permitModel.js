@@ -1,7 +1,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // Building and checking a permit request. Pure — no Firestore — so the form's
 // rules can be tested without a browser, and the same checks can be restated
-// where they cannot be bypassed (firestore.rules).
+// where they cannot be bypassed (stack/policy.mjs).
 // ─────────────────────────────────────────────────────────────────────────────
 import { PROCEDURE_STATUS } from '../constants/procedures'
 import { pointDeviceKeys } from '../constants/energySources'

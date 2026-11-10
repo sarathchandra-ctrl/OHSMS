@@ -23,7 +23,7 @@ import { refiledKey } from './lib/prelaunch'
  *
  * There is no site or region picker. The folder IS the classification — filing
  * into a site's Pre Launch folder is what makes the document that site's, in
- * the tree and in firestore.rules at once. A second control could only disagree
+ * the tree and on the server at once (stack/policy.mjs siteBlocked). A second control could only disagree
  * with the first.
  */
 const FIELDS = [
@@ -48,8 +48,8 @@ const FIELDS = [
     maxBytes: MAX_UPLOAD_BYTES,
     // Held, not uploaded. The bytes go to the bucket inside the save, once the
     // record is about to exist — see saveDoc. Uploading on pick used to strand
-    // a file every time a form was abandoned, and storage.rules lets no client
-    // delete, so nothing could ever tidy those up.
+    // a file every time a form was abandoned, with nothing pointing at it to
+    // tidy it up.
     //
     // It also means the folder chosen ABOVE is read at save time rather than at
     // pick time, so changing the location after attaching now files the bytes
@@ -165,8 +165,8 @@ export default function DocumentDialog({
       ...rest,
       // The folder decides who may see the document. nodeClassification writes
       // level / region / siteId / visibility and the siteRegion + siteEntity
-      // snapshot firestore.rules reads, so the tree and the security rule can
-      // never disagree about where this document belongs.
+      // snapshot, and the server reads siteId and visibility from the same
+      // write, so the tree and the access rule never disagree.
       ...classification,
       folderId: location,
       // Recorded so the folder a file was filed under survives a later move:

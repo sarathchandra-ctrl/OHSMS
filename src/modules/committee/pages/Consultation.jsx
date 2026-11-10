@@ -270,9 +270,8 @@ export default function Consultation() {
     // ==========================================
     // 4. STRICT ROW-LEVEL SECURITY (RLS)
     // ==========================================
-    // Every approved org member can see all of the organization's sites; the site
-    // dropdowns are a UX filter, not a security boundary (org membership is enforced
-    // by Firestore rules + the auth/approval guard).
+    // The site dropdowns offer every site; which meetings a person can read is
+    // decided by the server's site rule (stack/policy.mjs siteBlocked).
     const isGlobalUser = true;
     const visibleSites = sites;
 

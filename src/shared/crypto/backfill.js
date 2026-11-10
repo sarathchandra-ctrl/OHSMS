@@ -33,7 +33,7 @@
 // cannot seal anything differently from the way a normal save would.
 //
 // What that costs is the Admin SDK: this runs as a signed-in administrator and
-// is bound by firestore.rules like any other client code. That is acceptable
+// is bound by stack/policy.mjs like any other client code. That is acceptable
 // here — an admin can already read and write every collection in this table —
 // and it buys something a Cloud Function could not have: the person running the
 // migration holds BOTH key classes, so every document can be opened again and

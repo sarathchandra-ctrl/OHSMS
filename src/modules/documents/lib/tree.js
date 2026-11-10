@@ -37,7 +37,7 @@
 // ── The folder decides who may see the document ──────────────────────────────
 //
 // Every node resolves to a CLASSIFICATION — level, region, siteId — which is
-// what firestore.rules reads. Filing a document is therefore the same act as
+// what the server's site rule reads (siteId, visibility). Filing a document is therefore the same act as
 // classifying it, and there is no second setting that can disagree with where
 // the document appears to be:
 //
@@ -293,7 +293,7 @@ export const filesIn = (docs = [], tree, id) =>
   (docs || []).filter((d) => d && resolveNode(d, tree) === clean(id))
 
 /**
- * The classification a node confers — what firestore.rules will read.
+ * The classification a node confers — what the server's site rule reads.
  *
  * Handed to classificationFields, which every other part of the app already
  * trusts to write level / region / siteId / visibility and the siteRegion +

@@ -17,7 +17,7 @@ import { useAuth as useSharedAuth } from './AuthContext'
 //
 // Note what is NOT here: none of this is a permission control. The mapped role
 // decides what the UI offers. What the user may actually do is decided by
-// firestore.rules against their REAL platform role, which this never touches.
+// stack/policy.mjs against their REAL platform role, which this never touches.
 // A module that maps `manager` to its own `admin` is not granting anything.
 // ─────────────────────────────────────────────────────────────────────────────
 

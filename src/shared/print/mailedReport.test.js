@@ -4,7 +4,7 @@ import { MAILED_REPORT_KIND, captureReactPdf, mailedReportPath } from './mailedR
 describe('mailedReportPath', () => {
   const ok = 'files/mailed-reports/ab12cd34-report.pdf'
 
-  it('uses the kind the functions and storage.rules exclude from client read', () => {
+  it('uses the kind the server excludes from client read', () => {
     expect(MAILED_REPORT_KIND).toBe('mailed-reports')
   })
 

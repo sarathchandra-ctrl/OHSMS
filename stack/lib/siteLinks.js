@@ -9,9 +9,9 @@
 // analytics roll-ups, the site filters — sees nothing for those records.
 //
 // Being precise about what this does NOT do, because the name invites the wrong
-// expectation: no firestore.rules path reads a siteId on any of these three
-// collections today. reachesSite() guards /documents and nothing else. So this
-// grants nobody access and hides nothing. It repairs the joins, and it is the
+// expectation: it records a siteId the server's site rule then reads
+// (stack/policy.mjs siteBlocked), so a linked unit becomes visible only to
+// people who reach its site. It repairs the joins, and it is the
 // prerequisite for scoping equipment by site at all — which is exactly why a
 // wrong link here is expensive. A guess made today becomes an access decision
 // the day that scoping lands, and nobody re-checks a backfill that already

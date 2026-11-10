@@ -57,11 +57,8 @@ export const MEDICAL = 'medical'
 /**
  * Where the keyset lives: organizations/{orgId}/meta/cryptoKeys.
  *
- * Under /meta because that subcollection is already carved out of the generic
- * grants in firestore.rules for the stats and counter documents, so adding a
- * document here does not need a new top-level name added to two exclusion lists
- * — and one added to one list is the hole shipped. The rule for this exact
- * document id denies every client operation outright; see firestore.rules.
+ * The policy denies every client operation on this exact document id
+ * outright (isCryptoKey in stack/policy.mjs), admin included.
  */
 export const KEY_DOC_PATH = () => 'meta/cryptoKeys'
 
@@ -208,7 +205,7 @@ export async function generateKeyset(masterSecret, version = 1) {
 /**
  * What each half requires of the caller.
  *
- * Every line is a copy of a rule in firestore.rules, and that is the point: a
+ * Every line is a copy of a rule in stack/policy.mjs, and that is the point: a
  * key released on a looser test than the documents it opens makes the rule
  * decorative, and one released on a stricter test locks people out of their own
  * work with an error no screen can explain.
@@ -225,8 +222,8 @@ export async function generateKeyset(masterSecret, version = 1) {
  *                  the medical class is for.
  */
 export function grantsFor(profile) {
-  // mustChangePassword mirrors passwordIsOwn() in firestore.rules, which
-  // isApprovedMemberOf already folds in: someone still holding an
+  // mustChangePassword mirrors isApproved in stack/policy.mjs, which folds it
+  // in: someone still holding an
   // administrator-issued temporary password can read nothing in the app, so
   // handing them the keys that open it would be the one grant looser than the
   // rules — and it would survive a password reset the rules would have caught.

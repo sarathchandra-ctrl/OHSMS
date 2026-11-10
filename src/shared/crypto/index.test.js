@@ -197,7 +197,7 @@ describe('who can read a health record', () => {
   })
 
   it('refuses the member who wrote it', async () => {
-    // firestore.rules already says a member may write /injuries and not read
+    // stack/policy.mjs already says a member may write /injuries and not read
     // it. Before this, that was a rule; now it is arithmetic.
     const opened = await openDoc('injuries', sealed)
     expect(opened.medication).toBe(undefined)

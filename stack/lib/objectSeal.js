@@ -118,8 +118,7 @@ export const SEALED_SUFFIX = '.enc'
  *
  * Refuses anything outside the app's own files/ prefix and anything containing '..',
  * mirroring movedStoragePath in medicalRecords.js. `path` is a CLIENT-WRITABLE
- * field and this runs with Admin SDK privileges that never consult
- * storage.rules: a pointer naming another tenant's object would otherwise have
+ * field and this runs with server privileges that bypass the access rules: a pointer naming another tenant's object would otherwise have
  * this job read that object, copy it into this org, and delete the original.
  * Refused, and reported.
  */
