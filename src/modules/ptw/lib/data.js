@@ -27,6 +27,7 @@ import { onReadError } from '../../../shared/org/readError'
 import { reserveDocId } from '../../../shared/docId/reserve'
 import { putFile, removeFile, MAX_INLINE_BYTES, tooLargeForInline } from '../../../shared/storage'
 import { AUDIT } from './audit'
+import { ANSWERABLE_STAGES, answerBlock, stageBlock } from './rejection'
 import { computeWindow, derivePermitStatus } from './permitStatus'
 import { mirrorDisplayFields } from './publicPermit'
 import { generateQrToken } from './qr'
@@ -574,6 +575,31 @@ export async function decideApproval(permitId, team, decision, note, actor) {
   await logAudit(actor, decision === 'approved' ? AUDIT.APPROVE : AUDIT.REJECT, {
     targetId: permitId, targetLabel: current.permitNo,
     summary: `${team} ${decision}${note ? ` — ${note}` : ''}`,
+  })
+}
+
+/**
+ * The raiser answers a team's rejection of the opening ('permit') or the
+ * closure, and sends it back to the person who rejected it (lib/rejection.js).
+ */
+export async function answerRejection(permitId, stage, team, text, actor) {
+  if (!ANSWERABLE_STAGES.includes(stage)) throw new Error('Only an opening or a closure can be answered')
+  const current = await getPermit(permitId)
+  if (!current) throw new Error('Permit no longer exists')
+  const block = answerBlock(stageBlock(current, stage, team), text, actor)
+  const merged =
+    stage === 'permit'
+      ? { ...current, [team]: block }
+      : { ...current, closure: { ...current.closure, [team]: block } }
+  await updateDoc(permitRef(permitId), {
+    [stage === 'permit' ? team : `closure.${team}`]: block,
+    updatedAt: serverTimestamp(),
+  })
+  await syncStoredStatus(permitId, merged)
+  await logAudit(actor, AUDIT.REJECTION_ANSWER, {
+    targetId: permitId,
+    targetLabel: current.permitNo,
+    summary: `${stage === 'closure' ? 'Closure ' : ''}${team} rejection answered, sent back to ${block.reapproverName || 'the approver'}`,
   })
 }
 

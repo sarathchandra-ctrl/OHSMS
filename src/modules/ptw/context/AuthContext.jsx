@@ -13,8 +13,11 @@ const ROLE_MAP = {
   auditor: ROLES.TECHNICIAN,
 }
 
+// platformRole keeps the role ROLE_MAP collapsed: a manager and an
+// Administrator are both ADMIN here, but only the Administrator may decide a
+// re-approval pinned to someone else (lib/permissions.js canActForTeam).
 export const useAuth = createModuleAuth(ROLE_MAP, ROLES.TECHNICIAN, (a, role, profile) => ({
-  profile: profile ? { ...profile, roles: [role] } : profile,
+  profile: profile ? { ...profile, roles: [role], platformRole: a.role } : profile,
   isAdmin: roleIsAdmin(role),
   isApprover: roleIsApprover(role),
 }))

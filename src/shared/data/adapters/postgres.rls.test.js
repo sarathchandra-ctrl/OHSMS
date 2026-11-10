@@ -3,6 +3,7 @@ import { openSqlite } from '../../../../stack/sqlite.mjs'
 import { applySchema, createEngine } from '../../../../stack/engine.mjs'
 import { createPostgresAdapter } from './postgres'
 import { mirrorDisplayFields } from '../../../modules/ptw/lib/publicPermit'
+import { answerBlock } from '../../../modules/ptw/lib/rejection'
 
 // The access rules, through the real engine and the app's own data client.
 // SQLite has no row-level security: every rule here is stack/policy.mjs,
@@ -1399,5 +1400,161 @@ describe('in-app notifications (inbox/<uid>/items)', () => {
     expect(await adminEngine.get(null, mine, 'n6')).not.toBeNull()
     await as('memberA').remove(mine, 'n6')
     expect(await adminEngine.get(null, mine, 'n6')).toBeNull()
+  })
+})
+
+// A rejected permit's opening or closure, answered by its raiser and sent
+// back to the one person who rejected it (stack/policy.mjs
+// permitDecisionProblem). Each case is the write a hostile client would try.
+describe('a rejected permit, answered and sent back to the person who rejected it', () => {
+  const AT = '2026-11-10T06:10:00.000Z'
+  const rejected = (by, note = 'No gas test attached') => ({ status: 'rejected', by, byName: 'Mia', at: AT, note })
+  const approvedBy = (by) => ({ status: 'approved', by, byName: 'x', at: AT, note: '' })
+  const base = (extra = {}) => ({
+    permitNo: 'PTW-2026-R',
+    engineering: { status: 'pending' },
+    operations: approvedBy('managerB'),
+    closure: null,
+    extension: null,
+    storedStatus: 'draft',
+    createdBy: 'memberA',
+    ...extra,
+  })
+  // What ptw/lib/data.js answerRejection writes for that team.
+  const answer = (rejection, { by = 'memberA', text = 'Gas test done, certificate attached', reapprover = rejection.by } = {}) => ({
+    status: 'pending',
+    by: null,
+    byName: '',
+    at: null,
+    note: '',
+    reapprover,
+    reapproverName: rejection.byName,
+    rejection: { by: rejection.by, byName: rejection.byName, at: rejection.at, note: rejection.note },
+    response: { by, byName: 'Mo', at: '2026-11-10T07:00:00.000Z', text },
+  })
+  const denied = { code: 'permission-denied' }
+
+  beforeAll(async () => {
+    await seed('users', 'managerB', { role: 'manager', status: 'approved', name: 'Max' })
+    await seed('users', 'memberB', { role: 'member', status: 'approved', name: 'Mel' })
+  })
+
+  it('records a decision only in the decider’s own name', async () => {
+    await seed('permits', 'rj-name', base())
+    await expect(
+      as('managerA').update('permits', 'rj-name', { engineering: rejected('managerB') })
+    ).rejects.toMatchObject(denied)
+    await as('managerA').update('permits', 'rj-name', { engineering: rejected('managerA') })
+  })
+
+  it('lets the raiser answer a rejection and pins the re-approval to the rejector', async () => {
+    await seed('permits', 'rj-ok', base({ engineering: rejected('managerA') }))
+    await as('memberA').update('permits', 'rj-ok', { engineering: answer(rejected('managerA')) })
+    const p = await adminEngine.get(null, 'permits', 'rj-ok')
+    expect(p.engineering).toMatchObject({ status: 'pending', reapprover: 'managerA' })
+    expect(p.engineering.response.text).toMatch(/Gas test/)
+    // The other team's approval is untouched.
+    expect(p.operations.status).toBe('approved')
+  })
+
+  it('accepts exactly what the app writes (ptw/lib/rejection.js answerBlock)', async () => {
+    const r = rejected('managerA')
+    await seed('permits', 'rj-app', base({ engineering: r }))
+    const block = answerBlock(r, 'Gas test certificate attached', { uid: 'memberA', name: 'Mo' })
+    await as('memberA').update('permits', 'rj-app', { engineering: block })
+    expect((await adminEngine.get(null, 'permits', 'rj-app')).engineering.reapprover).toBe('managerA')
+  })
+
+  it('refuses every malformed or borrowed answer', async () => {
+    const r = rejected('managerA')
+    const attempts = [
+      ['memberB', answer(r, { by: 'memberB' })], // not the raiser
+      ['managerB', answer(r, { by: 'managerB' })], // a manager who is not the raiser
+      ['managerA', answer(r, { by: 'managerA' })], // the rejector answering their own rejection
+      ['memberA', answer(r, { reapprover: 'managerB' })], // sent to a friendlier approver
+      ['memberA', answer(r, { reapprover: '' })], // sent to the whole department
+      ['memberA', answer(r, { text: '   ' })], // no counter comment
+      ['memberA', answer(r, { by: 'memberB' })], // answered in someone else's name
+      ['memberA', { ...answer(r), rejection: { ...answer(r).rejection, note: 'Looks fine' } }], // rejection rewritten
+      ['memberA', { ...answer(r), by: 'memberA', at: AT }], // answer that records a decision
+      ['memberA', { ...answer(r), approvedOverride: true }], // something riding along
+      ['memberA', { ...answer(r), status: 'approved' }], // approving instead of answering
+    ]
+    for (const [i, [uid, block]] of attempts.entries()) {
+      await seed('permits', `rj-bad-${i}`, base({ engineering: r }))
+      await expect(
+        as(uid).update('permits', `rj-bad-${i}`, { engineering: block }),
+        `${i} ${uid}`
+      ).rejects.toMatchObject(denied)
+      expect((await adminEngine.get(null, 'permits', `rj-bad-${i}`)).engineering.status, `${i}`).toBe('rejected')
+    }
+  })
+
+  it('refuses an answer that also reopens the other team’s decision or edits the permit', async () => {
+    const r = rejected('managerA')
+    await seed('permits', 'rj-more', base({ engineering: r }))
+    for (const extra of [{ operations: { status: 'pending' } }, { jobDescription: 'Something else' }]) {
+      await expect(
+        as('memberA').update('permits', 'rj-more', { engineering: answer(r), ...extra }),
+        JSON.stringify(extra)
+      ).rejects.toMatchObject(denied)
+    }
+  })
+
+  it('leaves the re-approval to the rejector alone: not another manager, not an unpin', async () => {
+    const r = rejected('managerA')
+    await seed('permits', 'rj-pin', base({ engineering: answer(r) }))
+    // Another manager can neither decide nor redirect it.
+    await expect(
+      as('managerB').update('permits', 'rj-pin', { engineering: approvedBy('managerB') })
+    ).rejects.toMatchObject(denied)
+    await expect(
+      as('managerB').update('permits', 'rj-pin', { engineering: { ...answer(r), reapprover: 'managerB' } })
+    ).rejects.toMatchObject(denied)
+    await expect(
+      // update merges nested fields, so this is how the pin is cleared.
+      as('managerB').update('permits', 'rj-pin', { 'engineering.reapprover': '' })
+    ).rejects.toMatchObject(denied)
+    // Not even by the raiser, who asked for it.
+    await expect(
+      as('memberA').update('permits', 'rj-pin', { engineering: approvedBy('memberA') })
+    ).rejects.toMatchObject(denied)
+    // The rejector decides.
+    await as('managerA').update('permits', 'rj-pin', { engineering: approvedBy('managerA') })
+    expect((await adminEngine.get(null, 'permits', 'rj-pin')).engineering.status).toBe('approved')
+  })
+
+  it('lets an Administrator answer for a raiser who has left', async () => {
+    const r = rejected('managerA')
+    await seed('permits', 'rj-admin-answer', base({ engineering: r }))
+    await as('adminA').update('permits', 'rj-admin-answer', { engineering: answer(r, { by: 'adminA' }) })
+  })
+
+  it('lets an Administrator decide a pinned permit, so one is never stuck', async () => {
+    await seed('permits', 'rj-admin', base({ engineering: answer(rejected('managerA')) }))
+    await as('adminA').update('permits', 'rj-admin', { engineering: approvedBy('adminA') })
+  })
+
+  it('holds a rejected closure to the same rules', async () => {
+    const r = rejected('managerA', 'Area not cleaned')
+    const closure = (eng) => ({ requestedBy: 'memberA', engineering: eng, operations: approvedBy('managerB') })
+    await seed('permits', 'rj-close', base({
+      engineering: approvedBy('managerA'),
+      closure: closure(r),
+      storedStatus: 'in_progress',
+    }))
+    await expect(
+      as('memberA').update('permits', 'rj-close', { 'closure.engineering': answer(r, { reapprover: 'managerB' }) })
+    ).rejects.toMatchObject(denied)
+    // Starting the closure again instead of answering it is a manager's reset, not the raiser's.
+    await expect(
+      as('memberA').update('permits', 'rj-close', { closure: { requestedBy: 'memberA', engineering: { status: 'pending' }, operations: { status: 'pending' } } })
+    ).rejects.toMatchObject(denied)
+    await as('memberA').update('permits', 'rj-close', { 'closure.engineering': answer(r) })
+    await expect(
+      as('managerB').update('permits', 'rj-close', { 'closure.engineering': approvedBy('managerB') })
+    ).rejects.toMatchObject(denied)
+    await as('managerA').update('permits', 'rj-close', { 'closure.engineering': approvedBy('managerA') })
+    expect((await adminEngine.get(null, 'permits', 'rj-close')).closure.engineering.status).toBe('approved')
   })
 })

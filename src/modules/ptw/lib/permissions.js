@@ -92,9 +92,15 @@ export function can(profile, action, permit = null) {
  *  - engineering/operations: only their own team, and — if a specific approver
  *    is assigned for that team — only that assigned person.
  */
-export function canActForTeam(profile, permit, team) {
+export function canActForTeam(profile, permit, team, block = null) {
   const roles = rolesOf(profile)
   if (!roles.length) return false
+  // A rejection answered and sent back goes to the person who rejected it
+  // alone (lib/rejection.js). Managers map to ADMIN here, so this comes
+  // before the ADMIN shortcut; the platform Administrator still may decide,
+  // as the server allows (stack/policy.mjs permitDecisionProblem).
+  const pinned = block?.status === 'pending' && block.reapprover ? String(block.reapprover) : ''
+  if (pinned) return profile?.uid === pinned || profile?.platformRole === 'admin'
   if (roles.includes(ROLES.ADMIN)) return true
   if (!roles.some((r) => teamForRole(r) === team)) return false
   const assigned = team === TEAMS.ENGINEERING ? permit?.assignedEngineer : permit?.assignedOperator

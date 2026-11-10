@@ -5,7 +5,7 @@ import { motion } from 'framer-motion'
 import {
   ArrowLeft, Printer, FileText, MapPin, Calendar, Phone, User, Building2, ShieldAlert, HardHat,
   ListChecks, Users as UsersIcon, CheckCircle2, XCircle, Clock, Lock, TimerReset, MessageSquarePlus,
-  Table, Paperclip, Download, Flame, Eye, X, QrCode, AlertTriangle, Trash2,
+  Table, Paperclip, Download, Flame, Eye, X, QrCode, AlertTriangle, Trash2, Reply,
 } from 'lucide-react'
 import { QRCodeCanvas } from 'qrcode.react'
 import toast from 'react-hot-toast'
@@ -18,8 +18,9 @@ import { usePermits } from '../context/PermitContext'
 import {
   decideApproval, requestClosure, decideClosure, requestExtension, addExtensionSuggestion, decideExtension,
   subscribePermitDocuments, addPermitDocument, deletePermitDocument,
-  ensurePermitQr, subscribePermitObservations, createObservation, deletePermit,
+  ensurePermitQr, subscribePermitObservations, createObservation, deletePermit, answerRejection,
 } from '../lib/data'
+import { ANSWER_MAX, canAnswer, pinnedTo } from '../lib/rejection'
 import { can, canActForTeam, TEAMS } from '../lib/permissions'
 import { STATUS, statusMeta } from '../lib/permitStatus'
 import { fileToDataUrl, formatBytes } from '../lib/files'
@@ -46,12 +47,32 @@ function DecisionState({ block }) {
     rejected: { icon: XCircle, color: '#dc2626', label: 'Rejected' },
     pending: { icon: Clock, color: '#a16207', label: 'Pending' },
   }
-  const m = map[s]
+  const m = map[s] || map.pending
   const Icon = m.icon
+  // Sent back after a rejection: it waits for one named person, not the team.
+  const who = pinnedTo(block) ? block.reapproverName || 'the approver who rejected it' : block?.byName
+  const label = pinnedTo(block) ? 'Awaiting re-approval' : m.label
   return (
     <span className="inline-flex items-center gap-1.5 text-sm font-semibold" style={{ color: m.color }}>
-      <Icon size={16} /> {m.label}{block?.byName ? ` · ${block.byName}` : ''}
+      <Icon size={16} /> {label}{who ? ` · ${who}` : ''}
     </span>
+  )
+}
+
+/** The rejection and its answer, while a block waits for re-approval. */
+function RejectionThread({ block }) {
+  if (!pinnedTo(block)) return null
+  return (
+    <div className="mt-1.5 space-y-1 text-xs">
+      <p className="text-ink-500">
+        <span className="font-semibold text-red-700">Rejected by {block.rejection?.byName || block.reapproverName}:</span>{' '}
+        {block.rejection?.note ? `“${block.rejection.note}”` : 'no comment given'}
+      </p>
+      <p className="text-ink-600">
+        <span className="font-semibold text-ink-700">Answer from {block.response?.byName || 'the raiser'}:</span>{' '}
+        “{block.response?.text}”
+      </p>
+    </div>
   )
 }
 
@@ -64,20 +85,31 @@ function Chips({ items }) {
   )
 }
 
-/** A team approval row with Approve/Reject when the current user may act. */
-function TeamRow({ label, block, actionable, onApprove, onReject }) {
+/**
+ * A team approval row: Approve/Reject when the current user may act, and on a
+ * rejection, "Answer & send back" for the person who raised the permit.
+ */
+function TeamRow({ label, block, actionable, onApprove, onReject, onAnswer }) {
   return (
     <div className="ring-1 ring-ink-200 flex flex-wrap items-center justify-between gap-2 rounded-2xl bg-surface-50 px-4 py-3 ">
-      <div>
+      <div className="min-w-0">
         <p className="text-xs font-bold uppercase tracking-wide text-ink-500">{label}</p>
         <DecisionState block={block} />
-        {block?.note ? <p className="mt-0.5 text-xs text-ink-500">“{block.note}”</p> : null}
+        {block?.note ? (
+          <p className="mt-0.5 text-xs text-ink-500">
+            {block.status === 'rejected' ? <span className="font-semibold">Reason: </span> : null}“{block.note}”
+          </p>
+        ) : null}
+        <RejectionThread block={block} />
       </div>
-      {actionable && block?.status === 'pending' && (
+      {actionable && (block?.status || 'pending') === 'pending' && (
         <div className="flex gap-2">
           <button className="btn-soft" onClick={onApprove}><CheckCircle2 size={15} /> Approve</button>
           <button className="btn-danger" onClick={onReject}><XCircle size={15} /> Reject</button>
         </div>
+      )}
+      {onAnswer && (
+        <button className="btn-primary" onClick={onAnswer}><Reply size={15} /> Answer &amp; send back</button>
       )}
     </div>
   )
@@ -94,6 +126,8 @@ export default function PermitDetail() {
 
   const [decision, setDecision] = useState(null) // {stage, team, decision}
   const [note, setNote] = useState('')
+  const [answering, setAnswering] = useState(null) // {stage, team, block}
+  const [answerText, setAnswerText] = useState('')
   const [closing, setClosing] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [confirmNo, setConfirmNo] = useState('')
@@ -177,8 +211,16 @@ export default function PermitDetail() {
     setObsOpen(false)
   })
 
+  const sendAnswer = () => run(async () => {
+    await answerRejection(permit.id, answering.stage, answering.team, answerText, actor)
+    toast.success(`Sent back to ${answering.block?.byName || 'the approver'} for re-approval`)
+    setAnswering(null); setAnswerText('')
+  })
+
   const confirmDecision = async () => {
     const { stage, team, decision: d } = decision
+    // The reason is what the raiser is mailed and has to answer.
+    if (d === 'rejected' && !note.trim()) { toast.error('Give the reason for the rejection'); return }
     await run(async () => {
       if (stage === 'permit') await decideApproval(permit.id, team, d, note, actor)
       else if (stage === 'closure') await decideClosure(permit.id, team, d, note, actor)
@@ -233,7 +275,13 @@ export default function PermitDetail() {
   // Decision rows actionability
   const engAction = canActForTeam(profile, permit, TEAMS.ENGINEERING)
   const opsAction = canActForTeam(profile, permit, TEAMS.OPERATIONS)
+  // Per block: a re-approval is pinned to the person who rejected it.
+  const mayDecide = (block, team) => canActForTeam(profile, permit, team, block)
   const openDecision = (stage, team, d) => { setDecision({ stage, team, decision: d }); setNote('') }
+  const answerFor = (stage, team, block) =>
+    canAnswer(profile, permit, block, { admin: profile?.platformRole === 'admin' }) && !isClosed
+      ? () => { setAnswering({ stage, team, block }); setAnswerText('') }
+      : null
 
   return (
     <div>
@@ -472,12 +520,14 @@ export default function PermitDetail() {
             <h2 className="mb-3 text-base font-bold text-ink-900">Approvals</h2>
             <p className="mb-3 text-xs text-ink-500">Both Engineering and Operations must approve before work may begin.</p>
             <div className="space-y-2.5">
-              <TeamRow label="Engineering" block={permit.engineering} actionable={engAction && !permit.closure}
+              <TeamRow label="Engineering" block={permit.engineering} actionable={mayDecide(permit.engineering, TEAMS.ENGINEERING) && !permit.closure}
                 onApprove={() => openDecision('permit', TEAMS.ENGINEERING, 'approved')}
-                onReject={() => openDecision('permit', TEAMS.ENGINEERING, 'rejected')} />
-              <TeamRow label="Operations" block={permit.operations} actionable={opsAction && !permit.closure}
+                onReject={() => openDecision('permit', TEAMS.ENGINEERING, 'rejected')}
+                onAnswer={answerFor('permit', TEAMS.ENGINEERING, permit.engineering)} />
+              <TeamRow label="Operations" block={permit.operations} actionable={mayDecide(permit.operations, TEAMS.OPERATIONS) && !permit.closure}
                 onApprove={() => openDecision('permit', TEAMS.OPERATIONS, 'approved')}
-                onReject={() => openDecision('permit', TEAMS.OPERATIONS, 'rejected')} />
+                onReject={() => openDecision('permit', TEAMS.OPERATIONS, 'rejected')}
+                onAnswer={answerFor('permit', TEAMS.OPERATIONS, permit.operations)} />
             </div>
             {(permit.assignedEngineer || permit.assignedOperator) && (
               <p className="mt-3 text-xs text-ink-400">A specific approver is assigned for one or both teams.</p>
@@ -522,12 +572,14 @@ export default function PermitDetail() {
               <h2 className="mb-2 flex items-center gap-2 text-base font-bold text-ink-900"><Lock size={18} className="text-brand-600" /> Closure</h2>
               <p className="mb-3 text-xs text-ink-500">Requested by {permit.closure.requestedByName} · {fmt(permit.closure.requestedAt)}</p>
               <div className="space-y-2.5">
-                <TeamRow label="Engineering" block={permit.closure.engineering} actionable={engAction}
+                <TeamRow label="Engineering" block={permit.closure.engineering} actionable={mayDecide(permit.closure.engineering, TEAMS.ENGINEERING)}
                   onApprove={() => openDecision('closure', TEAMS.ENGINEERING, 'approved')}
-                  onReject={() => openDecision('closure', TEAMS.ENGINEERING, 'rejected')} />
-                <TeamRow label="Operations" block={permit.closure.operations} actionable={opsAction}
+                  onReject={() => openDecision('closure', TEAMS.ENGINEERING, 'rejected')}
+                  onAnswer={answerFor('closure', TEAMS.ENGINEERING, permit.closure.engineering)} />
+                <TeamRow label="Operations" block={permit.closure.operations} actionable={mayDecide(permit.closure.operations, TEAMS.OPERATIONS)}
                   onApprove={() => openDecision('closure', TEAMS.OPERATIONS, 'approved')}
-                  onReject={() => openDecision('closure', TEAMS.OPERATIONS, 'rejected')} />
+                  onReject={() => openDecision('closure', TEAMS.OPERATIONS, 'rejected')}
+                  onAnswer={answerFor('closure', TEAMS.OPERATIONS, permit.closure.operations)} />
               </div>
             </div>
           )}
@@ -545,11 +597,41 @@ export default function PermitDetail() {
           {decision?.team === TEAMS.ENGINEERING ? 'Engineering' : 'Operations'} decision on{' '}
           {decision?.stage === 'permit' ? 'this permit' : decision?.stage}.
         </p>
-        <Field label="Note (optional)"><textarea rows={3} className="input" value={note} onChange={(e) => setNote(e.target.value)} placeholder="Add a comment…" /></Field>
+        <Field label={decision?.decision === 'rejected' ? 'Reason for rejection *' : 'Note (optional)'}>
+          <textarea rows={3} className="input" value={note} onChange={(e) => setNote(e.target.value)}
+            placeholder={decision?.decision === 'rejected' ? 'What has to change before you approve? The person who raised the permit is mailed this.' : 'Add a comment…'} />
+        </Field>
         <div className="mt-4 flex justify-end gap-2">
           <button className="btn-ghost" onClick={() => setDecision(null)}>Cancel</button>
-          <button className={decision?.decision === 'approved' ? 'btn-primary' : 'btn-danger'} onClick={confirmDecision} disabled={busy}>
+          <button className={decision?.decision === 'approved' ? 'btn-primary' : 'btn-danger'} onClick={confirmDecision}
+            disabled={busy || (decision?.decision === 'rejected' && !note.trim())}>
             {busy ? <Spinner size={18} /> : decision?.decision === 'approved' ? 'Approve' : 'Reject'}
+          </button>
+        </div>
+      </Modal>
+
+      {/* Answer a rejection and send it back to the person who rejected it */}
+      <Modal open={!!answering} onClose={() => setAnswering(null)} title="Answer the rejection">
+        <p className="mb-2 text-sm text-ink-600">
+          {answering?.block?.byName || 'The approver'} rejected the{' '}
+          {answering?.stage === 'closure' ? 'closure' : 'opening'} of this permit
+          ({answering?.team === TEAMS.ENGINEERING ? 'Engineering' : 'Operations'}).
+        </p>
+        <p className="ring-1 ring-red-200 mb-3 rounded-xl bg-red-50 px-3 py-2 text-sm text-red-800">
+          {answering?.block?.note ? `“${answering.block.note}”` : 'No comment was given.'}
+        </p>
+        <Field label="Your answer *">
+          <textarea rows={4} className="input" maxLength={ANSWER_MAX} value={answerText}
+            onChange={(e) => setAnswerText(e.target.value)}
+            placeholder="What was done about it? This goes to them with the permit." />
+        </Field>
+        <p className="mt-2 text-xs text-ink-500">
+          It goes back to {answering?.block?.byName || 'them'} alone for re-approval, not to every approver.
+        </p>
+        <div className="mt-4 flex justify-end gap-2">
+          <button className="btn-ghost" onClick={() => setAnswering(null)}>Cancel</button>
+          <button className="btn-primary" onClick={sendAnswer} disabled={busy || !answerText.trim()}>
+            {busy ? <Spinner size={18} /> : 'Send back for re-approval'}
           </button>
         </div>
       </Modal>

@@ -281,6 +281,46 @@ describe('permits', () => {
     )
     expect(ev('permits', permit, { ...permit, typeOfWork: 'Hot work' })).toEqual([])
   })
+
+  // The owner's rule: a rejection goes to the raiser with its comment, and the
+  // answer goes back to the one person who rejected, not the department.
+  const rejection = { status: 'rejected', by: 'north', byName: 'North', at: 'T1', note: 'No gas test attached' }
+
+  it('a rejection: the raiser alone, with the comment, kept off the bell summary', () => {
+    const msgs = ev('permits', permit, { ...permit, engineering: rejection }, { actorUid: 'north' })
+    expect(to(msgs)).toEqual(['worker'])
+    expect(msgs[0].kind).toBe('permitRejection')
+    expect(msgs[0].text).toContain('Their comment: "No gas test attached"')
+    expect(msgs[0].summary).not.toContain('gas test')
+  })
+
+  it('a rejected closure is told the same way', () => {
+    const open = { ...permit, storedStatus: 'in_progress', closure: { requestedAt: 'T0', engineering: { status: 'pending' } } }
+    const msgs = ev('permits', open, { ...open, closure: { ...open.closure, engineering: rejection } }, { actorUid: 'north' })
+    expect(to(msgs)).toEqual(['worker'])
+    expect(msgs[0].text).toContain('closure (Engineering)')
+  })
+
+  it('the answer: the person who rejected alone, with the answer, and nobody else', () => {
+    const before = { ...permit, engineering: rejection }
+    const answered = {
+      status: 'pending',
+      reapprover: 'north',
+      reapproverName: 'North',
+      rejection: { by: 'north', note: 'No gas test attached', at: 'T1' },
+      response: { by: 'worker', byName: 'Worker', text: 'Certificate attached now', at: 'T2' },
+    }
+    const msgs = ev('permits', before, { ...permit, engineering: answered }, { actorUid: 'worker' })
+    expect(to(msgs)).toEqual(['north'])
+    expect(msgs[0].subject).toBe('Permit PTW-7 sent back for your re-approval')
+    expect(msgs[0].text).toContain('Their answer: "Certificate attached now"')
+    expect(msgs[0].summary).not.toContain('Certificate')
+  })
+
+  it('has its own switch', () => {
+    const org = { notifications: { permitRejection: false } }
+    expect(ev('permits', permit, { ...permit, engineering: rejection }, { org })).toEqual([])
+  })
 })
 
 describe('weather', () => {
