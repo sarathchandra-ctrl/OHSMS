@@ -1,5 +1,21 @@
 # LOTO permits
 
+> **Removed from the app on 2026-11-10, at the owner's request**, together with
+> the module's Learn page. There is no Permits tab, no way to raise, approve,
+> return or print a LOTO permit, and the five-minute due/overdue sweep is gone.
+> Trace now looks up a lock in the register, without permit history.
+>
+> Permit records already stored are not deleted. Until each one is purged,
+> it keeps the following:
+>
+> - its access rules (`stack/policy.mjs`);
+> - encryption of its personal fields (`src/shared/crypto/policy.js`);
+> - its place in a person's legal data export (`stack/lib/subjectData.js`);
+> - the nightly one-year purge described under *Retention* below.
+>
+> The rest of this page describes the feature as it was, and the rules those
+> records are still held to.
+
 A per-job permit on top of the isolation procedures in `src/modules/loto`. The
 procedure says *how* to isolate a machine and is approved once; the permit says
 *this crew isolates it, for this job, in this shift window*. Controlling
@@ -144,8 +160,8 @@ in the app.
 
 ## Due / overdue (PR C)
 
-`sweepLotoPermits` runs every 5 minutes on the **server** clock
-(`stack/schedule.mjs`) and writes
+*Removed with the permits on 2026-11-10.* `sweepLotoPermits` ran every 5 minutes on the **server** clock
+(`stack/schedule.mjs`) and wrote
 `flags` (`windowEnd`, `dueAt`, `overdueCount`, `overdueSince`, `lastOverdueAt`)
 onto **active** permits only. Flags are keyed to the window end they were
 computed for, so an extension restarts the count. A window is two absolute
@@ -179,8 +195,9 @@ whether this point is isolated now.
 Import (`/loto/import`) takes CSV for equipment, locks, group numbers and
 technicians, and offers a template for each. Examples in the templates are
 invented. Equipment rows become draft procedures, so they still need approval
-before a permit can use them. Group numbers still require an Admin. Learn
-(`/loto/learn`) is a short explanation and a four-question check.
+before they can be used. Group numbers still require an Admin. The Learn page
+(`/loto/learn`, a short explanation and a four-question check) was removed on
+2026-11-10.
 
 ## Dashboard
 

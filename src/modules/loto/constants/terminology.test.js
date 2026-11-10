@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest'
 import { ENERGY_SOURCES, GROUP_LOTO_BOX, LOTO_DEVICES } from './energySources'
 import { LOCK_STATUS, PROCEDURE_STATUS } from './procedures'
 import { ROLE_META, ROLES } from './roles'
-import { HECP_SHAPES, PERMIT_NOUN, TECHNICIAN_LABEL, TECHNICIAN_ROLE } from './terminology'
+import { HECP_SHAPES, TECHNICIAN_LABEL, TECHNICIAN_ROLE } from './terminology'
 
 const here = dirname(fileURLToPath(import.meta.url))
 
@@ -20,11 +20,10 @@ function sourceFiles(dir, out = []) {
 }
 
 describe('terminology shared with hecp-loto', () => {
-  it('calls the person a Technician and the job record a permit', () => {
+  it('calls the person a Technician', () => {
     expect(TECHNICIAN_LABEL).toBe('Technician')
     expect(TECHNICIAN_ROLE).toBe('technician')
     expect(ROLE_META[ROLES.TECHNICIAN].label).toBe('Technician')
-    expect(PERMIT_NOUN).toBe('permit')
   })
 
   it('keeps hecp-loto procedure statuses, lock states, prefixes and devices', () => {
@@ -52,7 +51,6 @@ describe('terminology shared with hecp-loto', () => {
     expect(LOTO_DEVICES.map((d) => d.key)).toEqual(HECP_SHAPES.deviceKeys)
     expect(GROUP_LOTO_BOX).toBe('group_loto_box')
     expect(HECP_SHAPES.lockTypes).toEqual(['personal', 'department'])
-    expect(HECP_SHAPES.permitPrefix).toBe('LP')
   })
 
   it('does not use the HYD8 role word MST anywhere in the module source', () => {

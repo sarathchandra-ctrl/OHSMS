@@ -21,7 +21,7 @@ import Spinner from '../../components/ui/Spinner'
 
 export default function Technicians() {
   const { profile } = useAuth()
-  // The register decides who may be named on an isolation permit, so the
+  // The register decides who may apply locks, so the
   // server leaves it to managers (stack/policy.mjs); everyone else reads it.
   const { isManager } = useAppAuth()
   const { technicians, loading } = useTechnicians()
@@ -84,7 +84,7 @@ export default function Technicians() {
         subtitle={
           isManager
             ? 'Maintain the list of technicians and their dedicated lock numbers.'
-            : 'Who may be named on an isolation permit. A manager maintains this list.'
+            : 'Who may apply LOTO locks, and their lock numbers. A manager maintains this list.'
         }
       />
 

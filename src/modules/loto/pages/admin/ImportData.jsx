@@ -42,7 +42,7 @@ export default function ImportData() {
     const blob = new Blob([templateCsv(kind)], { type: 'text/csv' })
     const a = document.createElement('a')
     a.href = URL.createObjectURL(blob)
-    a.download = `permit_${kind}_template.csv`
+    a.download = `loto_${kind}_template.csv`
     a.click()
     URL.revokeObjectURL(a.href)
   }

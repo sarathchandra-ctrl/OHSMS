@@ -14,7 +14,7 @@ import {
   NEEDS_LEGAL_SIGN_OFF,
 } from '../stack/lib/retentionPolicy.js'
 import { planWithdrawals, withdrawnFields } from '../stack/lib/permitMirror.js'
-import { planFlags, isPurgeable, MAX_PERMIT_PURGES_PER_RUN } from '../stack/lib/lotoPermitSweep.js'
+import { isPurgeable, MAX_PERMIT_PURGES_PER_RUN } from '../stack/lib/lotoPermitSweep.js'
 import { serveSiteWeather, WEATHER_FETCH_LIMIT, WEATHER_FETCH_WINDOW_S } from '../stack/lib/siteWeather.js'
 
 import { planExport, planScan, scanFeasibility, classifyErasure } from '../stack/lib/subjectData.js'
@@ -210,25 +210,6 @@ export async function withdrawStaleMirrors(engine, { now = Date.now() } = {}) {
     await engine.commit(WORKER, [{ type: 'update', path: 'permitQr', id: token, data: fields }])
   }
   return { withdrawn: plan.withdraw.length }
-}
-
-export async function sweepLoto(engine, { nowMs = Date.now() } = {}) {
-  const permits = await engine.list(WORKER, 'lotoPermits', {})
-  let flagged = 0
-  for (const permit of permits) {
-    const flags = planFlags(permit, nowMs)
-    if (!flags) continue
-    await engine.commit(WORKER, [
-      {
-        type: 'update',
-        path: 'lotoPermits',
-        id: permit.id,
-        data: { flags },
-      },
-    ])
-    flagged += 1
-  }
-  return { checked: permits.length, flagged }
 }
 
 // ── Site weather (fetchSiteWeather) ─────────────────────────────────────────

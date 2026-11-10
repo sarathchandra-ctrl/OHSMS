@@ -1,30 +1,14 @@
-// The two scheduled jobs behind LOTO permits.
+// The one scheduled job left behind LOTO isolation permits.
 //
-//   sweepLotoPermits         every few minutes: flag active permits that are due
-//                            or overdue against their window END, on the SERVER
-//                            clock. The flags are what notifyLotoPermitLifecycle
-//                            turns into mail, and what the app's badge defers to.
+// The permits were removed from the app at the owner's request (2026-11-10),
+// and with them the five-minute sweep that flagged active permits due or
+// overdue. Records already stored are still kept to their retention period:
+//
 //   purgeClosedLotoPermits   nightly: delete permits closed more than a year ago,
 //                            with their events, attachments and stored files.
 //
-// Planning is pure (planFlags, isPurgeable). The loops take their Firestore and
-// Storage handles as arguments so they are tested without either, the same split
-// retention.js uses.
-//
-// ── Why instants, not times of day ───────────────────────────────────────────
-// A shift window is two absolute instants. A 22:00–06:00 permit is stored as
-// 22:00 on one day and 06:00 on the next, so "overdue" is always
-// `now >= windowEnd`. Nothing here ever compares a clock reading, so midnight
-// cannot be a special case.
-
-/** "Due" begins this long before the window end. Mirrors DUE_SOON_MINUTES in the app. */
-export const DUE_SOON_MS = 30 * 60 * 1000
-
-/** An overdue permit is mailed again this often until somebody returns or extends it. */
-export const OVERDUE_REPEAT_MS = 30 * 60 * 1000
-
-/** From this notice on, the mail is worded as an escalation. */
-export const OVERDUE_ESCALATE_AT = 3
+// Planning is pure (isPurgeable). The loop takes its handles as arguments so it
+// is tested without them, the same split retention.js uses.
 
 /** Closed permits are kept this long after closure (owner decision: 1 year). */
 export const LOTO_PERMIT_RETENTION_DAYS = 365
@@ -43,63 +27,6 @@ function ms(value) {
   if (typeof value?.toMillis === 'function') return value.toMillis()
   if (typeof value?._seconds === 'number') return value._seconds * 1000
   return Number.NaN
-}
-
-const EMPTY = (windowEnd) => ({
-  windowEnd,
-  dueAt: null,
-  overdueSince: null,
-  overdueCount: 0,
-  lastOverdueAt: null,
-})
-
-/**
- * The flags this permit should carry at `nowMs`, or null when they are already
- * right (so a sweep that changes nothing writes nothing — every write would
- * wake the mail trigger).
- *
- * Only an ACTIVE permit has a clock: before it starts there is no equipment
- * locked to be late with, and after it closes nothing is outstanding. Flags are
- * keyed to the window end they were computed for, so an extension (a later end)
- * starts the count again from zero instead of inheriting the old deadline's
- * "overdue".
- */
-export function planFlags(permit, nowMs) {
-  if (!permit || permit.status !== 'active') return null
-  const end = ms(permit.windowEnd)
-  if (!Number.isFinite(end)) return null
-  const current = permit.flags || {}
-  const flags = current.windowEnd === end ? { ...EMPTY(end), ...current } : EMPTY(end)
-
-  if (nowMs >= end) {
-    const last = Number(flags.lastOverdueAt) || 0
-    if (!flags.overdueCount) {
-      flags.overdueCount = 1
-      flags.overdueSince = end
-      flags.lastOverdueAt = nowMs
-    } else if (nowMs - last >= OVERDUE_REPEAT_MS) {
-      flags.overdueCount += 1
-      flags.lastOverdueAt = nowMs
-    }
-    // It was also due: a sweep that first sees the permit already past its end
-    // (the job was down) still records that the due notice was owed.
-    if (!flags.dueAt) flags.dueAt = nowMs
-  } else if (nowMs >= end - DUE_SOON_MS && !flags.dueAt) {
-    flags.dueAt = nowMs
-  }
-
-  // A permit that has never been flagged and still has nothing to flag stays
-  // exactly as it is. Writing an empty flags map to every healthy permit on every
-  // run would wake the mail trigger for nothing.
-  if (!permit.flags && flags.dueAt == null && !flags.overdueCount) return null
-
-  const same =
-    current.windowEnd === flags.windowEnd &&
-    (current.dueAt ?? null) === flags.dueAt &&
-    (current.overdueSince ?? null) === flags.overdueSince &&
-    (current.overdueCount ?? 0) === flags.overdueCount &&
-    (current.lastOverdueAt ?? null) === flags.lastOverdueAt
-  return same ? null : flags
 }
 
 /** Closed for more than the retention period, and never an open permit. */
