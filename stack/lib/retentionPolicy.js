@@ -139,6 +139,17 @@ export const RECORD_CLASSES = [
     counselMustSign: 'Whether resolved assignments may be deleted, and after how long.',
   },
   {
+    path: 'inbox',
+    class: ERASABLE,
+    proposedPeriod: NEEDS_LEGAL_SIGN_OFF,
+    proposedPeriodNote:
+      'In-app notifications: a title, one line and a link, derived from records kept elsewhere. ' +
+      'The person dismisses their own; nothing removes them by age today. 60 days is the engineering proposal.',
+    livePurge: false,
+    recycleBin: false,
+    counselMustSign: 'Whether notifications may be cleared automatically, and after how long.',
+  },
+  {
     path: 'trainingRequests',
     class: ERASABLE,
     proposedPeriod: NEEDS_LEGAL_SIGN_OFF,

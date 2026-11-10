@@ -238,9 +238,9 @@ export function createOwnStackHandler({
       try {
         const { changes, ...result } = await engine.commit(roleSession, body.ops || [], body.expect || [])
         send(res, 200, result)
-        // After the response: a save never waits on a mailbox, and a mail
-        // that fails never fails the save.
-        if (mail && changes?.length) {
+        // After the response: a save never waits on the bell or a mailbox,
+        // and neither failing fails the save. The bell fills without mail.
+        if (changes?.length) {
           background(notifyChanges(engine, { changes, actorUid: roleSession.uid, mail, origin }))
         }
       } catch (err) {

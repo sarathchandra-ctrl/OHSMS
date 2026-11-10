@@ -25,6 +25,8 @@ import Sam from '../sam/Sam'
 import HomeBar from './HomeBar'
 import FieldNav from './FieldNav'
 import { AlertProvider } from '../mobile/useAlertFeed'
+import { InboxProvider } from '../notifications/InboxProvider'
+import NotificationBell from '../notifications/NotificationBell'
 import { OrgMark, hasOrgLogo } from '../branding/OrgMark'
 import IdleGuard from '../auth/IdleGuard'
 import { shellForMode } from '../mobile/viewMode'
@@ -116,6 +118,7 @@ function AppChromeInner({ children }) {
 
   return (
     <AlertProvider enabled={alertsOn}>
+      <InboxProvider>
       <div className="min-h-screen bg-canvas" data-view-mode={mode}>
         {/* Skip link. The header carries the wordmark, the module switcher, the
           notification bell and the account menu, and it is sticky — so on every
@@ -167,6 +170,8 @@ function AppChromeInner({ children }) {
               {orgName || 'Your organization'}
             </span>
           </div>
+
+          <NotificationBell />
 
           <div className="relative min-w-0 max-w-[48%] sm:max-w-none" ref={menuRef}>
             <button
@@ -272,6 +277,7 @@ function AppChromeInner({ children }) {
 
         <IdleGuard signOut={signOut} />
       </div>
+      </InboxProvider>
     </AlertProvider>
   )
 }

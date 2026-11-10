@@ -39,7 +39,10 @@ export default function NotificationSettings({ org, actor }) {
     try {
       const r = await sendDigestsNow()
       if (r?.skipped === 'off') toast('The daily summary is switched off')
-      else toast.success(`Sent ${r?.sent || 0}; ${r?.already || 0} already had today’s; ${r?.nothing || 0} had nothing due`)
+      else
+        toast.success(
+          `Sent ${r?.sent || 0}; ${r?.already || 0} already had today’s; ${r?.nothing || 0} had nothing due`
+        )
     } catch (err) {
       toastCaught(err, 'Could not send')
     } finally {
@@ -53,20 +56,22 @@ export default function NotificationSettings({ org, actor }) {
         <Bell size={17} className="text-brand-600" /> Notifications
       </h3>
       <p className="mb-4 mt-1 text-sm text-ink-500">
-        Email sent when something needs a person’s attention. Every notification is on until you
-        switch it off. A mail carries a reference, a site, a date and a link — never an incident
-        narrative, an action’s text or anything medical.
+        What people are told when something needs them: in the bell at the top of every page, and by
+        email. Every notification is on until you switch it off. Each carries a reference, a site, a
+        date and a link — never an incident narrative, an action’s text or anything medical.
       </p>
       {!mailOn && (
         <p className="mb-4 rounded-xl bg-amber-50 px-3 py-2 text-sm text-amber-800">
-          Outgoing mail is not configured on this server, so nothing is sent yet. These choices are
-          kept and apply once it is.
+          Outgoing mail is not configured on this server, so notifications appear in the bell only.
+          These choices apply to email too once it is.
         </p>
       )}
       <div className="space-y-4">
         {modules.map((m) => (
           <fieldset key={m}>
-            <legend className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-500">{m}</legend>
+            <legend className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-500">
+              {m}
+            </legend>
             <div className="space-y-2">
               {NOTIFY_KINDS.filter((k) => k.module === m).map((k) => (
                 <label
@@ -94,7 +99,12 @@ export default function NotificationSettings({ org, actor }) {
         ))}
       </div>
       {mailOn && on.digest && (
-        <button type="button" className="btn-soft mt-4" disabled={busy === 'send'} onClick={sendNow}>
+        <button
+          type="button"
+          className="btn-soft mt-4"
+          disabled={busy === 'send'}
+          onClick={sendNow}
+        >
           Send today’s summaries now
         </button>
       )}

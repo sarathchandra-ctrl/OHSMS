@@ -42,6 +42,14 @@ const isCryptoKey = (path, id) =>
   collectionOf(path) === 'cryptoKeys' || (collectionOf(path) === 'meta' && id === 'cryptoKeys')
 const PUBLIC_MIRRORS = ['qr', 'permitQr', 'procedureQr']
 
+// Each person's in-app notifications: inbox/<uid>/items. The owner is in the
+// path, so whose inbox a read or write touches is known before any row is
+// read, and a list needs no filter. Only the server writes one (stack/
+// notify.mjs); its owner may mark it read or dismiss it, and nothing else.
+const INBOX = /^inbox\/([^/]+)\/items$/
+export const inboxOwner = (path) => INBOX.exec(String(path))?.[1] || ''
+const ownInbox = (path, ctx) => Boolean(ctx.uid) && inboxOwner(path) === ctx.uid
+
 // ── Fields the server writes, whatever the client sent ──────────────────────
 
 // Keys, not prose: an action, module or target reads as a label in the Audit
@@ -180,7 +188,7 @@ export function moduleBlocked(path, ctx) {
 const SITE_EXEMPT = [
   'users', 'sites', 'organization', 'auditLogs', 'meta', 'docSeq', 'qr', 'permitQr',
   'procedureQr', 'lotoSettings', 'moduleEntitlements', 'alertReads', 'weatherCache',
-  'integrations',
+  'integrations', 'inbox',
 ]
 
 /** The site ids this profile reaches, or null for every site. */
@@ -255,6 +263,8 @@ export function queryProblem(path, opts, ctx) {
  */
 export function readScope(path, ctx) {
   if (ctx.worker) return 'all'
+  // Someone else's notifications say what was asked of them; not yours to read.
+  if (rootOf(path) === 'inbox') return ownInbox(path, ctx) && passwordOk(ctx) ? 'all' : 'none'
   if (serverOnly(path)) return 'none'
   if (isMedical(path) && !isManager(ctx)) return 'none'
   if (moduleBlocked(path, ctx)) return ctx.uid ? { ownedBy: ctx.uid } : 'none'
@@ -446,6 +456,16 @@ export function employeeMayEdit(path, id, prev, next, ctx) {
 
 function restrictWrite(op, path, id, ctx, { next, prev } = {}) {
   if (!passwordOk(ctx) && !ownUser(ctx, path, id)) return 'password'
+  // A notification is the server's statement of what was asked of someone.
+  // Written by a client, it could put "approve PTW-12 now" in a manager's
+  // bell under any link. The owner marks one read or dismisses it; an
+  // auditor is a person with an inbox too, so this is decided here, whole.
+  if (rootOf(path) === 'inbox') {
+    if (!ownInbox(path, ctx)) return 'inbox'
+    if (op === 'insert') return 'inbox-server-only'
+    if (op === 'update' && changedKeys(prev, next).some((k) => k !== 'readAt')) return 'inbox-read-only'
+    return ''
+  }
   if (serverOnly(path)) return 'server-only'
   if (isCryptoKey(path, id)) return 'crypto-keys'
   if (op === 'insert' && isAuditor(ctx) && collectionOf(path) !== 'auditLogs') return 'auditor'
@@ -647,6 +667,8 @@ export function updateAllowed(path, id, prev, next, ctx) {
   if (!canRead(path, id, ctx, prev)) return 'not-visible'
   const restricted = restrictWrite('update', path, id, ctx, { next, prev })
   if (restricted) return restricted
+  // update_inbox: marking your own read (what may change: restrictWrite)
+  if (ownInbox(path, ctx)) return ''
   // update_writer
   if (isWriter(ctx) && !specialPath(path)) return ''
   // update_organization, update_entitlement
@@ -664,6 +686,8 @@ export function deleteAllowed(path, id, prev, ctx) {
   if (!canRead(path, id, ctx, prev)) return 'not-visible'
   const restricted = restrictWrite('delete', path, id, ctx, { prev })
   if (restricted) return restricted
+  // delete_inbox: dismissing your own
+  if (ownInbox(path, ctx)) return ''
   // delete_member: broad on purpose; the auditor is removed by restrictWrite.
   if (isApproved(ctx) && !specialPath(path)) return ''
   // delete_user

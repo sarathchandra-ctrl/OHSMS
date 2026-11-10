@@ -98,8 +98,10 @@ pages; and at 08:00 IST each person's daily summary email, when mail is set
 up. They deploy with the Worker. A run that hit a problem shows as a failed
 invocation under the Worker's logs.
 
-**Notifications.** With mail set up, a save that needs someone's attention
-mails them right after it is answered (`stack/notify.mjs`, rules in
+**Notifications.** A save that needs someone's attention puts an item in
+their bell (top of every page; all of them at `/notifications`, each opening
+the record it is about) and, with mail set up, mails them, right after it is
+answered (`stack/notify.mjs`, rules in
 `stack/lib/notify.js`): a new incident to the site's managers and the
 organization's notification email, a corrective action to its owner, a new
 permit to its approvers, audit findings between auditee and auditor, and

@@ -95,13 +95,16 @@ export function day(value) {
   return `${Number(m[3])} ${months[Number(m[2]) - 1]} ${m[1]}`
 }
 
-function message(to, kind, subject, lines, origin, path) {
+// `uid` and `path` are for the in-app bell (stack/notify.mjs writes one
+// inbox item per message with a uid); `to` and `text` are for the mailbox.
+// The notification email has no uid: it is mailed and never belled.
+function message(to, kind, subject, lines, origin, path, uid = '') {
   const link = path ? `${str(origin).replace(/\/$/, '')}${path}` : ''
   const text = [...lines, '', link ? `Open it: ${link}` : '', '', 'You are getting this from your safety management system.']
     .filter((l, i, all) => !(l === '' && all[i - 1] === ''))
     .join('\n')
     .trim()
-  return { to: str(to).trim(), kind, subject, text }
+  return { to: str(to).trim(), uid, kind, subject, summary: str(lines[0]), path: path || '', text }
 }
 
 /** Everyone except the person who made the change, once each. */
@@ -128,7 +131,7 @@ export function eventMessages(changes = [], { users = [], sites = [], org = {}, 
   const people = byId(users)
   const out = []
   const to = (u, kind, subject, lines, path) => {
-    if (reachable(u) && u.id !== actorUid) out.push(message(u.email, kind, subject, lines, origin, path))
+    if (reachable(u) && u.id !== actorUid) out.push(message(u.email, kind, subject, lines, origin, path, u.id))
   }
 
   for (const { path, id, before, after } of changes) {
@@ -184,13 +187,13 @@ export function eventMessages(changes = [], { users = [], sites = [], org = {}, 
       const auditee = people.get(after.auditeeUid)
       const auditor = people.get(after.createdByUid)
       if (!before && after.auditeeUid) {
-        to(auditee, 'audit', `Audit findings for you to answer · ${ref}`, [`${ref} has findings for you to answer in the Auditee Workplace.`], '/audit')
+        to(auditee, 'audit', `Audit findings for you to answer · ${ref}`, [`${ref} has findings for you to answer in the Auditee Workplace.`], '/audit?view=auditee')
       } else if (from === 'Reported' && now === 'Submitted for Verification') {
-        to(auditor, 'audit', `Audit response submitted for verification · ${ref}`, [`The auditee answered ${ref}. It is waiting for your verification.`], '/audit')
+        to(auditor, 'audit', `Audit response submitted for verification · ${ref}`, [`The auditee answered ${ref}. It is waiting for your verification.`], '/audit?view=auditor')
       } else if (from === 'Submitted for Verification' && now === 'Reported') {
-        to(auditee, 'audit', `Audit response returned · ${ref}`, [`The auditor returned your answer to ${ref} with a note. Open it in the Auditee Workplace.`], '/audit')
+        to(auditee, 'audit', `Audit response returned · ${ref}`, [`The auditor returned your answer to ${ref} with a note. Open it in the Auditee Workplace.`], '/audit?view=auditee')
       } else if (from === 'Submitted for Verification' && now === 'Closed') {
-        to(auditee, 'audit', `Audit verified and closed · ${ref}`, [`The auditor verified and closed ${ref}.`], '/audit')
+        to(auditee, 'audit', `Audit verified and closed · ${ref}`, [`The auditor verified and closed ${ref}.`], '/audit?view=auditee')
       }
       continue
     }
@@ -311,5 +314,5 @@ export function digestFor(user, data = {}, { today = iso(Date.now()), origin = '
   const count = sections.reduce((n, s) => n + s.length - 1, 0)
   const lines = [`Good morning${user.name ? `, ${str(user.name).split(' ')[0]}` : ''}. Here is what needs your attention.`, '']
   for (const s of sections) lines.push(...s, '')
-  return message(user.email, 'digest', `Your safety summary: ${count === 1 ? '1 item needs' : `${count} items need`} attention`, lines, origin, '/portal')
+  return message(user.email, 'digest', `Your safety summary: ${count === 1 ? '1 item needs' : `${count} items need`} attention`, lines, origin, '/portal', user.id)
 }

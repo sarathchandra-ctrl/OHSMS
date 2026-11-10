@@ -329,6 +329,12 @@ export async function exportSubject(engine, { uid, subjectUid, personId, encrypt
   const read = new Map()
   for (const q of planExport({ uid: who, personId: person })) {
     try {
+      if (q.kind === 'pathUid') {
+        // inbox/items -> inbox/<uid>/items: the uid is the path segment.
+        const [root, sub] = q.path.split('/')
+        records[q.path] = await engine.list(WORKER, `${root}/${q.value}/${sub}`, {})
+        continue
+      }
       if (q.kind === 'docId') {
         const row = await engine.get(WORKER, q.path, q.value)
         records[q.path] = row ? [row] : []

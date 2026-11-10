@@ -92,6 +92,14 @@ export const SUBJECT_SOURCES = [
     retention: ANONYMISE,
     why: 'The account record. Removing it outright orphans every authored record that names the uid.',
   },
+  // Their in-app notifications: inbox/{uid}/items. Keyed by the uid in the
+  // path, so the whole collection is theirs (kind 'pathUid').
+  {
+    path: 'inbox/items',
+    joins: [{ kind: 'pathUid', key: 'uid' }],
+    retention: ERASABLE,
+    why: 'Reminders addressed to the person; the records they point at are kept on their own terms.',
+  },
 
   // ── Incidents ──────────────────────────────────────────────────────────────
   {

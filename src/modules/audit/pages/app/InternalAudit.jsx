@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { FileSearch } from 'lucide-react'
 import { PageHeader } from '../../../../shared/ui'
 import toast from 'react-hot-toast'
@@ -1222,7 +1223,14 @@ function PrintPlan({ plan, rows, siteName }) {
 export default function InternalAudit() {
   const { profile, isAdmin } = useAuth()
   const { sites: rawSites, users: rawUsers, locations, siteInventory } = useOrgData()
-  const [view, setView] = useState('hub')
+  // A notification links straight to a workplace (/audit?view=auditee);
+  // the hub otherwise opens on its tiles.
+  const [params] = useSearchParams()
+  const linked = ['auditor', 'auditee', 'scheduler'].includes(params.get('view')) ? params.get('view') : ''
+  const [view, setView] = useState(linked || 'hub')
+  useEffect(() => {
+    if (linked) setView(linked)
+  }, [linked])
   const [plans, setPlans] = useState([])
   const [findings, setFindings] = useState([])
 

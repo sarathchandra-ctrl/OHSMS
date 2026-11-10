@@ -1,6 +1,7 @@
-// Sends the mail stack/lib/notify.js decides on. That file holds the rules
-// (who, what, and what is never in a mail); this one loads what they read and
-// hands each message to the mailer.
+// Delivers what stack/lib/notify.js decides on: an item in each person's
+// in-app inbox (the bell, inbox/<uid>/items) and, when a mailer is
+// configured, an email. That file holds the rules (who, what, and what is
+// never sent); this one loads what they read and delivers.
 //
 // Two entry points:
 //   notifyChanges  after a commit, in the background, so the save that caused
@@ -48,16 +49,40 @@ async function deliver(mail, messages, limit) {
   return { sent, failed, dropped: Math.max(0, messages.length - limit) }
 }
 
-/** The mail one commit's changes call for, sent. Never throws. */
-export async function notifyChanges(engine, { changes = [], actorUid = '', mail, origin = '' }) {
-  if (!mail || !changes.some((c) => EVENT_PATHS.has(c.path))) return { sent: 0, failed: 0, dropped: 0 }
+// An inbox item is the message without the mail's body: a title, one line,
+// the in-app link. Same rules, so the bell never says more than the mail.
+const inboxOps = (messages, now) =>
+  messages
+    .filter((m) => m.uid)
+    .map((m) => ({
+      type: 'set',
+      path: `inbox/${m.uid}/items`,
+      id: crypto.randomUUID(),
+      merge: false,
+      data: {
+        kind: m.kind,
+        title: m.subject,
+        summary: m.summary,
+        link: m.path,
+        createdAt: new Date(now).toISOString(),
+        readAt: null,
+      },
+    }))
+
+/** The bell items and mail one commit's changes call for. Never throws. */
+export async function notifyChanges(engine, { changes = [], actorUid = '', mail = null, origin = '', now = Date.now() }) {
+  const none = { belled: 0, sent: 0, failed: 0, dropped: 0 }
+  if (!changes.some((c) => EVENT_PATHS.has(c.path))) return none
   try {
     const { users, sites, org } = await directory(engine)
     const messages = eventMessages(changes, { users, sites, org, origin, actorUid })
-    return await deliver(mail, messages, MAX_EVENT_MAILS)
+    const ops = inboxOps(messages, now).slice(0, MAX_EVENT_MAILS)
+    if (ops.length) await engine.commit(WORKER, ops)
+    const mailed = mail ? await deliver(mail, messages, MAX_EVENT_MAILS) : { sent: 0, failed: 0, dropped: 0 }
+    return { belled: ops.length, ...mailed }
   } catch (err) {
-    console.error('notification mail failed', err?.message || err)
-    return { sent: 0, failed: 0, dropped: 0, error: err?.message || String(err) }
+    console.error('notification failed', err?.message || err)
+    return { ...none, error: err?.message || String(err) }
   }
 }
 

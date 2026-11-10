@@ -244,7 +244,7 @@ describe('sending', () => {
       after: { employeeUid: 'south', status: 'assigned', courseName: 'x' },
     }))
     const out = await notifyChanges(engine, { changes: many, actorUid: 'admin', mail, origin })
-    expect(out).toEqual({ sent: MAX_EVENT_MAILS, failed: 0, dropped: 5 })
+    expect(out).toEqual({ belled: MAX_EVENT_MAILS, sent: MAX_EVENT_MAILS, failed: 0, dropped: 5 })
     expect(outbox).toHaveLength(MAX_EVENT_MAILS)
   })
 
@@ -290,5 +290,28 @@ describe('the personal opt-out', () => {
     expect((await engine.get(null, 'users', 'worker')).digestOptOut).toBe(true)
     await expect(optOut('worker', 'south')).rejects.toMatchObject({ code: 'permission-denied' })
     expect((await engine.get(null, 'users', 'south')).digestOptOut).toBeUndefined()
+  })
+})
+
+describe('the bell', () => {
+  it('fills without mail, with the title, one line and the in-app link', async () => {
+    const { engine } = await setup()
+    const out = await notifyChanges(engine, {
+      changes: [{ path: 'auditFindings', id: 'f', before: null, after: { docId: 'AUD-4', auditeeUid: 'worker', createdByUid: 'north', status: 'Reported' } }],
+      actorUid: 'north',
+      now: Date.parse('2026-11-10T09:00:00Z'),
+    })
+    expect(out).toMatchObject({ belled: 1, sent: 0 })
+    const items = await engine.list(null, 'inbox/worker/items', {})
+    expect(items).toHaveLength(1)
+    expect(items[0]).toMatchObject({
+      kind: 'audit',
+      title: 'Audit findings for you to answer · AUD-4',
+      link: '/audit?view=auditee',
+      createdAt: '2026-11-10T09:00:00.000Z',
+      readAt: null,
+    })
+    // The notification email is mailed, never belled: it has no inbox.
+    expect(await engine.list(null, 'inbox/north/items', {})).toEqual([])
   })
 })

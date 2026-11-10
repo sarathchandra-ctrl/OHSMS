@@ -1335,3 +1335,69 @@ describe('an audit finding moves through its lifecycle only by the right hands',
     await as('managerA').update('auditFindings', 'afl3', { status: 'Closed' })
   })
 })
+
+describe('in-app notifications (inbox/<uid>/items)', () => {
+  const mine = 'inbox/memberA/items'
+  const theirs = 'inbox/managerA/items'
+  const item = { kind: 'action', title: 'Corrective action assigned to you', link: '/incidents/i1', readAt: null }
+
+  it('shows a person their own and nobody else’s, admin included', async () => {
+    await seed(mine, 'n1', item)
+    await seed(theirs, 'n2', item)
+    expect(await as('memberA').get(mine, 'n1')).toMatchObject({ kind: 'action' })
+    expect(await as('memberA').list(mine)).toHaveLength(1)
+    for (const uid of ['memberA', 'adminA', 'auditorA', '']) {
+      expect(await as(uid).get(theirs, 'n2'), uid).toBeNull()
+      expect(await as(uid).list(theirs), uid).toEqual([])
+    }
+    // A temporary password reaches nothing but the profile, the bell included.
+    await seed('inbox/flaggedA/items', 'n3', item)
+    expect(await as('flaggedA').list('inbox/flaggedA/items')).toEqual([])
+  })
+
+  it('takes no item from a client, in anyone’s inbox, their own and an admin’s included', async () => {
+    const forged = { ...item, title: 'Approve PTW-12 now', link: '/permits/p1' }
+    for (const [uid, path] of [
+      ['memberA', theirs],
+      ['memberA', mine],
+      ['adminA', theirs],
+      ['adminA', 'inbox/adminA/items'],
+    ]) {
+      await expect(as(uid).set(path, `forged-${uid}`, forged), `${uid} ${path}`).rejects.toMatchObject({
+        code: 'permission-denied',
+      })
+    }
+  })
+
+  it('lets the owner mark one read, and change nothing else', async () => {
+    await seed(mine, 'n4', item)
+    await as('memberA').update(mine, 'n4', { readAt: '2026-11-10T09:00:00Z' })
+    expect((await adminEngine.get(null, mine, 'n4')).readAt).toBe('2026-11-10T09:00:00Z')
+    await expect(as('memberA').update(mine, 'n4', { link: 'https://evil.example/' })).rejects.toMatchObject({
+      code: 'permission-denied',
+    })
+    await expect(as('memberA').update(mine, 'n4', { title: 'rewritten', readAt: null })).rejects.toMatchObject({
+      code: 'permission-denied',
+    })
+    // Someone else's item is not there to them at all: refused as missing.
+    await expect(as('adminA').update(mine, 'n4', { readAt: null })).rejects.toThrow()
+    expect((await adminEngine.get(null, mine, 'n4')).readAt).toBe('2026-11-10T09:00:00Z')
+  })
+
+  it('lets an auditor, who writes nothing else, read and dismiss their own', async () => {
+    const path = 'inbox/auditorA/items'
+    await seed(path, 'n5', item)
+    await as('auditorA').update(path, 'n5', { readAt: '2026-11-10T09:00:00Z' })
+    await as('auditorA').remove(path, 'n5')
+    expect(await adminEngine.get(null, path, 'n5')).toBeNull()
+  })
+
+  it('lets the owner dismiss their own, and no one else', async () => {
+    await seed(mine, 'n6', item)
+    await as('managerA').remove(mine, 'n6').catch(() => {})
+    await as('adminA').remove(mine, 'n6').catch(() => {})
+    expect(await adminEngine.get(null, mine, 'n6')).not.toBeNull()
+    await as('memberA').remove(mine, 'n6')
+    expect(await adminEngine.get(null, mine, 'n6')).toBeNull()
+  })
+})

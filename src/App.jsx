@@ -26,6 +26,7 @@ const Security = lazy(() => import('./pages/auth/Security'))
 const Users = lazy(() => import('./pages/admin/Users'))
 const Sites = lazy(() => import('./pages/admin/Sites'))
 const OrgSettings = lazy(() => import('./pages/admin/OrgSettings'))
+const Notifications = lazy(() => import('./pages/Notifications'))
 const AuditLog = lazy(() => import('./pages/admin/AuditLog'))
 const Maintenance = lazy(() => import('./pages/admin/Maintenance'))
 
@@ -178,6 +179,7 @@ export default function App() {
       <Route path="/field/*" element={<Protected><Field /></Protected>} />
       <Route path="/dashboard" element={<Protected><Dashboard /></Protected>} />
       <Route path="/security" element={<Protected><Security /></Protected>} />
+      <Route path="/notifications" element={<Protected><Notifications /></Protected>} />
       <Route path="/incidents/*" element={<Protected moduleKey="incidents"><Incidents /></Protected>} />
       <Route path="/hira/*" element={<Protected moduleKey="hira"><Hira /></Protected>} />
       <Route path="/inspections/*" element={<Protected moduleKey="inspections"><Inspections /></Protected>} />
