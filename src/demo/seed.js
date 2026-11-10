@@ -4,6 +4,7 @@
 import { doc, setDoc, serverTimestamp } from '../shared/data/client.js'
 import { db } from '../shared/db'
 import { DEMO_ACCOUNTS } from './demoMode'
+import { seedModules } from './seedModules'
 
 const day = (offset) => {
   const d = new Date()
@@ -12,17 +13,57 @@ const day = (offset) => {
 }
 
 const SITES = [
-  { id: 'site-harbour', name: 'Harbour Depot', region: 'North', entity: 'Alpha Logistics', lat: 19.08, lng: 72.88 },
-  { id: 'site-ridge', name: 'Ridge Plant', region: 'North', entity: 'Beta Foods', lat: 19.2, lng: 72.97 },
-  { id: 'site-valley', name: 'Valley Works', region: 'South', entity: 'Alpha Logistics', lat: 12.97, lng: 77.59 },
-  { id: 'site-coastal', name: 'Coastal Yard', region: 'South', entity: 'Beta Foods', lat: 13.08, lng: 80.27 },
-  { id: 'site-summit', name: 'Summit Office', region: 'East', entity: 'Gamma Services', lat: 22.57, lng: 88.36 },
+  {
+    id: 'site-harbour',
+    name: 'Harbour Depot',
+    region: 'North',
+    entity: 'Alpha Logistics',
+    lat: 19.08,
+    lng: 72.88,
+  },
+  {
+    id: 'site-ridge',
+    name: 'Ridge Plant',
+    region: 'North',
+    entity: 'Beta Foods',
+    lat: 19.2,
+    lng: 72.97,
+  },
+  {
+    id: 'site-valley',
+    name: 'Valley Works',
+    region: 'South',
+    entity: 'Alpha Logistics',
+    lat: 12.97,
+    lng: 77.59,
+  },
+  {
+    id: 'site-coastal',
+    name: 'Coastal Yard',
+    region: 'South',
+    entity: 'Beta Foods',
+    lat: 13.08,
+    lng: 80.27,
+  },
+  {
+    id: 'site-summit',
+    name: 'Summit Office',
+    region: 'East',
+    entity: 'Gamma Services',
+    lat: 22.57,
+    lng: 88.36,
+  },
 ]
 
 const ACCESS = {
   'demo-admin': { sites: [], regions: [], entities: [] },
   'demo-manager': { sites: [], regions: ['North'], entities: [] },
-  'demo-employee': { sites: ['site-harbour', 'site-valley'], regions: [], entities: [], modules: ['incidents', 'hira', 'equipment', 'training', 'actions'] },
+  'demo-employee': {
+    sites: ['site-harbour', 'site-valley'],
+    regions: [],
+    entities: [],
+    modules: ['incidents', 'hira', 'equipment', 'training', 'actions'],
+  },
 }
 
 export async function seedDemo() {
@@ -45,11 +86,43 @@ export async function seedDemo() {
   for (const { id, ...s } of SITES) await put('sites', id, { ...s, address: '' })
 
   const incidents = [
-    ['inc-1', 'site-harbour', 'near_miss', 'medium', 'Forklift reversed close to a pedestrian walkway', -3, 'investigation'],
+    [
+      'inc-1',
+      'site-harbour',
+      'near_miss',
+      'medium',
+      'Forklift reversed close to a pedestrian walkway',
+      -3,
+      'investigation',
+    ],
     ['inc-2', 'site-ridge', 'first_aid', 'low', 'Minor cut while opening a carton', -9, 'capa'],
-    ['inc-3', 'site-valley', 'property_damage', 'high', 'Racking upright struck by a pallet truck', -15, 'closed'],
-    ['inc-4', 'site-summit', 'near_miss', 'low', 'Loose cable across an office corridor', -1, 'reporting'],
-    ['inc-5', 'site-coastal', 'lost_time', 'high', 'Slip on a wet loading bay surface', -21, 'capa'],
+    [
+      'inc-3',
+      'site-valley',
+      'property_damage',
+      'high',
+      'Racking upright struck by a pallet truck',
+      -15,
+      'closed',
+    ],
+    [
+      'inc-4',
+      'site-summit',
+      'near_miss',
+      'low',
+      'Loose cable across an office corridor',
+      -1,
+      'reporting',
+    ],
+    [
+      'inc-5',
+      'site-coastal',
+      'lost_time',
+      'high',
+      'Slip on a wet loading bay surface',
+      -21,
+      'capa',
+    ],
   ]
   let n = 1
   for (const [id, siteId, type, severity, narrative, ago, lifecycle] of incidents) {
@@ -88,7 +161,11 @@ export async function seedDemo() {
 
   let e = 1
   for (const s of SITES) {
-    for (const status of ['active', 'active', s.id === 'site-ridge' ? 'to_be_refilled' : 'active']) {
+    for (const status of [
+      'active',
+      'active',
+      s.id === 'site-ridge' ? 'to_be_refilled' : 'active',
+    ]) {
       await put('extinguishers', `ext-${e}`, {
         serialNo: `EXT-${1000 + e}`,
         type: e % 2 ? 'CO2' : 'ABC Powder',
@@ -107,22 +184,32 @@ export async function seedDemo() {
     }
   }
 
-  await put('trainingCourses', 'course-fire', { name: 'Fire safety basics', validityMonths: 12 })
-  await put('trainingCourses', 'course-forklift', { name: 'Forklift awareness', validityMonths: 24 })
-  await put('trainingAssignments', 'ta-1', {
-    courseId: 'course-fire',
-    courseName: 'Fire safety basics',
+  // Courses themselves are written by seedModules, in createCourse's full shape.
+  const assignment = (courseId, courseName, category, dueDate) => ({
+    courseId,
+    courseName,
+    category,
     employeeUid: 'demo-employee',
     employeeName: 'Eli Employee',
+    dueDate,
     status: 'assigned',
-    dueDate: day(5),
+    batchId: 'asn-demo',
+    groupMode: 'people',
+    groupLabel: 'Individual selection',
+    assignedBy: 'demo-manager',
+    assignedByName: 'Morgan Manager',
+    createdAt: serverTimestamp(),
   })
-  await put('trainingAssignments', 'ta-2', {
-    courseId: 'course-forklift',
-    courseName: 'Forklift awareness',
-    employeeUid: 'demo-employee',
-    employeeName: 'Eli Employee',
-    status: 'assigned',
-    dueDate: day(-2),
-  })
+  await put(
+    'trainingAssignments',
+    'ta-1',
+    assignment('course-fire', 'Fire safety basics', 'Fire Safety', day(5))
+  )
+  await put(
+    'trainingAssignments',
+    'ta-2',
+    assignment('course-forklift', 'Forklift awareness', 'Induction', day(-2))
+  )
+
+  await seedModules(put, { day, sites: SITES })
 }
