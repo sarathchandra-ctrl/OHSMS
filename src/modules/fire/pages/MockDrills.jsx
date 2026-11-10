@@ -285,7 +285,7 @@ export default function MockDrills() {
 
       <IncompleteNotice incomplete={incomplete} className="mb-4" />
       {/* Scenario picker */}
-      <div className="mb-8">
+      <div data-write className="mb-8">
         <p className="mb-3 text-sm font-bold uppercase tracking-wide text-ink-500">Initiate a scenario</p>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
           {SCENARIOS.map((s) => (

@@ -105,7 +105,7 @@ export default function Incidents() {
         <button type="button" className="btn-ghost" onClick={doExport}>
           <Download size={16} /> Export
         </button>
-        <Link to="/incidents/new" className="btn-primary"><Plus size={16} /> Report Incident</Link>
+        <Link data-write to="/incidents/new" className="btn-primary"><Plus size={16} /> Report Incident</Link>
       </PageHeader>
 
       {capped && (
@@ -177,7 +177,7 @@ export default function Incidents() {
       )}
 
       {filtered.length === 0 ? (
-        <EmptyState icon={ClipboardList} title="No incidents found" hint={incidents.length ? 'Try clearing filters.' : 'Report your first incident to get started.'} action={<Link to="/incidents/new" className="btn-primary"><Plus size={16} /> Report Incident</Link>} />
+        <EmptyState icon={ClipboardList} title="No incidents found" hint={incidents.length ? 'Try clearing filters.' : 'Report your first incident to get started.'} action={<Link data-write to="/incidents/new" className="btn-primary"><Plus size={16} /> Report Incident</Link>} />
       ) : (
         <div className="space-y-2">
           {filtered.map((inc, i) => {

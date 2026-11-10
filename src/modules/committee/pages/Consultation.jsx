@@ -631,7 +631,7 @@ export default function Consultation() {
                                 }} className="bg-surface-100 hover:bg-surface-200 text-ink-900 px-4 py-2.5 rounded-xl font-bold text-xs shadow flex items-center gap-2 transition-colors border border-surface-300"><FileSpreadsheet size={14} className="text-emerald-600" /> Export</button>
                                 <button type="button" onClick={() => setView('calendar')} className="bg-surface-100 hover:bg-surface-200 text-ink-900 px-4 py-2.5 rounded-xl font-bold text-xs shadow flex items-center gap-2 transition-colors border border-surface-300"><Calendar size={14} className="text-brand-600" /> Calendar</button>
                                 {canEditForm && (
-                                    <button type="button" onClick={openNewMeeting} className="bg-green-600 hover:brightness-110 text-white px-4 py-2.5 rounded-xl font-bold text-xs shadow-glow flex items-center gap-2 transition-colors"><Plus size={14} /> New Meeting</button>
+                                    <button data-write type="button" onClick={openNewMeeting} className="bg-green-600 hover:brightness-110 text-white px-4 py-2.5 rounded-xl font-bold text-xs shadow-glow flex items-center gap-2 transition-colors"><Plus size={14} /> New Meeting</button>
                                 )}
                             </div>
                         </div>

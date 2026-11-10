@@ -261,10 +261,10 @@ export default function Repository() {
   return (
     <div>
       <PageHeader title="Repository" subtitle={countLabel} icon={Boxes}>
-        <Link to="/equipment/add" className="btn-primary">
+        <Link data-write to="/equipment/add" className="btn-primary">
           <Plus size={16} /> Add extinguisher
         </Link>
-        <Link to="/equipment/bulk-upload" className="btn-soft">
+        <Link data-write to="/equipment/bulk-upload" className="btn-soft">
           <Upload size={16} /> Bulk upload
         </Link>
         <button className="btn-ghost" onClick={doExport}>
@@ -290,7 +290,7 @@ export default function Repository() {
             : `Site links (${linkedRows.length})`}
         </button>
         {missingQr > 0 && (
-          <button
+          <button data-write
             className="btn-soft !bg-amber-100 !text-amber-900"
             onClick={doGenerateQr}
             title="These assets have no QR code, so they cannot be printed or scanned"

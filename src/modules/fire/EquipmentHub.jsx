@@ -51,7 +51,7 @@ export default function EquipmentHub() {
             </button>
           ))}
         </div>
-        <Link to="/equipment/add" className="btn-primary !py-1.5 text-xs">
+        <Link data-write to="/equipment/add" className="btn-primary !py-1.5 text-xs">
           <Plus size={14} /> Add extinguisher
         </Link>
       </div>

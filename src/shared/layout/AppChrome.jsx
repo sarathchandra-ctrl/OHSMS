@@ -187,6 +187,7 @@ function AppChromeInner({ children }) {
                 <span className="block text-[12.5px] font-bold text-ink-900">{name}</span>
                 <span className="block text-[10.5px] text-ink-400">
                   {ROLE_LABEL[role] || 'Employee'}
+                  {role === 'auditor' ? ' · View only' : ''}
                 </span>
               </span>
               <ChevronDown

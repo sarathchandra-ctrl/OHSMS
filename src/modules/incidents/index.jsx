@@ -9,6 +9,7 @@ import IllnessWizard from './pages/IllnessWizard'
 import Injuries from './pages/Injuries'
 import ActionTracker from './pages/ActionTracker'
 import RecycleBin from './pages/RecycleBin'
+import WriteGate from '../../shared/auth/WriteGate'
 
 // List pages share the secondary tab nav; the wizards render full-width.
 function ListLayout() {
@@ -34,9 +35,9 @@ export default function IncidentsModule() {
             <Route path="actions" element={<ActionTracker />} />
             <Route path="recycle" element={<RecycleBin />} />
           </Route>
-          <Route path="new" element={<IncidentWizard />} />
+          <Route path="new" element={<WriteGate><IncidentWizard /></WriteGate>} />
           <Route path=":id" element={<IncidentWizard />} />
-          <Route path="illness/new" element={<IllnessWizard />} />
+          <Route path="illness/new" element={<WriteGate><IllnessWizard /></WriteGate>} />
           <Route path="illness/:id" element={<IllnessWizard />} />
           <Route path="*" element={<Navigate to="/incidents" replace />} />
         </Routes>

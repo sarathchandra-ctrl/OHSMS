@@ -57,7 +57,7 @@ export default function Permits() {
   return (
     <div>
       <PageHeader icon={FileText} title="Permits" subtitle={isApprover ? 'All permits across your organization' : 'Permits you have raised'} tourId="permits-header">
-        <Link to="/permits/new" className="btn-primary"><Plus size={16} /> New Permit</Link>
+        <Link data-write to="/permits/new" className="btn-primary"><Plus size={16} /> New Permit</Link>
       </PageHeader>
 
       {/* Filters */}
@@ -97,7 +97,7 @@ export default function Permits() {
         <div className="grid place-items-center py-20"><Spinner size={28} /></div>
       ) : visible.length === 0 ? (
         <EmptyState icon={FileText} title="No permits found" hint="Adjust the filters, or raise a new permit to get started."
-          action={<Link to="/permits/new" className="btn-primary mt-1"><Plus size={16} /> New Permit</Link>} />
+          action={<Link data-write to="/permits/new" className="btn-primary mt-1"><Plus size={16} /> New Permit</Link>} />
       ) : (
         <div className="space-y-2.5">
           {visible.map((p, i) => (

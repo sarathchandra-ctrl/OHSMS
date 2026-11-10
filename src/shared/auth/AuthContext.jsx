@@ -9,6 +9,8 @@ import {
 } from '../modules/entitlements'
 import { getUserProfile, subscribeOrg } from '../org/orgData'
 import { personalModuleMap } from './access'
+import { isReadOnly } from './permissions'
+import { setViewOnly } from './viewOnly'
 import {
   clearAccessToken,
   currentAccessToken,
@@ -154,6 +156,10 @@ export function AuthProvider({ children }) {
   }, [])
 
   const role = profile?.role || null
+  const readOnly = isReadOnly(role)
+  useEffect(() => {
+    setViewOnly(readOnly)
+  }, [readOnly])
   // What this person may open: the organization's modules, narrowed to the
   // ones granted to them. Every screen reads this map, so the sidebar, portal
   // grid and route gate all follow the grant.
@@ -161,6 +167,7 @@ export function AuthProvider({ children }) {
   const value = {
     user,
     profile,
+    readOnly,
     org,
     loading,
     isAuthed: Boolean(user),
@@ -183,6 +190,11 @@ export function AuthProvider({ children }) {
   }
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
+}
+
+/** Whether the signed-in role is view-only; false outside the provider (tests, public pages). */
+export function useReadOnly() {
+  return Boolean(useContext(AuthContext)?.readOnly)
 }
 
 export function useAuth() {

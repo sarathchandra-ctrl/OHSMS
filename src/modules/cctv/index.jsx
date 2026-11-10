@@ -16,7 +16,7 @@ const TABS = [
   { to: '/cctv', end: true, label: 'Health', icon: Activity },
   { to: '/cctv/inventory', label: 'Inventory', icon: List },
   { to: '/cctv/defects', label: 'Defects', icon: TriangleAlert },
-  { to: '/cctv/import', label: 'Import', icon: Upload },
+  { to: '/cctv/import', label: 'Import', icon: Upload, write: true },
 ]
 
 export default function CctvModule() {

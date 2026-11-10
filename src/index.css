@@ -1394,3 +1394,9 @@ option {
     transition: none !important;
   }
 }
+
+/* View-only roles (src/shared/auth/viewOnly.js): controls that only write are
+   marked data-write and not shown. The server refuses those writes anyway. */
+html.read-only [data-write] {
+  display: none !important;
+}

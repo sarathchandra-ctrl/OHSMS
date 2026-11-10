@@ -34,6 +34,7 @@ import Activity from './pages/permits/Activity'
 import ImportData from './pages/admin/ImportData'
 import Learn from './pages/Learn'
 import ModuleTabs from '../../shared/layout/ModuleTabs'
+import WriteGate from '../../shared/auth/WriteGate'
 
 const TABS = [
   { to: '/loto', label: 'Home', icon: HomeIcon, end: true },
@@ -47,7 +48,7 @@ const TABS = [
   { to: '/loto/groups', label: 'Group numbers', icon: Boxes },
   { to: '/loto/trace', label: 'Trace', icon: Search },
   { to: '/loto/activity', label: 'Activity', icon: ScrollText },
-  { to: '/loto/import', label: 'Import', icon: Upload },
+  { to: '/loto/import', label: 'Import', icon: Upload, write: true },
   { to: '/loto/learn', label: 'Learn', icon: BookOpen },
 ]
 
@@ -85,9 +86,9 @@ export default function LotoModule() {
           <Route path="learn" element={<Learn />} />
         </Route>
         <Route path="operations/:id" element={<OperateProcedure />} />
-        <Route path="permits/new" element={<NewPermit />} />
+        <Route path="permits/new" element={<WriteGate><NewPermit /></WriteGate>} />
         <Route path="permits/:id" element={<PermitDetail />} />
-        <Route path="procedures/new" element={<CreateProcedure />} />
+        <Route path="procedures/new" element={<WriteGate><CreateProcedure /></WriteGate>} />
         <Route path="procedures/:id/revise" element={<CreateProcedure />} />
         <Route path="procedures/:id" element={<ProcedureDetail />} />
         <Route path="*" element={<Navigate to="/loto" replace />} />

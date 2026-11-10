@@ -43,7 +43,7 @@ export default function Illnesses() {
   return (
     <div>
       <PageHeader title="Illness Reports" subtitle={`${illnesses.length} recorded`} icon={Activity} tourId="illness-header">
-        <Link to="/incidents/illness/new" className="btn-primary"><Plus size={16} /> Report Illness</Link>
+        <Link data-write to="/incidents/illness/new" className="btn-primary"><Plus size={16} /> Report Illness</Link>
       </PageHeader>
 
       <div className="card mb-4 flex flex-wrap items-center gap-3 p-4">
@@ -54,7 +54,7 @@ export default function Illnesses() {
       </div>
 
       {filtered.length === 0 ? (
-        <EmptyState icon={Activity} title="No illness reports" hint={illnesses.length ? 'Try a different search.' : 'Report an occupational illness to get started.'} action={<Link to="/incidents/illness/new" className="btn-primary"><Plus size={16} /> Report Illness</Link>} />
+        <EmptyState icon={Activity} title="No illness reports" hint={illnesses.length ? 'Try a different search.' : 'Report an occupational illness to get started.'} action={<Link data-write to="/incidents/illness/new" className="btn-primary"><Plus size={16} /> Report Illness</Link>} />
       ) : (
         <div className="space-y-2">
           {filtered.map((ill, i) => {

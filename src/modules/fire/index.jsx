@@ -38,6 +38,7 @@ import {
   BinCountBadge,
   useRecycleBinEntry,
 } from './components/RecentlyDeletedLink'
+import WriteGate from '../../shared/auth/WriteGate'
 
 // Dashboard = per-type dashboards (EquipmentHub tabs, kept separate).
 // Repository = one consolidated inventory for every equipment class.
@@ -47,7 +48,7 @@ const TABS = [
   { to: '/equipment/repository', label: 'Repository', icon: Boxes },
   { to: '/equipment/defects', label: 'Defects', icon: Wrench },
   { to: '/equipment/sites', label: 'Sites', icon: MapPin },
-  { to: '/equipment/approvals', label: 'Approvals', icon: Stamp },
+  { to: '/equipment/approvals', label: 'Approvals', icon: Stamp, write: true },
 ]
 
 function ModuleNav() {
@@ -122,9 +123,9 @@ export default function EquipmentModule() {
           <Route path="approvals" element={<Approvals />} />
           <Route path="recycle" element={<RecycleBin />} />
         </Route>
-        <Route path="add" element={<AddExtinguisher />} />
-        <Route path="bulk-upload" element={<BulkUpload />} />
-        <Route path="asset-bulk-upload" element={<AssetBulkUpload />} />
+        <Route path="add" element={<WriteGate><AddExtinguisher /></WriteGate>} />
+        <Route path="bulk-upload" element={<WriteGate><BulkUpload /></WriteGate>} />
+        <Route path="asset-bulk-upload" element={<WriteGate><AssetBulkUpload /></WriteGate>} />
         <Route path="qr-print" element={<QRPrint />} />
         <Route path="*" element={<Navigate to="/equipment" replace />} />
       </Routes>

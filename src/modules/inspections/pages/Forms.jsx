@@ -85,7 +85,7 @@ export default function Forms() {
   return (
     <div>
       <PageHeader icon={ClipboardList} title="Inspection forms" subtitle={`${templates.length} form${templates.length === 1 ? '' : 's'} in your organization`}>
-        <button className="btn-primary" onClick={() => navigate('/inspections/forms/new')}>
+        <button data-write className="btn-primary" onClick={() => navigate('/inspections/forms/new')}>
           <Plus size={16} /> Create form
         </button>
       </PageHeader>
@@ -110,7 +110,7 @@ export default function Forms() {
           icon={ClipboardList}
           title={templates.length === 0 ? 'No inspection forms yet' : 'No forms match your filters'}
           hint={templates.length === 0 ? 'Create your first inspection form to start scheduling checks.' : 'Try a different search or status filter.'}
-          action={templates.length === 0 && <button className="btn-primary mt-2" onClick={() => navigate('/inspections/forms/new')}><Plus size={16} /> Create form</button>}
+          action={templates.length === 0 && <button data-write className="btn-primary mt-2" onClick={() => navigate('/inspections/forms/new')}><Plus size={16} /> Create form</button>}
         />
       ) : (
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">

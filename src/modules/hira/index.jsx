@@ -9,13 +9,14 @@ import RiskRegister from './pages/RiskRegister'
 import ActionTracker from './pages/ActionTracker'
 import BulkImport from './pages/BulkImport'
 import ModuleTabs from '../../shared/layout/ModuleTabs'
+import WriteGate from '../../shared/auth/WriteGate'
 
 const TABS = [
   { to: '/hira', label: 'Assessments', icon: Library, end: true },
   { to: '/hira/baselines', label: 'Baselines', icon: Layers },
   { to: '/hira/risk-register', label: 'Risk Register', icon: Grid3x3 },
   { to: '/hira/action-tracker', label: 'Action Tracker', icon: ListChecks },
-  { to: '/hira/bulk-import', label: 'Bulk Import', icon: Upload },
+  { to: '/hira/bulk-import', label: 'Bulk Import', icon: Upload, write: true },
 ]
 
 function ModuleNav() {
@@ -42,9 +43,9 @@ export default function HiraModule() {
           <Route path="baselines" element={<BaselineRepository />} />
           <Route path="risk-register" element={<RiskRegister />} />
           <Route path="action-tracker" element={<ActionTracker />} />
-          <Route path="bulk-import" element={<BulkImport />} />
+          <Route path="bulk-import" element={<WriteGate><BulkImport /></WriteGate>} />
         </Route>
-        <Route path="create" element={<CreateAssessment />} />
+        <Route path="create" element={<WriteGate><CreateAssessment /></WriteGate>} />
         <Route path="create/:id" element={<CreateAssessment />} />
         <Route path="assessment/:id" element={<AssessmentView />} />
         <Route path="*" element={<Navigate to="/hira" replace />} />

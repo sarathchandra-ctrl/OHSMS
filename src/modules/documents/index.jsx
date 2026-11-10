@@ -715,7 +715,7 @@ export default function DocumentsModule() {
                 </Button>
               )}
               {canFileHere && (
-                <Button icon={Upload} onClick={() => setDocDialog({ mode: 'new' })}>
+                <Button data-write icon={Upload} onClick={() => setDocDialog({ mode: 'new' })}>
                   Add document
                 </Button>
               )}

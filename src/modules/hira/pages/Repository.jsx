@@ -88,7 +88,7 @@ export default function Repository() {
   return (
     <div>
       <PageHeader tour="repository-header" title="Repository" subtitle="Browse and filter all risk assessments." icon={FolderOpen}>
-        <button type="button" className="btn-primary" onClick={() => { setBaselinePick(''); setChooserOpen(true) }}>
+        <button data-write type="button" className="btn-primary" onClick={() => { setBaselinePick(''); setChooserOpen(true) }}>
           <FilePlus2 size={16} /> New assessment
         </button>
       </PageHeader>
@@ -140,7 +140,7 @@ export default function Repository() {
           title={loading ? 'Loading…' : filtersActive ? 'No assessments match your filters' : 'No assessments yet'}
           hint={filtersActive ? 'Try clearing the filters.' : 'Create your first risk assessment to see it here.'}
           action={!filtersActive && (
-            <button type="button" className="btn-primary mt-2" onClick={() => { setBaselinePick(''); setChooserOpen(true) }}>
+            <button data-write type="button" className="btn-primary mt-2" onClick={() => { setBaselinePick(''); setChooserOpen(true) }}>
               <FilePlus2 size={16} /> Create assessment
             </button>
           )}

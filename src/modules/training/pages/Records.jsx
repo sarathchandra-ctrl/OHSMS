@@ -95,7 +95,7 @@ export default function Records() {
                 <CalendarPlus size={16} /> Assign course
               </Link>
             )}
-            <Button icon={Plus} onClick={() => openLog()} disabled={courses.length === 0}>Log training</Button>
+            <Button data-write icon={Plus} onClick={() => openLog()} disabled={courses.length === 0}>Log training</Button>
           </div>
         }
       />

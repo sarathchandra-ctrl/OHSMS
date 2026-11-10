@@ -14,7 +14,7 @@ import { readableOnTint } from '../../shared/lib/contrast'
 const fmtDue = (due) => (due ? due : '—')
 
 export default function ActionTracker() {
-  const { isApproved } = useAuth()
+  const { isApproved, readOnly } = useAuth()
   const [rows, setRows] = useState(null)
   const [incomplete, setIncomplete] = useState(null)
   const [busyKey, setBusyKey] = useState(null)
@@ -186,7 +186,7 @@ export default function ActionTracker() {
                       <td className="px-4 py-3">
                         <select
                           value={r.norm}
-                          disabled={!isApproved || busyKey === r.key}
+                          disabled={!isApproved || readOnly || busyKey === r.key}
                           onChange={(e) => changeStatus(r, e.target.value)}
                           className="rounded-lg border px-2.5 py-1.5 text-xs font-bold outline-hidden transition disabled:opacity-60"
                           style={{
