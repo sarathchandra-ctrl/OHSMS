@@ -124,6 +124,8 @@ export async function serveOnCloudflare(request, env, ctx) {
       blobStore: files,
       // The response goes first; the mail is sent after it.
       background: (promise) => ctx?.waitUntil?.(promise),
+      // Set by Cloudflare at its edge; a client cannot supply it.
+      clientIp: () => request.headers.get('cf-connecting-ip') || '',
     })
     const req = nodeRequest(request)
     const { res, done, toResponse } = nodeResponse()

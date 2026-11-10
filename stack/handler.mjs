@@ -90,6 +90,11 @@ export function createOwnStackHandler({
   background = (promise) => {
     promise.catch(() => {})
   },
+  // The caller's address, for the sign-in and reset limits. The Node server
+  // reads the socket; the Worker passes Cloudflare's CF-Connecting-IP, which
+  // Cloudflare sets itself. A client-sent X-Forwarded-For is never trusted:
+  // anyone could rotate it to dodge every limit.
+  clientIp = (req) => req.socket?.remoteAddress || '',
 }) {
   async function handle(req, res) {
     try {
@@ -179,15 +184,18 @@ export function createOwnStackHandler({
     const result = await signInWithPassword(engine, db, {
       email: body.email,
       password: body.password,
+      ip: clientIp(req),
     })
     if (!result.ok) {
       const message =
-        result.reason === 'locked'
+        result.reason === 'throttled'
+          ? 'Too many failed sign-ins from this network. Try again in 15 minutes.'
+          : result.reason === 'locked'
           ? 'Too many wrong passwords. Try again in 15 minutes, or ask an administrator.'
           : result.reason === 'disabled'
             ? 'This account is disabled. Ask an administrator.'
             : 'That email and password do not match.'
-      send(res, result.reason === 'locked' ? 429 : 401, {
+      send(res, result.reason === 'locked' || result.reason === 'throttled' ? 429 : 401, {
         code: 'unauthenticated',
         reason: result.reason,
         message,
@@ -204,7 +212,7 @@ export function createOwnStackHandler({
       return
     }
     background(
-      requestPasswordReset(engine, db, { email: body.email, origin, send: mail }).catch((err) =>
+      requestPasswordReset(engine, db, { email: body.email, origin, send: mail, ip: clientIp(req) }).catch((err) =>
         console.error('password reset mail failed', err?.message || err)
       )
     )

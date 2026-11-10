@@ -146,36 +146,72 @@ async function bump(db, key, ttlSeconds) {
   return Number(row?.value || 0)
 }
 
-async function failures(db, email) {
+async function counter(db, key) {
   const row = await db
     .prepare('SELECT value FROM auth_pending WHERE key = ? AND expires_at > ?')
-    .bind(`pwfail:${email}`, Date.now())
+    .bind(key, Date.now())
     .first()
   return Number(row?.value || 0)
 }
 
-async function recordFailure(db, email) {
+// Three counters, each over LOCK_SECONDS. The lockout used to count by
+// address alone, which made it a weapon: anyone who knew a colleague's email
+// could type ten wrong passwords and keep them out, again and again, from
+// anywhere. And nothing limited one source trying a few passwords against
+// every address in the organization.
+//
+//   pwfail:<email>:<ip>   MAX_FAILURES from one source locks that address
+//                         for that source only — the stranger locks
+//                         themselves out, not the person;
+//   pwfailip:<ip>         MAX_FAILURES_PER_SOURCE across all addresses stops
+//                         that source entirely (spraying);
+//   pwfail:<email>        MAX_FAILURES_PER_ADDRESS from everywhere still
+//                         locks the address, so guessing one person's
+//                         password from many machines is bounded too — at a
+//                         level one person mistyping never reaches.
+//
+// `ip` is '' when the server cannot tell (the per-source counters then share
+// one key, which is the old behaviour).
+export const MAX_FAILURES_PER_SOURCE = 50
+export const MAX_FAILURES_PER_ADDRESS = 100
+const pairKey = (email, ip) => `pwfail:${email}:${ip}`
+
+async function lockReason(db, email, ip) {
+  if ((await counter(db, `pwfailip:${ip}`)) >= MAX_FAILURES_PER_SOURCE) return 'throttled'
+  if ((await counter(db, pairKey(email, ip))) >= MAX_FAILURES) return 'locked'
+  if ((await counter(db, `pwfail:${email}`)) >= MAX_FAILURES_PER_ADDRESS) return 'locked'
+  return ''
+}
+
+async function recordFailure(db, email, ip) {
+  await bump(db, pairKey(email, ip), LOCK_SECONDS)
+  await bump(db, `pwfailip:${ip}`, LOCK_SECONDS)
   await bump(db, `pwfail:${email}`, LOCK_SECONDS)
 }
 
-async function clearFailures(db, email) {
-  await db.prepare('DELETE FROM auth_pending WHERE key = ?').bind(`pwfail:${email}`).run()
+async function clearFailures(db, email, ip) {
+  await db
+    .prepare('DELETE FROM auth_pending WHERE key IN (?, ?)')
+    .bind(pairKey(email, ip), `pwfail:${email}`)
+    .run()
 }
 
 /**
- * @returns {{ ok: true, uid } | { ok: false, reason: 'credentials'|'locked'|'disabled' }}
+ * @returns {{ ok: true, uid } | { ok: false, reason: 'credentials'|'locked'|'throttled'|'disabled' }}
  */
-export async function signInWithPassword(engine, db, { email, password }) {
+export async function signInWithPassword(engine, db, { email, password, ip = '' }) {
   const address = normalizeEmail(email)
   if (!address || typeof password !== 'string' || !password) {
     return { ok: false, reason: 'credentials' }
   }
-  if ((await failures(db, address)) >= MAX_FAILURES) return { ok: false, reason: 'locked' }
+  const source = String(ip || '').slice(0, 64)
+  const locked = await lockReason(db, address, source)
+  if (locked) return { ok: false, reason: locked }
   const uid = await userByEmail(db, address)
   const hash = uid ? await storedHash(db, uid) : null
   const matches = await verifyPassword(hash || DUMMY_HASH, password)
   if (!uid || !hash || !matches) {
-    await recordFailure(db, address)
+    await recordFailure(db, address, source)
     return { ok: false, reason: 'credentials' }
   }
   const profile = await liveProfile(engine, uid)
@@ -183,7 +219,7 @@ export async function signInWithPassword(engine, db, { email, password }) {
   if (!profile || !['approved', 'pending'].includes(profile.status)) {
     return { ok: false, reason: 'disabled' }
   }
-  await clearFailures(db, address)
+  await clearFailures(db, address, source)
   return { ok: true, uid }
 }
 
@@ -329,6 +365,10 @@ const RESET_TTL_SECONDS = 30 * 60
 // At most three links per address per hour: the request is unauthenticated,
 // and each one sends a mail.
 const RESET_PER_HOUR = 3
+// Per source, across addresses: the per-address cap alone let one machine
+// walk the staff list and send every person three mails an hour from the
+// organization's domain, on its mail bill.
+export const RESETS_PER_SOURCE_HOUR = 20
 
 function sha256(text) {
   return createHash('sha256').update(String(text)).digest('hex')
@@ -342,10 +382,12 @@ function sha256(text) {
 export async function requestPasswordReset(
   engine,
   db,
-  { email, origin, send, appName = 'Cult Fit SMS' }
+  { email, origin, send, appName = 'Cult Fit SMS', ip = '' }
 ) {
   const address = normalizeEmail(email)
   if (!address || typeof send !== 'function') return { ok: true }
+  const source = String(ip || '').slice(0, 64)
+  if ((await bump(db, `pwresetip:${source}`, 60 * 60)) > RESETS_PER_SOURCE_HOUR) return { ok: true }
   if ((await bump(db, `pwresetcount:${address}`, 60 * 60)) > RESET_PER_HOUR) return { ok: true }
 
   const uid = await userByEmail(db, address)
