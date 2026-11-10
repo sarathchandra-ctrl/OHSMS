@@ -18,6 +18,7 @@ import {
   Trash2,
   Plug,
   Palette,
+  Bell,
 } from 'lucide-react'
 import { ERP_ROLES, normalizeErpRoleLabels } from '../../shared/org/erpRoles'
 import { DEPARTMENTS } from '../../shared/auth/access'
@@ -90,6 +91,9 @@ import { SERVER_FEATURES } from '../../shared/serverFeatures'
 
 const TABS = [
   { key: 'general', label: 'General', icon: Settings },
+  // Its own tab: the switches save the moment they move, unlike the General
+  // form beside them, and they were lost between the profile and the logo.
+  { key: 'notifications', label: 'Notifications', icon: Bell },
   { key: 'scope', label: 'Scope & Granularity', icon: Layers },
   // Every integration on this tab still needs a server job that has not been
   // ported (src/shared/serverFeatures.js), so the tab is hidden with them.
@@ -528,7 +532,7 @@ export default function OrgSettings() {
     <>
       <PageHeader
         title="Organization settings"
-        subtitle="Profile, branding, scope granularity & integrations"
+        subtitle="Profile, branding, notifications, scope granularity & integrations"
         icon={Settings}
       />
 
@@ -581,8 +585,6 @@ export default function OrgSettings() {
               </Field>
             </div>
           </Card>
-
-          <NotificationSettings org={org} actor={actor} />
 
           {/* Brand mark. Saved on pick rather than on Submit — see the comment
               on logoBusy above. */}
@@ -908,6 +910,12 @@ export default function OrgSettings() {
             </Button>
           </div>
         </form>
+      )}
+
+      {tab === 'notifications' && (
+        <div className="max-w-2xl space-y-5">
+          <NotificationSettings org={org} actor={actor} />
+        </div>
       )}
 
       {tab === 'scope' && (
