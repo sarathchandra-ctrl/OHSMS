@@ -30,7 +30,8 @@ import {
   collectionsAnswered,
 } from '../../shared/org/orgData'
 import { useAccessibleSitesRead } from '../../shared/org/useAccessibleSites'
-import { regionsOf, entitiesOf, sitesInSelection, shortList } from '../../shared/auth/access'
+import { regionsOf, entitiesOf, sitesInSelection } from '../../shared/auth/access'
+import { scopeSummary } from './scopeSummary'
 import { subscribeActions, SOURCES } from '../../modules/actions/lib/sources'
 import { subscribeAssignmentsRead } from '../../modules/training/lib/data'
 import { INCIDENT_TYPE_BY_KEY } from '../../modules/incidents/lib/constants'
@@ -488,14 +489,14 @@ export default function PortalHome() {
             <>
             {scopedSites.length > 0 && (
               <dl className="flex flex-wrap gap-x-5 gap-y-1 rounded-xl bg-surface-50 px-3 py-2 text-[12px] ring-1 ring-ink-900/5">
-                {[
-                  ['Regions', regionsOf(scopedSites)],
-                  ['Entities', entitiesOf(scopedSites)],
-                  ['Sites', scopedSites.map((s) => s.name).sort((a, b) => a.localeCompare(b))],
-                ].map(([label, names]) => (
-                  <div key={label} className="flex gap-1.5" title={names.join(', ')}>
+                {scopeSummary({
+                  region,
+                  entity,
+                  siteName: siteOptions.find((s) => s.id === pickedSite)?.name,
+                }).map(([label, value]) => (
+                  <div key={label} className="flex gap-1.5">
                     <dt className="flex-none font-semibold text-ink-500">{label}:</dt>
-                    <dd className="min-w-0 text-ink-800">{names.length ? shortList(names, 4) : '—'}</dd>
+                    <dd className="min-w-0 text-ink-800">{value}</dd>
                   </div>
                 ))}
               </dl>
