@@ -6,7 +6,7 @@
 //
 //   admin    — full access incl. users, roles and org settings
 //   manager  — approve/close records, manage sites, delete; safety-officer level
-//   member   — create & edit records in every module (standard user)
+//   member   — Employee: create, view and close in the modules and sites given
 //   auditor  — read-only across all modules incl. the audit log
 //
 // UI gates on can(role, action); Firestore rules enforce tenant + member access.
@@ -23,7 +23,7 @@ export const ROLES = [
   {
     key: 'member',
     label: 'Employee',
-    desc: 'The modules and sites they are given; several sites may be assigned.',
+    desc: 'Create, view and close in the modules and sites they are given; several sites may be assigned.',
   },
   { key: 'auditor', label: 'Auditor', desc: 'Read-only access across all modules.' },
 ]
@@ -38,7 +38,7 @@ const MATRIX = {
   'record.view': ['manager', 'member', 'auditor'],
   'record.create': ['manager', 'member'],
   'record.edit': ['manager', 'member'],
-  'record.close': ['manager'],
+  'record.close': ['manager', 'member'],
   'record.delete': ['manager'],
   'action.manage': ['manager', 'member'],
   'site.manage': ['manager'],

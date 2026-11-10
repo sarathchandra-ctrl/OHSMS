@@ -22,6 +22,7 @@ beforeAll(async () => {
   await applySchema(db)
   await seed('users', 'adminA', { role: 'admin', status: 'approved', name: 'Ada' })
   await seed('users', 'memberA', { role: 'member', status: 'approved', name: 'Mo' })
+  await seed('users', 'managerA', { role: 'manager', status: 'approved', name: 'Mia' })
   await seed('users', 'auditorA', {
     role: 'auditor',
     status: 'approved',
@@ -248,12 +249,91 @@ describe('post-state check', () => {
 
 describe('restrictions are added to every allow, not offered as one more', () => {
   it('an auditor is approved, and still cannot delete', async () => {
-    // Approved members may delete records; the auditor restriction must win
+    // Approved managers may delete records; the auditor restriction must win
     // over that broad allow. Reversing the order of those two checks is the
     // permissive-union bug.
     await adminEngine.commit(null, [{ type: 'set', path: 'incidents', id: 'i9', data: { title: 'x' }, merge: false }])
     await expect(as('auditorA').remove('incidents', 'i9')).rejects.toMatchObject({ code: 'permission-denied' })
-    await as('memberA').remove('incidents', 'i9')
+    await as('managerA').remove('incidents', 'i9')
     expect(await adminEngine.get(null, 'incidents', 'i9')).toBeNull()
+  })
+})
+
+// An employee creates, views and closes. Approving, verifying and deleting
+// are a manager's. Each case is the write an employee would send to skip that.
+describe('employee: create, view and close only', () => {
+  beforeAll(async () => {
+    await seed('permits', 'p-pend', { status: 'pending_approval', title: 'Hot work' })
+    await seed('permits', 'p-ok', { status: 'approved', title: 'Roof' })
+    await seed('reports', 'r1', { approvalStatus: 'pending', kind: 'defect' })
+    await seed('incidents', 'i-close', { title: 'Slip', lifecycle: 'open' })
+    await seed('incidents', 'i-del', { title: 'Trip', createdBy: 'memberA' })
+    await seed('sites', 's-1', { name: 'Depot', region: 'North' })
+    await seed('trainingRequests', 'tr-mine', { employeeUid: 'memberA', status: 'pending' })
+    await seed('trainingRequests', 'tr-theirs', { employeeUid: 'adminA', status: 'pending' })
+    await seed('trainingRequests', 'tr-named', { employeeUid: 'Mo', status: 'pending' })
+    await seed('defectLocks', 'ext1__crack', { extId: 'ext1', defectType: 'crack' })
+    await seed('incidents/i-close/photos', 'ph1', { url: 'x' })
+  })
+  const denied = { code: 'permission-denied' }
+
+  it('lets an employee raise and submit, but not approve', async () => {
+    const m = as('memberA')
+    await m.set('permits', 'p-new', { status: 'draft', title: 'Mine' })
+    await m.update('permits', 'p-new', { status: 'pending_approval' })
+    // Every way into a decided state: directly, on create, per approver, and by clearing one.
+    await expect(m.update('permits', 'p-pend', { status: 'approved' })).rejects.toMatchObject(denied)
+    await expect(m.set('permits', 'p-skip', { status: 'approved' })).rejects.toMatchObject(denied)
+    await expect(
+      m.update('permits', 'p-pend', { engineering: { status: 'approved' } })
+    ).rejects.toMatchObject(denied)
+    await expect(m.update('permits', 'p-ok', { status: 'pending_approval' })).rejects.toMatchObject(denied)
+    await expect(m.update('reports', 'r1', { approvalStatus: 'approved' })).rejects.toMatchObject(denied)
+    await expect(m.update('incidents', 'i-close', { lifecycle: 'verified' })).rejects.toMatchObject(denied)
+    expect((await adminEngine.get(null, 'permits', 'p-pend')).status).toBe('pending_approval')
+    expect((await adminEngine.get(null, 'permits', 'p-ok')).status).toBe('approved')
+
+    await as('managerA').update('permits', 'p-pend', { status: 'approved' })
+    expect((await adminEngine.get(null, 'permits', 'p-pend')).status).toBe('approved')
+  })
+
+  it('lets an employee close', async () => {
+    await as('memberA').update('incidents', 'i-close', { lifecycle: 'closed' })
+    expect((await adminEngine.get(null, 'incidents', 'i-close')).lifecycle).toBe('closed')
+  })
+
+  it('refuses an employee every delete, their own record and its photos included', async () => {
+    const m = as('memberA')
+    await expect(m.remove('incidents', 'i1')).rejects.toMatchObject(denied)
+    await expect(m.remove('incidents', 'i-del')).rejects.toMatchObject(denied)
+    await expect(m.remove('incidents/i-close/photos', 'ph1')).rejects.toMatchObject(denied)
+    await expect(m.remove('permits', 'p-ok')).rejects.toMatchObject(denied)
+    await expect(m.remove('meta', 'docSeq')).rejects.toMatchObject(denied)
+    await expect(m.remove('qr', 'tok1')).rejects.toMatchObject(denied)
+    expect(await adminEngine.get(null, 'incidents', 'i-del')).not.toBeNull()
+    expect(await adminEngine.get(null, 'meta', 'docSeq')).not.toBeNull()
+  })
+
+  it('lets an employee withdraw only their own training request, matched by uid', async () => {
+    const m = as('memberA')
+    await expect(m.remove('trainingRequests', 'tr-theirs')).rejects.toMatchObject(denied)
+    // A field holding the person's display name is not ownership.
+    await expect(m.remove('trainingRequests', 'tr-named')).rejects.toMatchObject(denied)
+    await m.remove('trainingRequests', 'tr-mine')
+    expect(await adminEngine.get(null, 'trainingRequests', 'tr-mine')).toBeNull()
+    await m.remove('defectLocks', 'ext1__crack')
+  })
+
+  it('leaves the site register to managers', async () => {
+    const m = as('memberA')
+    await expect(m.update('sites', 's-1', { region: 'South' })).rejects.toMatchObject(denied)
+    await expect(m.set('sites', 's-2', { name: 'Mine' })).rejects.toMatchObject(denied)
+    await expect(m.remove('sites', 's-1')).rejects.toMatchObject(denied)
+    expect((await adminEngine.get(null, 'sites', 's-1')).region).toBe('North')
+
+    const mgr = as('managerA')
+    await mgr.update('sites', 's-1', { region: 'South' })
+    await mgr.remove('incidents', 'i-del')
+    expect(await adminEngine.get(null, 'incidents', 'i-del')).toBeNull()
   })
 })

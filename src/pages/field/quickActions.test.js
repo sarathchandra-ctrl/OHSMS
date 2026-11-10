@@ -28,17 +28,21 @@ describe('fieldQuickActions', () => {
     ).not.toContain('receive')
   })
 
-  it('offers close to a manager when the unit has an open physical defect', () => {
+  // An employee creates, views and closes; an auditor only views.
+  it('offers close to a manager and an employee when the unit has an open physical defect', () => {
     const open = { ...ext, physicalDefects: ['pin'] }
     expect(
       fieldQuickActions(open, { role: 'manager' }).actions.map((a) => a.key)
     ).toContain('close')
     expect(
       fieldQuickActions(open, { role: 'member' }).actions.map((a) => a.key)
+    ).toContain('close')
+    expect(
+      fieldQuickActions(open, { role: 'auditor' }).actions.map((a) => a.key)
     ).not.toContain('close')
   })
 
-  it('offers close on an AED or panel that is out of service, to a manager only', () => {
+  it('offers close on an AED or panel only while it is out of service', () => {
     const aed = {
       assetKind: 'aed',
       status: AED_STATUS.OUT_OF_SERVICE,

@@ -25,7 +25,7 @@ function staticDir() {
   return dir
 }
 
-async function start({ db, dir = '', bootstrap } = {}) {
+async function start({ db, dir = '', bootstrap, mail } = {}) {
   const database = db || (await hostedLikeDb())
   const app = await createDedicatedApp({
     db: database,
@@ -33,6 +33,7 @@ async function start({ db, dir = '', bootstrap } = {}) {
     sessionSecret: SECRET,
     dataKeyMaster: Buffer.alloc(32, 7).toString('base64'),
     staticDir: dir,
+    mail,
     bootstrap: bootstrap ?? { orgName: 'Cult Fit', adminEmail: ADMIN.email, adminPassword: ADMIN.password },
   })
   await new Promise((resolve) => app.server.listen(0, '127.0.0.1', resolve))
@@ -117,6 +118,22 @@ describe('signing in', () => {
     const admin = await readyAdmin(s)
     expect(await s.read(admin, 'organization', 'profile')).toMatchObject({ name: 'Cult Fit' })
     expect(await s.signIn(ADMIN.email, ADMIN.password)).toBeUndefined()
+    await s.stop()
+  })
+
+  // Any session could send any text to any address from the organization's
+  // own sending domain through this job. It had no caller; it is gone.
+  it('has no job that sends mail on the caller\'s say-so', async () => {
+    const sent = []
+    const s = await start({ mail: async (m) => sent.push(m) })
+    const admin = await readyAdmin(s)
+    const res = await s.rpc(admin, 'notifyIncidentReported', {
+      to: 'anyone@example.test',
+      subject: 'x',
+      text: 'y',
+    })
+    expect(res.status).toBe(404)
+    expect(sent).toEqual([])
     await s.stop()
   })
 

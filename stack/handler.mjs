@@ -16,7 +16,6 @@ import {
   withdrawStaleMirrors,
   sweepLoto,
   isLiveAdmin,
-  productMail,
   stampIdentity,
 } from './workers.mjs'
 import {
@@ -292,7 +291,6 @@ export function createOwnStackHandler({
       purgeSoftDeleted: () => runRetention(engine, { uid }),
       withdrawStalePermitMirrors: () => withdrawStaleMirrors(engine),
       sweepLotoPermits: () => sweepLoto(engine, { uid }),
-      notifyIncidentReported: () => productMail(mail, body),
     }
     const fn = table[name]
     if (!fn) {

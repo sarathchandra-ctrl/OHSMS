@@ -89,13 +89,43 @@ export function canRead(path, id, ctx) {
 
 // ── Restrictions every write must also pass (the RESTRICTIVE policies) ──────
 
-function restrictWrite(op, path, id, ctx, { next } = {}) {
+// The site register is the organization's map: every scope, picker and
+// grant resolves through it. Creating, editing and deleting sites is the
+// Sites page's job (site.manage), and that is a manager's.
+const MANAGER_ONLY_COLLECTIONS = ['sites']
+
+// An employee creates, views and closes; deleting is a manager's. Two
+// deletes are part of an employee's own flow rather than removing a record:
+// defect locks are released when a defect is closed, and a person may
+// withdraw their own training request (ownsRow).
+const MEMBER_DELETABLE = ['defectLocks']
+const MEMBER_WITHDRAWABLE = ['trainingRequests']
+
+// Fields that name the person a row belongs to. Compared against the session
+// uid, so a field holding a display name can never match.
+const OWNER_FIELDS = ['createdBy', 'employeeUid']
+const ownsRow = (prev, ctx) =>
+  Boolean(ctx.uid) && OWNER_FIELDS.some((f) => typeof prev?.[f] === 'string' && prev[f] === ctx.uid)
+
+function restrictWrite(op, path, id, ctx, { next, prev } = {}) {
   if (!passwordOk(ctx) && !ownUser(ctx, path, id)) return 'password'
   if (serverOnly(path)) return 'server-only'
   if (isCryptoKey(path, id)) return 'crypto-keys'
   if (op === 'insert' && isAuditor(ctx) && collectionOf(path) !== 'auditLogs') return 'auditor'
   if ((op === 'update' || op === 'delete') && isAuditor(ctx)) return 'auditor'
   if ((op === 'update' || op === 'delete') && collectionOf(path) === 'auditLogs') return 'audit-log'
+  if (MANAGER_ONLY_COLLECTIONS.includes(path) && !isManager(ctx)) return 'manager-only'
+  // Deleting is irreversible and the records are the evidence. Every delete
+  // used to be open to any employee, for any record in any module — someone
+  // else's incident, an approved permit, a site, the reference counters.
+  if (
+    op === 'delete' &&
+    !isManager(ctx) &&
+    !MEMBER_DELETABLE.includes(path) &&
+    !(MEMBER_WITHDRAWABLE.includes(path) && ownsRow(prev, ctx))
+  ) {
+    return 'manager-delete'
+  }
   void next
   return ''
 }
@@ -208,7 +238,7 @@ export function updateAllowed(path, id, prev, next, ctx) {
 export function deleteAllowed(path, id, prev, ctx) {
   if (ctx.worker) return ''
   if (!canRead(path, id, ctx)) return 'not-visible'
-  const restricted = restrictWrite('delete', path, id, ctx)
+  const restricted = restrictWrite('delete', path, id, ctx, { prev })
   if (restricted) return restricted
   // delete_member: broad on purpose; the auditor is removed by restrictWrite.
   if (isApproved(ctx) && !specialPath(path)) return ''
@@ -218,6 +248,57 @@ export function deleteAllowed(path, id, prev, ctx) {
 }
 
 // ── What the triggers checked ───────────────────────────────────────────────
+
+// Manager-only decisions (SECURITY.md S-02), ported from the decision map the
+// Firestore rules carried and that the move to SQL dropped. A state in this
+// list records a decision: moving a row INTO it, or OUT of it, is a manager's
+// act. Asking is not deciding, so pending / draft / submitted are absent and
+// an employee can still raise and submit. Both directions, because clearing
+// an approval is as much the approver's act as granting it.
+//
+// Closing is NOT here. An employee creates, views and closes (owner's
+// decision, 2026-11-10); the Firestore map also gated `closed`, and that is
+// deliberately dropped. Verifying a closure stays a manager's.
+const DECIDED = ['approved', 'rejected', 'declined']
+const VERIFIED = ['verified']
+export const DECISION_STATES = {
+  permits: DECIDED,
+  procedures: DECIDED,
+  reports: DECIDED,
+  observations: DECIDED,
+  trainingRequests: DECIDED,
+  erpRescuePlans: DECIDED,
+  incidents: VERIFIED,
+  illnesses: VERIFIED,
+  capas: VERIFIED,
+  findings: VERIFIED,
+  audits: VERIFIED,
+  injuries: VERIFIED,
+  documents: ['active'],
+}
+// Where a decision is written. incidents and illnesses call it `lifecycle`;
+// a permit also carries one per approver, and again for closure and extension.
+const DECISION_FIELDS = [['status'], ['approvalStatus'], ['lifecycle']]
+const PERMIT_DECISION_FIELDS = ['engineering', 'operations'].flatMap((who) => [
+  [who, 'status'],
+  ['closure', who, 'status'],
+  ['extension', who, 'status'],
+])
+const at = (obj, keys) => keys.reduce((o, k) => (o && typeof o === 'object' ? o[k] : undefined), obj)
+
+/** The first decision field this write moves into or out of a decided state, or ''. */
+export function decisionChanged(path, prev, next) {
+  const states = DECISION_STATES[collectionOf(path)]
+  if (!states) return ''
+  const fields =
+    collectionOf(path) === 'permits' ? [...DECISION_FIELDS, ...PERMIT_DECISION_FIELDS] : DECISION_FIELDS
+  for (const keys of fields) {
+    const before = str(at(prev, keys))
+    const after = str(at(next, keys))
+    if (before !== after && (states.includes(before) || states.includes(after))) return keys.join('.')
+  }
+  return ''
+}
 
 const num = (v) => {
   const n = Number(v)
@@ -230,7 +311,7 @@ const num = (v) => {
  *                          by an approved admin, judged on the STORED actor;
  *                          nobody but the server clears mustChangePassword
  *   meta_counters_forward  reference counters never move backwards
- *   manager_decisions      verifying an injury, closing an illness: managers
+ *   manager_decisions      a decision (DECISION_STATES): managers only
  * `prev` is undefined for an insert.
  */
 export function invariantProblem(path, id, prev, next, ctx) {
@@ -253,23 +334,6 @@ export function invariantProblem(path, id, prev, next, ctx) {
       if (num(prev[k]) > num(n[k])) return 'counter'
     }
   }
-  const oldStatus = str(prev?.status)
-  const newStatus = str(n.status)
-  if (
-    collectionOf(path) === 'injuries' &&
-    newStatus === 'verified' &&
-    oldStatus !== 'verified' &&
-    !isManager(ctx)
-  ) {
-    return 'manager-decision'
-  }
-  if (
-    collectionOf(path) === 'illnesses' &&
-    ['closed', 'verified'].includes(newStatus) &&
-    oldStatus !== newStatus &&
-    !isManager(ctx)
-  ) {
-    return 'manager-decision'
-  }
+  if (!ctx.worker && !isManager(ctx) && decisionChanged(path, prev, n)) return 'manager-decision'
   return ''
 }

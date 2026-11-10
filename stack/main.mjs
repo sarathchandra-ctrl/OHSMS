@@ -56,7 +56,7 @@ if (problems.length) {
   process.exit(1)
 }
 
-// Mail is optional and used only for incident notifications.
+// Mail is optional and used only for password-reset links.
 let mail = null
 if (env.SMTP_HOST && env.SMTP_USER && env.SMTP_PASS && env.MAIL_FROM) {
   const port = Number(env.SMTP_PORT || 587)

@@ -130,8 +130,3 @@ export async function sweepLoto(engine, { nowMs = Date.now() } = {}) {
   }
   return { checked: permits.length, flagged }
 }
-
-export async function productMail(mail, message) {
-  if (!mail) return { sent: false, reason: 'no-smtp' }
-  return mail(message)
-}
