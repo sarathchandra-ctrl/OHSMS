@@ -1,0 +1,41 @@
+// Fresh download links on records as they leave the server.
+//
+// Download links expire an hour after they are signed (stack/blobSign.mjs).
+// Records keep the link they were saved with, and dozens of screens paint it
+// directly, so rather than teach every screen to ask for a new one, the
+// server re-signs each of its own links in a record as it hands that record
+// to someone allowed to read it (handler.mjs, /data get and list). A link
+// copied out of the app — into an email, a chat, a bookmark — dies within the
+// hour; a link the app shows is always current.
+//
+// Only this server's own links are touched: a /blob URL for op=get naming a
+// path under files/. The host is ignored when matching, so a link saved under
+// another address (a local dev server, an old hostname) is re-signed onto the
+// current one.
+
+function ownPath(value) {
+  if (typeof value !== 'string' || !value.includes('/blob?')) return null
+  try {
+    const u = new URL(value)
+    const path = u.searchParams.get('path') || ''
+    if (!u.pathname.endsWith('/blob') || u.searchParams.get('op') !== 'get') return null
+    return path.startsWith('files/') && !path.includes('..') ? path : null
+  } catch {
+    return null
+  }
+}
+
+/** A copy of `data` with each of this server's download links re-signed by `sign(path)`. */
+export function refreshFileLinks(data, sign) {
+  if (typeof data === 'string') {
+    const path = ownPath(data)
+    return path ? sign(path) : data
+  }
+  if (Array.isArray(data)) return data.map((v) => refreshFileLinks(v, sign))
+  if (data && typeof data === 'object') {
+    const out = {}
+    for (const [k, v] of Object.entries(data)) out[k] = refreshFileLinks(v, sign)
+    return out
+  }
+  return data
+}

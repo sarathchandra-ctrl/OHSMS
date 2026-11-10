@@ -8,6 +8,7 @@
 // provider.
 
 import { verifySession, signSession } from './session.mjs'
+import { refreshFileLinks } from './lib/fileLinks.js'
 import { decidePresign } from './presign.mjs'
 import {
   releaseDataKeys,
@@ -163,14 +164,18 @@ export function createOwnStackHandler({
     const body = await readBody(req)
     const session = sessionOf(req, sessionSecret)
     const roleSession = { role: 'ohsms_browser', uid: session?.sub || '' }
+    // Every record goes out with fresh download links (stack/lib/fileLinks.js):
+    // the reader has just passed the access rules for it.
+    const fresh = (row) =>
+      blobStore && row ? refreshFileLinks(row, (path) => blobStore.downloadUrl(path)) : row
     if (body.op === 'get') {
       const doc = await engine.get(roleSession, body.path, body.id, { rev: Boolean(body.rev) })
-      send(res, 200, { doc })
+      send(res, 200, { doc: fresh(doc) })
       return
     }
     if (body.op === 'list') {
       const rows = await engine.list(roleSession, body.path, body.opts || {})
-      send(res, 200, { rows })
+      send(res, 200, { rows: rows.map(fresh) })
       return
     }
     if (body.op === 'count') {
@@ -277,6 +282,10 @@ export function createOwnStackHandler({
     if (body.op === 'delete') {
       await blobStore.remove(body.path)
       send(res, 200, { ok: true })
+      return
+    }
+    if (body.op === 'get') {
+      send(res, 200, { url: blobStore.downloadUrl(body.path) })
       return
     }
     send(res, 200, {

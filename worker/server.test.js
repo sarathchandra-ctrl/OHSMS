@@ -46,6 +46,33 @@ describe('files in R2', () => {
   // random path, so the second PUT is never legitimate.
   // Served back under the type it was uploaded with, so the type is the
   // difference between an attachment and a page running on the app's origin.
+  // A download link used to work forever, for whoever held it.
+  it('expires a download link within two hours, and refuses the old never-expiring kind', async () => {
+    const bucket = fakeBucket()
+    const files = createR2FileStore({ bucket, key, origin })
+    await files.handle(
+      new Request(files.uploadUrl('files/photos/e.pdf'), {
+        method: 'PUT',
+        body: 'x',
+        headers: { 'Content-Type': 'application/pdf', 'Content-Length': '1' },
+      })
+    )
+    const issued = Date.now()
+    const H = 3600 * 1000
+    const link = files.downloadUrl('files/photos/e.pdf', issued)
+    // Stable within the hour, so repeated reads do not re-download.
+    expect(files.downloadUrl('files/photos/e.pdf', issued + 1000)).toBe(link)
+    expect((await files.handle(new Request(link), issued + 59 * 60 * 1000)).status).toBe(200)
+    expect((await files.handle(new Request(link), issued + 2 * H + 1000)).status).toBe(403)
+    // A forged later expiry breaks the signature.
+    const stretched = link.replace(/exp=\d+/, `exp=${issued + 99 * 3600 * 1000}`)
+    expect((await files.handle(new Request(stretched), issued + 2 * H + 1000)).status).toBe(403)
+    const { createHmac } = await import('node:crypto')
+    const oldSig = createHmac('sha256', key).update(['get', 'files/photos/e.pdf'].join('\n')).digest('base64url')
+    const legacy = `${origin}/blob?op=get&path=files%2Fphotos%2Fe.pdf&sig=${oldSig}`
+    expect((await files.handle(new Request(legacy))).status).toBe(403)
+  })
+
   it('refuses file types that could run as a page', async () => {
     const files = createR2FileStore({ bucket: fakeBucket(), key, origin })
     for (const type of ['text/html', 'image/svg+xml', 'application/javascript', 'text/plain', 'application/vnd.evil']) {

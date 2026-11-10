@@ -19,6 +19,30 @@ import { assignmentStatus, ASSIGNMENT_META, recordStatus, STATUS_META, todayISO 
 import CertificateModal from '../components/Certificate'
 import CourseThumb from '../components/CourseThumb'
 import { safeHref } from '../../../shared/safeUrl'
+import { useFileUrl } from '../../../shared/storage/useFileUrl'
+
+/**
+ * One material chip. An uploaded file is opened through a fresh download link
+ * (useFileUrl asks the server; stored links expire after an hour), an inline
+ * file through its data URL, and a web link as it is.
+ */
+function ContentLink({ item: c }) {
+  const isFile = c.type === 'file'
+  const { src } = useFileUrl(isFile && !c.dataUrl ? c : null)
+  const href = isFile ? c.dataUrl || src : c.url
+  return (
+    <a
+      href={safeHref(href)}
+      target="_blank"
+      rel="noreferrer"
+      download={isFile ? c.fileName || c.label : undefined}
+      aria-disabled={!href}
+      className="chip bg-brand-50 text-brand-700 transition hover:bg-brand-100"
+    >
+      {isFile ? <Paperclip size={12} /> : <Link2 size={12} />} {c.label}
+    </a>
+  )
+}
 
 /** Learning material chips for a course (links open, files download). */
 function ContentList({ course }) {
@@ -27,16 +51,7 @@ function ContentList({ course }) {
   return (
     <div className="flex flex-wrap gap-2">
       {items.map((c) => (
-        <a
-          key={c.id}
-          href={safeHref(c.type === 'file' ? (c.dataUrl || c.url) : c.url)}
-          target="_blank"
-          rel="noreferrer"
-          download={c.type === 'file' ? c.fileName || c.label : undefined}
-          className="chip bg-brand-50 text-brand-700 transition hover:bg-brand-100"
-        >
-          {c.type === 'file' ? <Paperclip size={12} /> : <Link2 size={12} />} {c.label}
-        </a>
+        <ContentLink key={c.id} item={c} />
       ))}
     </div>
   )

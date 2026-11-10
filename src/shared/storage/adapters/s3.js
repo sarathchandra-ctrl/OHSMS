@@ -58,6 +58,25 @@ export default {
     return { url: publicUrl }
   },
 
+  // A fresh download link, valid for an hour, from this installation's server
+  // (/presign op 'get', which re-reads the signed-in person's live profile).
+  // The link stored on a record when the file was uploaded expires, so files
+  // are always shown through this.
+  async resolve(path) {
+    if (!ENDPOINT) return null
+    const { url } = await presign({ op: 'get', path })
+    return url || null
+  },
+
+  // The bytes, for an encrypted file the browser has to open itself.
+  async resolveBlob(path) {
+    const url = await this.resolve(path)
+    if (!url) return null
+    const res = await fetch(url)
+    if (!res.ok) throw new Error(`download failed: ${res.status}`)
+    return res.blob()
+  },
+
   async remove(path) {
     if (!ENDPOINT) return
     const { deleteUrl } = await presign({ op: 'delete', path })

@@ -16,11 +16,20 @@ function approved(profile) {
  * `profile` is the live row. A role stamped on the token is not an argument.
  */
 export function decidePresign({ op, path, profile }) {
-  if (op !== 'put' && op !== 'delete') return { ok: false, reason: 'op' }
+  if (op !== 'put' && op !== 'delete' && op !== 'get') return { ok: false, reason: 'op' }
   if (!approved(profile)) return { ok: false, reason: 'profile' }
   const p = String(path || '')
   if (!isAppFilePath(p)) return { ok: false, reason: 'path' }
   if (op === 'delete') return mayDeleteFile(profile, p)
+  // A fresh download link, for a signed-in, approved person. Medical files
+  // only for the people who may read the medical records they belong to.
+  if (op === 'get') {
+    const medical = [MEDICAL, '/illness-files/'].some((m) => p.includes(m))
+    if (medical && profile.role !== 'admin' && profile.role !== 'manager') {
+      return { ok: false, reason: 'medical' }
+    }
+    return { ok: true }
+  }
   if (profile.role === 'auditor') return { ok: false, reason: 'role' }
   if (p.includes(MEDICAL) && profile.role !== 'admin' && profile.role !== 'manager') {
     return { ok: false, reason: 'medical' }

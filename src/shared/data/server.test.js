@@ -401,3 +401,45 @@ describe('legacy Firebase files', () => {
     await s.stop()
   })
 })
+
+describe('fresh download links', () => {
+  it('issues a link to a signed-in person, never for medical files to an employee', async () => {
+    const { mkdtemp } = await import('node:fs/promises')
+    const { tmpdir } = await import('node:os')
+    const { join } = await import('node:path')
+    const s = await start({ blobDir: await mkdtemp(join(tmpdir(), 'ohsms-dl-')) })
+    const admin = await readyAdmin(s)
+    await s.rpc(admin, 'createMember', { email: 'dl@cult.test', role: 'member', password: 'temporary-pass-9' })
+    await s.rpc(await s.signIn('dl@cult.test', 'temporary-pass-9'), 'completePasswordChange', { current: 'temporary-pass-9', password: 'dl-own-pass-10' })
+    const emp = await s.signIn('dl@cult.test', 'dl-own-pass-10')
+
+    const ok = await s.post('/presign', { op: 'get', path: 'files/incident-photos/a.jpg' }, emp)
+    expect(ok.status).toBe(200)
+    expect(ok.body.url).toMatch(/\/blob\?op=get&path=.*&exp=\d+&sig=/)
+    for (const path of ['files/medical-records/fit-note.pdf', 'files/illness-files/x.pdf']) {
+      expect((await s.post('/presign', { op: 'get', path }, emp)).status, path).toBe(403)
+      expect((await s.post('/presign', { op: 'get', path }, admin)).status, path).toBe(200)
+    }
+    expect((await s.post('/presign', { op: 'get', path: 'files/a/b.jpg' })).status).toBe(401)
+    expect((await s.post('/presign', { op: 'get', path: 'secrets/x' }, admin)).status).toBe(403)
+    await s.stop()
+  })
+})
+
+describe('records leave with fresh download links', () => {
+  it('re-signs a stored link that has expired or never expired', async () => {
+    const { mkdtemp } = await import('node:fs/promises')
+    const { tmpdir } = await import('node:os')
+    const { join } = await import('node:path')
+    const s = await start({ blobDir: await mkdtemp(join(tmpdir(), 'ohsms-rs-')) })
+    const admin = await readyAdmin(s)
+    const stale = 'https://ehs.example.com/blob?op=get&path=files%2Fincident-photos%2Fa.jpg&sig=never-expired'
+    await s.post('/data', { op: 'commit', ops: [{ type: 'set', path: 'incidents', id: 'rs1', merge: false, data: { photo: { url: stale, path: 'files/incident-photos/a.jpg' } } }] }, admin)
+    const got = await s.read(admin, 'incidents', 'rs1')
+    expect(got.photo.url).not.toBe(stale)
+    expect(got.photo.url).toMatch(/^https:\/\/ehs\.example\.com\/blob\?op=get&path=files%2Fincident-photos%2Fa\.jpg&exp=\d+&sig=/)
+    const listed = (await s.post('/data', { op: 'list', path: 'incidents' }, admin)).body.rows
+    expect(listed.find((r) => r.id === 'rs1').photo.url).toBe(got.photo.url)
+    await s.stop()
+  })
+})

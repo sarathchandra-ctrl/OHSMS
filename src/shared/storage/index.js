@@ -14,6 +14,7 @@
 // refusal — so every caller can fall back to the old inline dataUrl and the
 // app keeps working un-degraded while infrastructure catches up.
 // ─────────────────────────────────────────────────────────────────────────────
+import { pointerPath } from './pointerPath'
 import { reportError } from '../monitoring'
 import { isSealedFile, openFileBytes, sealFileBytes } from '../crypto'
 import { checkFileBytes, headOf } from './sniffType'
@@ -292,9 +293,11 @@ export async function removeFile(path) {
  * URL pins its blob in memory until it is released, and a gallery that forgets
  * leaks every photo the user scrolls past.
  */
+export { pointerPath }
+
 export async function fileUrl(record, { collection } = {}) {
   const stored = typeof record === 'string' ? null : record?.url || null
-  const path = typeof record === 'string' ? record : record?.path || null
+  const path = pointerPath(record)
   if (!path) return { url: stored, revoke: () => {} }
 
   // A sealed object takes a different route, and MUST NOT fall back to the

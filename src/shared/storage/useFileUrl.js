@@ -33,6 +33,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import { useEffect, useState } from 'react'
 import { fileUrl } from './index'
+import { pointerPath } from './pointerPath'
 
 /** How many times to retry a path fetch before accepting the stored fallback. */
 const MAX_ATTEMPTS = 3
@@ -84,7 +85,7 @@ export function useFileUrl(pointer, { collection } = {}) {
   // The identity of a pointer, for the dependency array. An object literal
   // rebuilt on every render would re-fetch on every render — and each fetch
   // mints a blob URL, so that is a leak as well as a waste.
-  const path = typeof pointer === 'string' ? pointer : pointer?.path || ''
+  const path = pointerPath(pointer) || ''
   const stored = typeof pointer === 'string' ? '' : pointer?.url || pointer?.dataUrl || ''
   const inline = inlineImageSrc(stored)
 
