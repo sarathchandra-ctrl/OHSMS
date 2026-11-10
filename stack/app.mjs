@@ -95,6 +95,7 @@ function serveFile(res, file, method) {
  * @param {string} [o.staticDir]     the built app; omitted means API only
  * @param {string} [o.blobDir]       where uploaded files are kept on disk
  * @param {object} [o.bootstrap]     { orgName, adminEmail, adminPassword } for first start
+ * @param {Function} [o.clientIp]    (req) => the visitor's address (stack/clientIp.mjs)
  */
 export async function createDedicatedApp({
   db,
@@ -106,6 +107,7 @@ export async function createDedicatedApp({
   blobDir = '',
   bootstrap = null,
   fetchImpl,
+  clientIp,
 }) {
   await applySchema(db)
   const engine = createEngine(db)
@@ -123,6 +125,7 @@ export async function createDedicatedApp({
     dataKeyMaster,
     mail,
     fetchImpl,
+    ...(clientIp ? { clientIp } : {}),
   })
   const delegate = host.listeners('request')[0]
   host.removeAllListeners('request')

@@ -119,6 +119,16 @@ curl -s https://ehs.example.com/health
 
 `/health` answers `{"ok":true}`.
 
+**Behind a proxy you run yourself.** The sign-in limits count wrong passwords
+per visitor. Inside Docker, compose tells the server which front door is in
+front (`FRONT_DOOR`, from `COMPOSE_PROFILES`), so it reads the visitor's
+address from that proxy. If you run the server outside this compose file
+behind your own proxy on the same machine or private network, set
+`FRONT_DOOR=caddy` for any proxy that writes the visitor's address as the last
+`X-Forwarded-For` entry. Without it every request appears to come from the
+proxy, and one person guessing passwords can lock everyone out for 15
+minutes (`stack/clientIp.mjs`).
+
 ## 4. Sign in
 
 Open `https://ehs.example.com` and sign in with `ADMIN_EMAIL` and

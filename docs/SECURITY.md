@@ -650,6 +650,31 @@ for anything it shows, under the same rules.
 Tests: `worker/fileLinks.handler.test.js` (through the request handler, R2
 store) and `src/shared/data/server.test.js` (disk store).
 
+### S-24 · Self-hosted, one stranger could lock everyone out of signing in — HIGH
+
+The sign-in, reset and two-step limits count per source address, read from
+the socket. In the Docker install nobody reaches the app's socket directly:
+Caddy or the Cloudflare Tunnel connects to it over the compose network, so
+every visitor had the proxy's address. Each "per source" limit was one limit
+for the organization: fifty failed sign-ins against made-up addresses, from
+one machine, and the admin's correct password answered `throttled`. The
+per-address lock, meant to stop a stranger and not the person, could not
+tell the two apart. The Cloudflare-hosted Worker was not affected; it reads
+`cf-connecting-ip`.
+
+**Fixed** (`stack/clientIp.mjs`):
+- compose passes the front door to the app (`FRONT_DOOR`, from
+  `COMPOSE_PROFILES`); behind Caddy the visitor is the last
+  `X-Forwarded-For` entry (Caddy writes it and does not trust an incoming
+  one), behind the tunnel it is `X-OHSMS-Client-Ip`, which the Worker sets
+  from `cf-connecting-ip` and strips from what browsers send;
+- either header is believed only when the connection comes from a private
+  address, the proxy beside the app.
+
+Tests: `stack/clientIp.test.js` (fifty failures from one visitor behind the
+proxy, then the admin from another, through a real HTTP server) and
+`worker/index.test.js`.
+
 ---
 
 ## Testing

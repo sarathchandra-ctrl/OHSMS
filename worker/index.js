@@ -52,6 +52,8 @@ const DROP = [
   'x-forwarded-for',
   'x-forwarded-proto',
   'x-forwarded-host',
+  // The visitor's address for the server's limits is ours to state.
+  'x-ohsms-client-ip',
   // Never let a browser present an Access credential of its own.
   'cf-access-client-id',
   'cf-access-client-secret',
@@ -76,7 +78,12 @@ export async function forward(request, env) {
   headers.set('X-Forwarded-Host', incoming.host)
   headers.set('X-Forwarded-Proto', incoming.protocol.replace(':', ''))
   const ip = request.headers.get('cf-connecting-ip')
-  if (ip) headers.set('X-Forwarded-For', ip)
+  if (ip) {
+    headers.set('X-Forwarded-For', ip)
+    // Cloudflare may add its own hop to X-Forwarded-For between here and the
+    // tunnel; this one it leaves alone (stack/clientIp.mjs).
+    headers.set('X-OHSMS-Client-Ip', ip)
+  }
   if (env.CF_ACCESS_CLIENT_ID && env.CF_ACCESS_CLIENT_SECRET) {
     headers.set('CF-Access-Client-Id', env.CF_ACCESS_CLIENT_ID)
     headers.set('CF-Access-Client-Secret', env.CF_ACCESS_CLIENT_SECRET)

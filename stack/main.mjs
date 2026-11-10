@@ -6,6 +6,7 @@ import nodemailer from 'nodemailer'
 import { createDedicatedApp } from './app.mjs'
 import { startNodeSchedule } from './schedule.mjs'
 import { openSqlite } from './sqlite.mjs'
+import { clientIpFor } from './clientIp.mjs'
 
 const env = process.env
 const problems = []
@@ -104,6 +105,9 @@ const { server, engine, blobStore } = await createDedicatedApp({
     adminPassword: env.ADMIN_PASSWORD || '',
     mustChange: env.ADMIN_MUST_CHANGE !== 'false',
   },
+  // Which proxy is in front (compose passes COMPOSE_PROFILES as FRONT_DOOR),
+  // so the sign-in limits count visitors, not the proxy.
+  clientIp: clientIpFor(env.FRONT_DOOR),
 })
 
 // The server's own jobs on a clock: LOTO flags every five minutes, the

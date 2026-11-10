@@ -50,7 +50,12 @@ describe('forwarding', () => {
       return new Response('', { status: 302, headers: { Location: 'https://idp.example/sso' } })
     })
     const req = new Request('https://ehs.example.com/auth/start?x=1', {
-      headers: { 'CF-Access-Client-Secret': 'forged', 'CF-Connecting-IP': '203.0.113.9' },
+      headers: {
+        'CF-Access-Client-Secret': 'forged',
+        'CF-Connecting-IP': '203.0.113.9',
+        // A visitor naming their own address for the server's limits.
+        'X-OHSMS-Client-Ip': '10.0.0.1',
+      },
     })
     const res = await forward(
       req,
@@ -61,6 +66,7 @@ describe('forwarding', () => {
     expect(seen[0].init.headers.get('CF-Access-Client-Secret')).toBe('secret')
     expect(seen[0].init.headers.get('X-Forwarded-Host')).toBe('ehs.example.com')
     expect(seen[0].init.headers.get('X-Forwarded-For')).toBe('203.0.113.9')
+    expect(seen[0].init.headers.get('X-OHSMS-Client-Ip')).toBe('203.0.113.9')
     expect(res.status).toBe(302)
     expect(res.headers.get('Location')).toBe('https://idp.example/sso')
     expect(res.headers.get('Cache-Control')).toBe('no-store')
