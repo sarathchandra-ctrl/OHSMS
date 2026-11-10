@@ -42,7 +42,7 @@ export default function GroupNumbers() {
       <PageHeader
         icon={<HdrIcon d={<><rect x="4" y="8" width="16" height="10" rx="2" /><path d="M8 8V6a4 4 0 0 1 8 0v2" /></>} />}
         title="Group lockout numbers"
-        subtitle="A number can be on one open permit. Everyone comes off before the primary."
+        subtitle="Group lock box numbers. Everyone comes off before the primary."
       />
       {isAdmin && (
         <Card animate={false} className="mt-4 !p-5">

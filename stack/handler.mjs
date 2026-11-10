@@ -16,7 +16,6 @@ import {
   deleteOrgFile,
   runRetention,
   withdrawStaleMirrors,
-  sweepLoto,
   isLiveAdmin,
   siteWeather,
   exportSubject,
@@ -48,7 +47,6 @@ const WORKER = { role: 'ohsms_worker', uid: '' }
 const ADMIN_JOBS = new Set([
   'purgeSoftDeleted',
   'withdrawStalePermitMirrors',
-  'sweepLotoPermits',
   'migrateLegacyFiles',
   'sendDigestsNow',
 ])
@@ -430,7 +428,6 @@ export function createOwnStackHandler({
       // Today's summaries now, for whoever has not had one yet today.
       sendDigestsNow: () => (mail ? sendDigests(engine, db, { mail, origin }) : { ok: false, code: 'unavailable', reason: 'no-mail' }),
       withdrawStalePermitMirrors: () => withdrawStaleMirrors(engine),
-      sweepLotoPermits: () => sweepLoto(engine, { uid }),
       migrateLegacyFiles: () =>
         migrateLegacyFiles(engine, db, blobStore, { dryRun: body.dryRun !== false, fetchImpl }),
       exportSubjectData: () =>

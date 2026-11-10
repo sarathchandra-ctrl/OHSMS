@@ -50,10 +50,12 @@ const at = (offset, hour = 10) => {
 export async function seedModules(put, { day, sites }) {
   const site = (id) => sites.find((s) => s.id === id)
   await seedRiskAssessments(put, day, site)
+  // LOTO first: the electrical permit names an approved LOTO procedure
+  // (stack/policy.mjs permitLotoProblem).
+  await seedLoto(put, day, site)
   await seedPermits(put, day, site)
   await seedInspections(put, day, site)
   await seedAudits(put, day, site)
-  await seedLoto(put, day, site)
   await seedCommittee(put, day)
   await seedMockDrills(put, day, site)
   await seedDocuments(put, day, sites)
@@ -411,7 +413,7 @@ async function seedPermits(put, day, site) {
   const closedWhen = startedAgo(0, 6)
   const closedAt = at(-6, 16)
   const valley = site('site-valley')
-  const p3 = permit(3, 'Electrical Work', valley, {
+  const p3Base = permit(3, 'Electrical Work', valley, {
     when: { date: closedWhen.date, time: '08:30' },
     jobLocation: 'Main distribution board, panel MDB-2',
     jobDescription: 'Replace a failed incomer breaker',
@@ -430,6 +432,14 @@ async function seedPermits(put, day, site) {
     },
     storedStatus: 'closed',
   })
+  // Electrical work names the LOTO procedure isolating its equipment
+  // (seedLoto: proc-compressor, approved, at the same site).
+  const p3 = {
+    ...p3Base,
+    lotoProcedureId: 'proc-compressor',
+    lotoProcedureCode: buildProcedureCode({ orgName: ORG_NAME, site: valley.name, equipment: 'Air compressor AC-1' }),
+    lotoEquipment: 'Air compressor AC-1',
+  }
 
   let n = 0
   for (const p of [p1, p2, p3]) {
@@ -893,6 +903,8 @@ async function seedLoto(put, day, site) {
     ]),
     actor
   )
+
+  await approveProcedure('proc-compressor', actor)
 
   const expires = (offset) => Timestamp.fromDate(new Date(`${day(offset)}T23:59:59`))
   const technicians = [

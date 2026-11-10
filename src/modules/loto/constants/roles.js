@@ -11,11 +11,6 @@ export const PERMISSIONS = {
   PROCEDURE_APPROVE: 'procedure.approve',
   PROCEDURE_DELETE: 'procedure.delete',
   LOTO_PERFORM: 'loto.perform',
-  // Per-job permits. Raising is open to every working role; deciding, extending
-  // and emergency removal are Admin only (the rules' lotoPermitAdmin()).
-  PERMIT_REQUEST: 'permit.request',
-  PERMIT_APPROVE: 'permit.approve',
-  PERMIT_EMERGENCY_REMOVE: 'permit.emergencyRemove',
   USERS_MANAGE: 'users.manage',
 }
 
@@ -39,7 +34,6 @@ export const ROLE_PERMISSIONS = {
     P.PROCEDURE_APPROVE,
     P.PROCEDURE_DELETE,
     P.LOTO_PERFORM,
-    P.PERMIT_REQUEST,
   ],
   [ROLES.ENGINEERING]: [
     P.PROCEDURE_VIEW,
@@ -47,9 +41,8 @@ export const ROLE_PERMISSIONS = {
     P.PROCEDURE_REVISE,
     P.PROCEDURE_SEND_FOR_APPROVAL,
     P.LOTO_PERFORM,
-    P.PERMIT_REQUEST,
   ],
-  [ROLES.TECHNICIAN]: [P.PROCEDURE_VIEW, P.LOTO_PERFORM, P.PERMIT_REQUEST],
+  [ROLES.TECHNICIAN]: [P.PROCEDURE_VIEW, P.LOTO_PERFORM],
 }
 
 export const ROLE_META = {

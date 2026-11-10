@@ -6,6 +6,7 @@ import {
   subscribeOrgUsers,
   subscribeOrg,
   reconcilePermitStatus,
+  subscribeProcedureLock,
 } from '../lib/data'
 import { derivePermitStatus, STATUS } from '../lib/permitStatus'
 import { openUnsafeByPermit } from '../lib/observations'
@@ -22,6 +23,10 @@ export function PermitProvider({ children }) {
   const [org, setOrg] = useState(null)
   const [loading, setLoading] = useState(true)
   const reconciledRef = useRef(new Set())
+  // procedureId -> live lock fields, for the LOTO procedures electrical
+  // permits name (lib/lotoLink.js). A permit is LOTO pending until its
+  // procedure is locked, and that state lives on the procedure, not the permit.
+  const [locks, setLocks] = useState({})
 
   useEffect(() => {
     setLoading(true)
@@ -34,13 +39,32 @@ export function PermitProvider({ children }) {
     return () => { u1(); u2(); u3(); u4() }
   }, [])
 
+  const procedureIds = useMemo(
+    () => [...new Set(permits.map((p) => p.lotoProcedureId).filter(Boolean))].sort().join('|'),
+    [permits],
+  )
+  useEffect(() => {
+    const ids = procedureIds ? procedureIds.split('|') : []
+    const offs = ids.map((id) =>
+      subscribeProcedureLock(id, (fields) => setLocks((prev) => ({ ...prev, [id]: fields }))))
+    return () => offs.forEach((off) => off())
+  }, [procedureIds])
+
+  // Each permit with its procedure's lock state, once that has loaded.
+  const joined = useMemo(
+    () => permits.map((p) => (p.lotoProcedureId && locks[p.lotoProcedureId] ? { ...p, ...locks[p.lotoProcedureId] } : p)),
+    [permits, locks],
+  )
+
   // Auto-expire: persist storedStatus for permits whose live status drifted
   // (e.g. 8h window elapsed → Not Closed). Only approvers can write; once per
   // permit/status per session to avoid write storms.
   useEffect(() => {
     if ((!isApprover)) return
     const now = Date.now()
-    for (const p of permits) {
+    for (const p of joined) {
+      // Not before its lock state has loaded: a guess would be written as fact.
+      if (p.lotoProcedureId && !locks[p.lotoProcedureId]) continue
       const live = derivePermitStatus(p, now)
       if (p.storedStatus !== live) {
         const key = `${p.id}:${live}`
@@ -50,7 +74,7 @@ export function PermitProvider({ children }) {
         }
       }
     }
-  }, [permits, isApprover])
+  }, [joined, locks, isApprover])
 
   const value = useMemo(() => {
     const now = Date.now()
@@ -58,7 +82,7 @@ export function PermitProvider({ children }) {
     // live in their own collection because the person raising one from a QR
     // scan has no permission to touch the permit.
     const openUnsafe = openUnsafeByPermit(observations)
-    const withStatus = permits.map((p) => {
+    const withStatus = joined.map((p) => {
       const merged = { ...p, openUnsafeCount: openUnsafe.get(p.id) || 0 }
       return { ...merged, status: derivePermitStatus(merged, now) }
     })
@@ -88,7 +112,7 @@ export function PermitProvider({ children }) {
       approvalQueue,
       observations,
     }
-  }, [permits, observations, users, org, loading, profile])
+  }, [joined, observations, users, org, loading, profile])
 
   return <PermitContext.Provider value={value}>{children}</PermitContext.Provider>
 }

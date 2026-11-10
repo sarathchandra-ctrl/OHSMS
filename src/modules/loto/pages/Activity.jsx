@@ -1,10 +1,9 @@
 import { useMemo, useState } from 'react'
-import { useOrgEvents } from '../../hooks/useOrgProcedures'
-import { filterActivity } from '../../utils/permitCompliance'
-import { toMs } from '../../utils/permitWindow'
-import PageHeader, { HdrIcon } from '../../components/PageHeader'
-import Input from '../../components/ui/Input'
-import Spinner from '../../components/ui/Spinner'
+import { useOrgEvents } from '../hooks/useOrgProcedures'
+import { filterActivity, toMs } from '../utils/activity'
+import PageHeader, { HdrIcon } from '../components/PageHeader'
+import Input from '../components/ui/Input'
+import Spinner from '../components/ui/Spinner'
 
 export default function Activity() {
   const { events, loading } = useOrgEvents()
