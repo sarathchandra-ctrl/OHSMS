@@ -726,6 +726,31 @@ dies on a password change, other devices, an admin's revoke and reset; no one
 can set the epoch back) and `stack/passwords.limits.test.js` "a reset lifts
 the lock".
 
+### S-27 · An employee could certify themselves — HIGH
+
+Two registers say who is qualified, and both were open to any employee with
+the module:
+- **LOTO technicians.** Who is an authorised technician, with a wireman
+  licence and its expiry, decides who may be named on an isolation permit
+  and hang a personal padlock (`loto/utils/permitModel.js`). Any employee
+  with LOTO could add themselves, licence number and expiry made up.
+- **Training records.** My Learning lets a person mark a course complete,
+  flagged `loggedBy: 'self'`. Nothing held a record to that shape: an
+  employee could write a trainer-led record for themselves valid until 2099,
+  write one for a colleague, or extend their own record's expiry afterwards.
+
+**Fixed** in `stack/policy.mjs`:
+- the technician register is a manager's to change (`restrictWrite`); the
+  page is read-only for everyone else, and its import refuses technicians;
+- an employee may create a training record only as the self-completion the
+  app writes: their own, flagged self, no trainer, dated today (a day either
+  side for time zones), with the course's real validity and the expiry it
+  gives (`selfTrainingProblem`; the engine loads the course). They may not
+  change or remove a record afterwards. Trainer-led records stay a manager's.
+
+Tests: `postgres.rls.test.js` "certifying yourself", including the record
+My Learning writes.
+
 ---
 
 ## Testing

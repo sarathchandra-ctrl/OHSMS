@@ -451,6 +451,16 @@ function restrictWrite(op, path, id, ctx, { next, prev } = {}) {
   if (op === 'insert' && isAuditor(ctx) && collectionOf(path) !== 'auditLogs') return 'auditor'
   if ((op === 'update' || op === 'delete') && isAuditor(ctx)) return 'auditor'
   if ((op === 'update' || op === 'delete') && collectionOf(path) === 'auditLogs') return 'audit-log'
+  // Who is an authorised technician is what decides who may be named on an
+  // isolation permit and hang a personal padlock (loto/utils/permitModel.js).
+  // Any employee with the LOTO module could add themselves, licence and all.
+  if (path === 'technicians' && !isManager(ctx)) return 'technicians'
+  // A training record is a certification. An employee writes one only by
+  // completing a course themselves (selfTrainingProblem, at insert), and
+  // never changes or removes one afterwards.
+  if ((op === 'update' || op === 'delete') && path === 'trainingRecords' && !isManager(ctx)) {
+    return 'training-record'
+  }
   // An entry is in its writer's own name (S-12), with key-shaped labels.
   // Here, not only in insert_audit: insert_writer let every employee who can
   // write records past that branch, so the pin held for auditors alone.
@@ -552,6 +562,10 @@ export function insertAllowed(path, id, data, ctx, lookup) {
   }
   const d = data || {}
   const signedOut = !ctx.uid
+  if (path === 'trainingRecords' && !isManager(ctx)) {
+    const self = selfTrainingProblem(d, ctx, lookup)
+    if (self) return self
+  }
 
   // insert_writer
   if (isWriter(ctx) && !specialPath(path)) return ''
@@ -707,6 +721,44 @@ export function decisionChanged(path, prev, next) {
     const after = str(at(next, keys))
     if (before !== after && (states.includes(before) || states.includes(after))) return keys.join('.')
   }
+  return ''
+}
+
+// ── Training an employee records for themselves ─────────────────────────────
+// My Learning lets a person mark a course complete (training/lib/data.js
+// selfCompleteTraining). That was the only shape checked by nobody: an
+// employee could write a "trainer-led" record for themselves, valid until
+// 2099, or one for a colleague. Now an employee's record must be exactly the
+// self-completion: theirs, flagged self, no trainer, dated today, and
+// expiring when the real course says it does.
+
+const isoDay = (date) =>
+  `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}-${String(date.getUTCDate()).padStart(2, '0')}`
+
+/** training/lib/status.js computeExpiry, in UTC: '' for a course that never expires. */
+export function trainingExpiry(completedOn, validityMonths) {
+  const months = Number(validityMonths) || 0
+  const [y, m, d] = String(completedOn || '').split('-').map(Number)
+  if (months <= 0 || !y || !m || !d) return ''
+  const base = new Date(Date.UTC(y, m - 1 + months, d))
+  if (base.getUTCDate() !== d) base.setUTCDate(0)
+  return isoDay(base)
+}
+
+function selfTrainingProblem(d, ctx, lookup, now = Date.now()) {
+  if (d.loggedBy !== 'self' || str(d.employeeUid) !== ctx.uid || str(d.createdBy) !== ctx.uid) {
+    return 'training-self'
+  }
+  if (str(d.trainerName)) return 'training-trainer'
+  // The person's own "today" may be a day either side of the server's.
+  const day = 24 * 60 * 60 * 1000
+  const today = [now - day, now, now + day].map((t) => isoDay(new Date(t)))
+  if (!today.includes(str(d.completedOn))) return 'training-date'
+  const course = lookup('trainingCourses', str(d.courseId))
+  if (!course) return 'training-course'
+  const months = Number(course.validityMonths) || 0
+  if ((Number(d.validityMonths) || 0) !== months) return 'training-validity'
+  if (str(d.expiresOn) !== trainingExpiry(d.completedOn, months)) return 'training-expiry'
   return ''
 }
 

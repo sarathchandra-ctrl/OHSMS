@@ -317,6 +317,10 @@ export function createEngine(db) {
         if (op.path === 'reports' || op.path === 'defectLocks') want('qr', token)
         if (op.path === 'observations') want('permitQr', token)
       }
+      // An employee's own training record is judged against its course.
+      if (op.path === 'trainingRecords' && typeof op.data?.courseId === 'string' && op.data.courseId) {
+        want('trainingCourses', op.data.courseId)
+      }
       // A new LOTO permit's window is judged against the site's shift clocks.
       if (op.path === 'lotoPermits') want('lotoSettings', 'shifts')
       const parent = parentOf(op.path)

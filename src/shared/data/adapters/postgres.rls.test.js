@@ -1177,3 +1177,97 @@ describe('the people directory cannot be searched by what it hides', () => {
     expect(flagged.map((u) => u.id)).toContain('noMfa')
   })
 })
+
+describe('certifying yourself', () => {
+  const todayIso = () => new Date().toISOString().slice(0, 10)
+  beforeAll(async () => {
+    await seed('technicians', 'techReal', {
+      name: 'Ravi',
+      lockNo: 'P-1',
+      licenceNo: 'WL-1',
+      licenceExp: '2025-01-01',
+      active: true,
+      createdBy: 'managerA',
+    })
+    await seed('trainingCourses', 'confined', { name: 'Confined space', validityMonths: 12 })
+    await seed('trainingCourses', 'induction', { name: 'Induction', validityMonths: 0 })
+  })
+
+  it('leaves the technician register to managers', async () => {
+    await expect(
+      as('memberA').set('technicians', 'techSelf', {
+        name: 'Mo',
+        lockNo: 'P-9',
+        licenceNo: 'MADE-UP',
+        licenceExp: '2099-01-01',
+        active: true,
+        createdBy: 'memberA',
+      })
+    ).rejects.toThrow()
+    await expect(as('memberA').update('technicians', 'techReal', { active: false })).rejects.toThrow()
+    await expect(as('memberA').remove('technicians', 'techReal')).rejects.toThrow()
+    await as('managerA').update('technicians', 'techReal', { licenceExp: '2027-01-01' })
+    await as('managerA').set('technicians', 'techNew', { name: 'Ana', lockNo: 'P-2', licenceNo: 'WL-2', active: true, createdBy: 'managerA' })
+  })
+
+  // What My Learning writes (training/lib/data.js selfCompleteTraining).
+  const selfRecord = (extra = {}) => {
+    const completedOn = todayIso()
+    const [y, m, d] = completedOn.split('-').map(Number)
+    const exp = new Date(Date.UTC(y, m - 1 + 12, d))
+    if (exp.getUTCDate() !== d) exp.setUTCDate(0)
+    return {
+      courseId: 'confined',
+      courseName: 'Confined space',
+      category: 'Other',
+      validityMonths: 12,
+      employeeUid: 'memberA',
+      employeeName: 'Mo',
+      trainerName: '',
+      completedOn,
+      expiresOn: exp.toISOString().slice(0, 10),
+      loggedBy: 'self',
+      createdBy: 'memberA',
+      ...extra,
+    }
+  }
+
+  it('accepts the self-completion the app writes', async () => {
+    await as('memberA').set('trainingRecords', 'selfOk', selfRecord())
+    await as('memberA').set(
+      'trainingRecords',
+      'selfNoExpiry',
+      selfRecord({ courseId: 'induction', courseName: 'Induction', validityMonths: 0, expiresOn: '' })
+    )
+  })
+
+  it('refuses an employee certifying themselves any other way, or a colleague', async () => {
+    for (const [label, data] of [
+      ['trainer-led', selfRecord({ trainerName: 'Chief Trainer', loggedBy: undefined })],
+      ['not flagged self', selfRecord({ loggedBy: undefined })],
+      ['a colleague', selfRecord({ employeeUid: 'managerA', employeeName: 'Mia' })],
+      ['valid until 2099', selfRecord({ expiresOn: '2099-01-01' })],
+      ['a longer validity', selfRecord({ validityMonths: 120 })],
+      ['backdated', selfRecord({ completedOn: '2024-01-01' })],
+      ['a course that does not exist', selfRecord({ courseId: 'ghost' })],
+    ]) {
+      await expect(as('memberA').set('trainingRecords', `bad-${label}`, data), label).rejects.toThrow()
+    }
+  })
+
+  it('refuses an employee changing or removing a record afterwards', async () => {
+    await expect(as('memberA').update('trainingRecords', 'selfOk', { expiresOn: '2099-01-01' })).rejects.toThrow()
+    await expect(as('memberA').remove('trainingRecords', 'selfOk')).rejects.toThrow()
+  })
+
+  it('leaves trainer-led records, for anyone, to managers', async () => {
+    await as('managerA').set('trainingRecords', 'logged', {
+      courseId: 'confined',
+      employeeUid: 'memberA',
+      trainerName: 'Chief Trainer',
+      completedOn: '2026-01-05',
+      expiresOn: '2027-01-05',
+      createdBy: 'managerA',
+    })
+  })
+})

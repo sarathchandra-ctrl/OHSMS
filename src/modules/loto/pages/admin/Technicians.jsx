@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import toast from 'react-hot-toast'
 import { toastCaught } from '../../../../shared/lib/toastCaught'
 import { useAuth } from '../../context/AuthContext'
+import { useAuth as useAppAuth } from '../../../../shared/auth/AuthContext'
 import { useTechnicians } from '../../hooks/useTechnicians'
 import { useLocks } from '../../hooks/useLocks'
 import { useOrgProcedures } from '../../hooks/useOrgProcedures'
@@ -20,6 +21,9 @@ import Spinner from '../../components/ui/Spinner'
 
 export default function Technicians() {
   const { profile } = useAuth()
+  // The register decides who may be named on an isolation permit, so the
+  // server leaves it to managers (stack/policy.mjs); everyone else reads it.
+  const { isManager } = useAppAuth()
   const { technicians, loading } = useTechnicians()
   const { locks } = useLocks()
   const { procedures } = useOrgProcedures()
@@ -77,10 +81,15 @@ export default function Technicians() {
       <PageHeader
         icon={<HdrIcon d={<><circle cx="12" cy="8" r="4" /><path d="M4 21a8 8 0 0 1 16 0" /></>} />}
         title="Authorized LOTO Technicians"
-        subtitle="Maintain the list of technicians and their dedicated lock numbers."
+        subtitle={
+          isManager
+            ? 'Maintain the list of technicians and their dedicated lock numbers.'
+            : 'Who may be named on an isolation permit. A manager maintains this list.'
+        }
       />
 
       {/* Add form */}
+      {isManager && (
       <Card animate={false} className="mt-6 !p-5">
         <form onSubmit={onAdd} className="grid gap-3 sm:grid-cols-2">
           <Input
@@ -117,6 +126,7 @@ export default function Technicians() {
           </div>
         </form>
       </Card>
+      )}
 
       <div className="mt-4">
         {loading ? (
@@ -126,7 +136,7 @@ export default function Technicians() {
         ) : technicians.length === 0 ? (
           <EmptyState
             title="No technicians yet"
-            subtitle="Add your first authorized technician above."
+            subtitle={isManager ? 'Add your first authorized technician above.' : 'A manager has not added any yet.'}
             icon={<svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="8" r="4" /><path d="M4 21a8 8 0 0 1 16 0" /></svg>}
           />
         ) : (
@@ -154,6 +164,8 @@ export default function Technicians() {
                     <span className="rounded-md bg-hazard px-2.5 py-1 text-xs font-bold text-ink">
                       #{t.lockNo || '—'}
                     </span>
+                    {isManager && (
+                    <>
                     <button
                       onClick={() => toggleActive(t)}
                       className="rounded-lg border border-steel-700 px-2.5 py-1 text-xs font-medium text-steel-300 hover:border-steel-500"
@@ -166,6 +178,8 @@ export default function Technicians() {
                     >
                       Delete
                     </button>
+                    </>
+                    )}
                   </div>
                 </li>
               ))}
