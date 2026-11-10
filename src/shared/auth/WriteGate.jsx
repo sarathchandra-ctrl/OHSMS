@@ -16,8 +16,8 @@ export default function WriteGate({ children, back = '/portal' }) {
       </span>
       <h1 className="text-lg font-bold text-ink-900">View-only access</h1>
       <p className="text-sm text-ink-600">
-        Your role can look at records but not create or change them. Ask an administrator if
-        you need to.
+        Your role can look at records but not create or change them. Ask an administrator if you
+        need to.
       </p>
       <Link to={back} className="btn-soft inline-flex">
         Back

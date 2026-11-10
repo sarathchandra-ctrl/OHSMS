@@ -98,9 +98,11 @@ export default function Dashboard() {
     return [...map.values()]
       .map((r) => ({
         ...r,
-        pct: r.employees && scopeIds.length ? Math.round((r.covered / (r.employees * scopeIds.length)) * 100) : 100,
+        // No course in scope (none marked mandatory) is not 100% compliant:
+        // it is nothing measured. It showed a full green bar beside overdue work.
+        pct: r.employees && scopeIds.length ? Math.round((r.covered / (r.employees * scopeIds.length)) * 100) : null,
       }))
-      .sort((a, b) => a.pct - b.pct || b.employees - a.employees)
+      .sort((a, b) => (a.pct ?? 101) - (b.pct ?? 101) || b.employees - a.employees)
   }, [users, cRecords, cOpenAssignments, courses, courseFilter, uidDept, today])
 
   // Open assignments already past their due date — the LMS chase list.
@@ -227,6 +229,9 @@ export default function Dashboard() {
                     ) : '—'}
                   </td>
                   <td className="px-4 py-2.5">
+                    {d.pct == null ? (
+                      <span className="text-xs text-ink-500">No mandatory course</span>
+                    ) : (
                     <div className="flex items-center gap-2">
                       {/* A bare div conveys a percentage by width alone. role="progressbar"
                           plus the value attributes is what makes the same figure
@@ -236,6 +241,7 @@ export default function Dashboard() {
                       </div>
                       <span className="text-xs font-semibold text-ink-600">{d.pct}%</span>
                     </div>
+                    )}
                   </td>
                 </tr>
               ))}

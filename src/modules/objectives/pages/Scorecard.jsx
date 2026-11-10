@@ -142,6 +142,7 @@ export default function Scorecard() {
                     ? `${row.numerator} of ${row.denominator}`
                     : `${row.numerator} recorded`}
                   {row.target == null && ' · no target set'}
+                  {row.period !== 'now' && ` · ${row.period}`}
                 </p>
                 <p className="mt-1 text-xs italic text-ink-400">{row.kpi.help}</p>
 

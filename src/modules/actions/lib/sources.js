@@ -45,8 +45,10 @@ export const SOURCES = [
     collection: 'incidents',
     toNorm: (s) => (s === 'closed' ? 'done' : s === 'in_progress' ? 'in_progress' : 'open'),
     toNative: (n) => (n === 'done' ? 'closed' : n),
+    // A soft-deleted incident's actions are gone with it: they used to count
+    // as open and overdue here, and in the Ticket Closure KPI.
     extract: (d) =>
-      (d.capa || []).filter(Boolean).map((a) => ({
+      (d.deletedAt ? [] : d.capa || []).filter(Boolean).map((a) => ({
         actionId: a.id,
         title: a.description || a.title || 'Corrective action',
         owner: a.owner || a.ownerName || a.responsible || '',
@@ -72,7 +74,7 @@ export const SOURCES = [
     toNorm: (s) => (s === 'closed' ? 'done' : s === 'in_progress' ? 'in_progress' : 'open'),
     toNative: (n) => (n === 'done' ? 'closed' : n),
     extract: (d) =>
-      (d.actions || []).filter(Boolean).map((a) => ({
+      (d.deletedAt ? [] : d.actions || []).filter(Boolean).map((a) => ({
         actionId: a.id,
         title: a.description || a.title || 'Corrective action',
         owner: a.owner || a.ownerName || a.responsible || '',

@@ -22,4 +22,5 @@ export function setViewOnly(on) {
 
 export const isViewOnly = () => viewOnly
 
-export const VIEW_ONLY_MESSAGE = 'View-only access: your role can look at records but not change them.'
+export const VIEW_ONLY_MESSAGE =
+  'View-only access: your role can look at records but not change them.'
