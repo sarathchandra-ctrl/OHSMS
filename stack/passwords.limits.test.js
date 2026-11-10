@@ -6,6 +6,8 @@ import {
   MAX_FAILURES_PER_SOURCE,
   RESETS_PER_SOURCE_HOUR,
   bootstrapOrganization,
+  createMember,
+  resetMemberPassword,
   requestPasswordReset,
   signInWithPassword,
 } from './passwords.mjs'
@@ -27,7 +29,8 @@ beforeEach(async () => {
   })
 })
 
-const signIn = (password, ip, email = ADMIN.email) => signInWithPassword(engine, db, { email, password, ip })
+const signIn = (password, ip, email = ADMIN.email) =>
+  signInWithPassword(engine, db, { email, password, ip })
 
 describe('sign-in limits', () => {
   it('locks an address for the source guessing at it, and not for the person', async () => {
@@ -60,9 +63,19 @@ describe('password reset limits', () => {
     const send = async (m) => sent.push(m)
     const ip = '203.0.113.77'
     for (let i = 0; i < RESETS_PER_SOURCE_HOUR; i++) {
-      await requestPasswordReset(engine, db, { email: `nobody${i}@example.test`, origin: 'https://x.test', send, ip })
+      await requestPasswordReset(engine, db, {
+        email: `nobody${i}@example.test`,
+        origin: 'https://x.test',
+        send,
+        ip,
+      })
     }
-    await requestPasswordReset(engine, db, { email: ADMIN.email, origin: 'https://x.test', send, ip })
+    await requestPasswordReset(engine, db, {
+      email: ADMIN.email,
+      origin: 'https://x.test',
+      send,
+      ip,
+    })
     expect(sent).toEqual([])
     // Another source still gets its mail.
     await requestPasswordReset(engine, db, {
@@ -72,5 +85,71 @@ describe('password reset limits', () => {
       ip: '198.51.100.4',
     })
     expect(sent.map((m) => m.to)).toEqual([ADMIN.email])
+  })
+})
+
+describe('an address on two profiles', () => {
+  // The planted copy the access rules now refuse (users_keep_privilege), as
+  // it would stand if written before that rule or by the server's own hand.
+  const plant = async (id) =>
+    engine.commit(null, [
+      {
+        type: 'set',
+        path: 'users',
+        id,
+        merge: false,
+        data: { role: 'member', status: 'approved', email: ADMIN.email.toUpperCase() },
+      },
+    ])
+
+  it('signs in to neither, rather than to whichever row comes first', async () => {
+    // Sorted after the real profile, so a first-row lookup would still sign
+    // the admin in and hide the ambiguity; it must refuse instead.
+    await plant('zzzz-planted')
+    expect((await signIn(ADMIN.password, '198.51.100.4')).ok).toBe(false)
+  })
+
+  it('sends no reset link for it', async () => {
+    await plant('0000-planted')
+    const sent = []
+    await requestPasswordReset(engine, db, {
+      email: ADMIN.email,
+      origin: 'https://x.test',
+      send: async (m) => sent.push(m),
+      ip: '198.51.100.4',
+    })
+    expect(sent).toEqual([])
+  })
+
+  it('still refuses adding a new person under it', async () => {
+    const adminUid = (await signIn(ADMIN.password, '198.51.100.4')).uid
+    await plant('0000-planted')
+    await plant('zzzz-planted')
+    expect(
+      await createMember(engine, db, {
+        uid: adminUid,
+        email: ADMIN.email,
+        name: 'Third',
+        role: 'member',
+        password: 'temporary-pass-1',
+      })
+    ).toMatchObject({ ok: false, reason: 'already-member' })
+  })
+})
+
+describe('a reset lifts the lock', () => {
+  it('lets the person back in from the machine they were locked out on', async () => {
+    const adminUid = (await signIn(ADMIN.password, '198.51.100.4')).uid
+    const bo = await createMember(engine, db, {
+      uid: adminUid,
+      email: 'bo@example.test',
+      name: 'Bo',
+      role: 'member',
+      password: 'temporary-pass-1',
+    })
+    for (let i = 0; i < MAX_FAILURES; i++) await signIn(`wrong-${i}`, '203.0.113.20', 'bo@example.test')
+    expect((await signIn('temporary-pass-1', '203.0.113.20', 'bo@example.test')).reason).toBe('locked')
+    await resetMemberPassword(engine, db, { uid: adminUid, targetUid: bo.uid, password: 'brand-new-pass-2' })
+    expect(await signIn('brand-new-pass-2', '203.0.113.20', 'bo@example.test')).toMatchObject({ ok: true })
   })
 })

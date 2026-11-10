@@ -1,4 +1,4 @@
-// Document engine over SQLite (Cloudflare D1, or Node's SQLite in Docker).
+// Document engine over SQLite (Cloudflare D1; Node's SQLite locally and in tests).
 //
 // One table, addressed as (path, id), which is what the app's data seam
 // requires (src/shared/data/index.js): a QR mirror and the record it mirrors
@@ -35,8 +35,10 @@ import {
   deleteAllowed,
   insertAllowed,
   invariantProblem,
+  queryProblem,
   reachOf,
   readScope,
+  serverStampedInsert,
   siteBlocked,
   siteScoped,
   updateAllowed,
@@ -325,12 +327,30 @@ export function createEngine(db) {
         if (op.path === 'reports' || op.path === 'defectLocks') want('qr', token)
         if (op.path === 'observations') want('permitQr', token)
       }
+      // An employee's own training record is judged against its course.
+      if (op.path === 'trainingRecords' && typeof op.data?.courseId === 'string' && op.data.courseId) {
+        want('trainingCourses', op.data.courseId)
+      }
       // A new LOTO permit's window is judged against the site's shift clocks.
       if (op.path === 'lotoPermits') want('lotoSettings', 'shifts')
       const parent = parentOf(op.path)
       if (parent) want(parent[0], parent[1])
     }
     const rows = await readRows([...keys.values()])
+    // A permit's public QR record is judged against the permit it names
+    // (permitMirrorProblem). A merge update does not carry permitId, so it is
+    // read from the stored record, and the permit is loaded and guarded too.
+    const permitKeys = []
+    for (const op of ops) {
+      if (op.path !== 'permitQr') continue
+      const stored = rows.get(keyOf('permitQr', op.id))
+      const permitId = String(op.data?.permitId || (stored && parse(stored.data)?.permitId) || '')
+      if (permitId && !keys.has(keyOf('permits', permitId))) {
+        want('permits', permitId)
+        permitKeys.push(['permits', permitId])
+      }
+    }
+    if (permitKeys.length) for (const [k, row] of await readRows(permitKeys)) rows.set(k, row)
     const { ctx } = await contextFor(session, rows)
 
     for (const seen of expect) {
@@ -369,10 +389,10 @@ export function createEngine(db) {
       }
       if (op.type === 'createExclusive') {
         if (current) throw fail('already-exists', `sqlite: ${op.path}/${op.id} already exists`)
-        const data = applyPatch(undefined, op)
+        const data = serverStampedInsert(op.path, applyPatch(undefined, op), ctx, () => nextTimestamp())
         const why =
           insertAllowed(op.path, op.id, data, ctx, lookup) ||
-          invariantProblem(op.path, op.id, undefined, data, ctx)
+          invariantProblem(op.path, op.id, undefined, data, ctx, lookup)
         if (why)
           throw fail('permission-denied', `sqlite: create refused at ${op.path}/${op.id} (${why})`)
         state.set(k, { rev: 1, data })
@@ -387,12 +407,13 @@ export function createEngine(db) {
         // A set over a row the caller cannot see: refused, never overwritten.
         throw fail('permission-denied', `sqlite: write refused at ${op.path}/${op.id}`)
       }
-      const data = applyPatch(current?.data, op, () => nextTimestamp())
+      const patched = applyPatch(current?.data, op, () => nextTimestamp())
+      const data = current ? patched : serverStampedInsert(op.path, patched, ctx, () => nextTimestamp())
       const why = current
         ? updateAllowed(op.path, op.id, current.data, data, ctx) ||
-          invariantProblem(op.path, op.id, current.data, data, ctx)
+          invariantProblem(op.path, op.id, current.data, data, ctx, lookup)
         : insertAllowed(op.path, op.id, data, ctx, lookup) ||
-          invariantProblem(op.path, op.id, undefined, data, ctx)
+          invariantProblem(op.path, op.id, undefined, data, ctx, lookup)
       if (why)
         throw fail('permission-denied', `sqlite: write refused at ${op.path}/${op.id} (${why})`)
       state.set(k, { rev: (current?.rev || 0) + 1, data })
@@ -484,6 +505,8 @@ export function createEngine(db) {
     async list(session, path, opts = {}) {
       checkRole(session)
       const { ctx } = await contextFor(session)
+      const hidden = queryProblem(path, opts, ctx)
+      if (hidden) throw fail('permission-denied', `sqlite: query refused at ${path} (${hidden})`)
       if (await parentBlocked(path, ctx)) return []
       const params = [path]
       const scope = ctx.worker ? '' : scopeSql(path, ctx, params)
@@ -504,6 +527,8 @@ export function createEngine(db) {
     async count(session, path, opts = {}) {
       checkRole(session)
       const { ctx } = await contextFor(session)
+      const hidden = queryProblem(path, opts, ctx)
+      if (hidden) throw fail('permission-denied', `sqlite: query refused at ${path} (${hidden})`)
       if (await parentBlocked(path, ctx)) return 0
       const params = [path]
       const scope = ctx.worker ? '' : scopeSql(path, ctx, params)

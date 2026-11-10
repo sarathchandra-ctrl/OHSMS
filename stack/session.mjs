@@ -17,11 +17,16 @@ export function newSessionSecret() {
   return randomBytes(32).toString('base64url')
 }
 
-export function signSession(secret, { sub, authTime = Math.floor(Date.now() / 1000) } = {}) {
+// `ep` is the person's session epoch when the token was issued (the profile's
+// sessionEpoch). A token used to be good for its whole eight hours whatever
+// happened: a password change, a reset or a lost phone left a stolen session
+// working. Bumping the epoch ends every token issued before it
+// (handler.mjs liveSession).
+export function signSession(secret, { sub, authTime = Math.floor(Date.now() / 1000), ep = 0 } = {}) {
   if (!secret || !sub) throw new Error('session: secret and sub are required')
   const now = Math.floor(Date.now() / 1000)
   const header = b64({ alg: 'HS256', typ: 'JWT' })
-  const body = b64({ sub, iat: now, auth_time: authTime, exp: now + TTL_S })
+  const body = b64({ sub, iat: now, auth_time: authTime, exp: now + TTL_S, ep: Number(ep) || 0 })
   const sig = createHmac('sha256', secret).update(`${header}.${body}`).digest('base64url')
   return `${header}.${body}.${sig}`
 }
@@ -48,5 +53,9 @@ export function verifySession(secret, token) {
   if (!payload || typeof payload.sub !== 'string' || !payload.sub) return null
   if (typeof payload.exp !== 'number' || payload.exp * 1000 < Date.now()) return null
   if ('role' in payload || 'orgId' in payload || 'mustChangePassword' in payload) return null
-  return { sub: payload.sub, authTime: payload.auth_time || payload.iat }
+  return {
+    sub: payload.sub,
+    authTime: payload.auth_time || payload.iat,
+    ep: Number.isInteger(payload.ep) ? payload.ep : 0,
+  }
 }

@@ -261,6 +261,16 @@ export async function logTwoStepReset(uid, actor, userLabel) {
   })
 }
 
+/** Record an admin ending every session a person holds (done by the server job). */
+export async function logSessionsRevoked(uid, actor, userLabel) {
+  await logAudit(actor, AUDIT.USER_ROLE, {
+    target: 'user',
+    targetId: uid,
+    targetLabel: userLabel || uid,
+    summary: 'Signed out everywhere',
+  })
+}
+
 // ── Sites (shared across modules) ───────────────────────────────────────────
 // Same multiplexing as users — the site registry is read by nearly every module.
 const sharedSites = createSharedSubscription((_key, emit) => {

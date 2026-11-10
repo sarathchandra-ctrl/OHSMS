@@ -3,14 +3,9 @@
   "private": true,
   "version": "1.0.0",
   "type": "module",
-  "description": "Control plane and dedicated host for one own-stack company. docs/CONTROL-PLANE.md.",
+  "description": "The organization's server logic: run by the Cloudflare Worker (worker/server.js), and locally by scripts/dev-local.mjs.",
   "engines": {
     "node": ">=22"
   },
-  "scripts": {
-    "start": "node main.mjs"
-  },
-  "dependencies": {
-    "nodemailer": "^10.3.1"
-  }
+  "dependencies": {}
 }

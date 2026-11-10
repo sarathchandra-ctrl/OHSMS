@@ -6,6 +6,7 @@ import { useAuth } from '../../shared/auth/AuthContext'
 import {
   subscribeOrgUsers, setUserStatus, setUserRole, setUserAccess, grantAccessRequest, subscribeSites,
   logTwoStepReset,
+  logSessionsRevoked,
 } from '../../shared/org/orgData'
 import { ROLES, roleLabel } from '../../shared/auth/permissions'
 import { enabledModules } from '../../shared/modules/entitlements'
@@ -19,7 +20,7 @@ import {
 } from '../../shared/ui'
 import { initials } from '../../shared/lib/format'
 import AddEmployee, { temporaryPassword } from './AddEmployee'
-import { resetMemberPassword, resetMemberTotp } from '../../shared/functions'
+import { resetMemberPassword, resetMemberTotp, revokeMemberSessions } from '../../shared/functions'
 
 const STATUS_TONE = { approved: 'green', pending: 'amber', suspended: 'red' }
 const emptyScope = { sites: [], regions: [], entities: [] }
@@ -112,6 +113,20 @@ export default function Users() {
       modules: Array.isArray(a.modules) ? a.modules : null,
     })
     setManage(u)
+  }
+
+  const signOutEverywhere = async () => {
+    if (!manage) return
+    setBusy(true)
+    try {
+      await revokeMemberSessions({ uid: manage.uid })
+      await logSessionsRevoked(manage.uid, actor, manage.name)
+      toast.success(`${manage.name} is signed out on every device.`)
+    } catch (err) {
+      toastCaught(err, 'Sessions were not ended')
+    } finally {
+      setBusy(false)
+    }
   }
 
   const resetTwoStep = async () => {
@@ -497,6 +512,17 @@ export default function Users() {
                 </Button>
               )}
             </fieldset>
+
+            {manage.uid !== user?.uid && (
+              <div className="flex items-center justify-between gap-3 rounded-2xl border border-ink-100 p-3">
+                <p className="text-sm text-ink-700">
+                  End every session this person has open, on every device. They can sign in again.
+                </p>
+                <Button type="button" variant="ghost" onClick={signOutEverywhere} loading={busy} className="!py-1.5 flex-none text-xs">
+                  Sign out everywhere
+                </Button>
+              </div>
+            )}
           </form>
         )}
       </Modal>

@@ -1,5 +1,5 @@
 // A Cloudflare-D1-shaped database over Node's built-in SQLite, so the server
-// runs the same code in Docker and in tests as it does on Cloudflare:
+// runs the same code locally and in tests as it does on Cloudflare:
 //
 //   db.prepare(sql).bind(...params) -> statement
 //   statement.all()   -> { results: [row…] }

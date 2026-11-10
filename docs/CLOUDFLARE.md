@@ -1,17 +1,12 @@
 # Deploying on Cloudflare
 
-Two ways, chosen by the Worker's settings in `wrangler.jsonc`:
+OHSMS runs entirely on Cloudflare, with no server to manage. The Worker
+(`worker/index.js`) serves the app from the edge and runs the organization's
+server itself (`worker/server.js`, the same handler as `stack/handler.mjs`).
+The database is **Cloudflare D1** (SQLite) and uploaded files go to a private
+**R2** bucket.
 
-- **A. Everything on Cloudflare** (no server to manage). The Worker serves the
-  app *and* runs the server (`worker/server.js`). The database is
-  **Cloudflare D1** (SQLite); uploaded files go to an **R2** bucket.
-  `ORIGIN_URL` is empty and the `DB` binding is set. This is how the current
-  deployment runs.
-- **B. Cloudflare in front of your own server** (below, from "What you need").
-  The Worker serves the app and forwards server requests through a Cloudflare
-  Tunnel to the server in `selfhost/`. `ORIGIN_URL` is the Tunnel hostname.
-
-## A. Everything on Cloudflare
+## Setting up
 
 **Plan: Workers Paid ($5 a month) is required.** The Free plan does not
 fit this server, for three reasons that each fail in front of users:
@@ -86,22 +81,21 @@ fit this server, for three reasons that each fail in front of users:
    A forgotten password is reset by an administrator (Employees → Reset
    password).
 
-Limits of A: the only mail sent is password-reset links; D1 holds up to
+Limits: the only mail sent is password-reset links; D1 holds up to
 10 GB per database and runs one write at a time, which is ample for one
 organization. One record may be at most 1,900,000 bytes, under D1's
 2,000,000-byte row limit (`MAX_RECORD_BYTES` in `stack/engine.mjs`); a larger
 save is refused with `record too large` rather than failing inside D1. Files
 belong in R2, not inside records.
 
-**Scheduled jobs (A).** `wrangler.jsonc` sets two cron triggers that run the
+**Scheduled jobs.** `wrangler.jsonc` sets two cron triggers that run the
 server's own jobs (`stack/schedule.mjs`): LOTO due/overdue flags every five
 minutes, and nightly at 03:45 IST the Recycle Bin purge, the purge of LOTO
 permits closed more than a year ago, and the withdrawal of stale public permit
 pages. They deploy with the Worker. A run that hit a problem shows as a failed
-invocation under the Worker's logs. When the Worker forwards to your own
-server (B), the triggers do nothing; that server runs the jobs itself.
+invocation under the Worker's logs.
 
-**Backups (A).** D1 keeps 30 days of point-in-time history (Time Travel):
+**Backups.** D1 keeps 30 days of point-in-time history (Time Travel):
 `npx wrangler d1 time-travel restore ohsms --timestamp <time>`. For a copy
 you hold yourself: `npx wrangler d1 export ohsms --remote --output ohsms.sql`.
 
@@ -128,209 +122,30 @@ Email reset also needs `RESEND_API_KEY` and a verified `MAIL_FROM` setting.
 
 The workflow installs locked dependencies, runs lint and tests, builds the app,
 and deploys its assets and backend together. It then checks `/health` for the
-database, storage binding and deployed Git commit. Until all three secrets
-exist the job is skipped with a notice, so a pushed commit alone is not a live
-deployment.
-After supplying secrets, use **Actions → Deploy OHSMS → Run workflow**, branch `main`.
+database, storage binding and deployed Git commit.
 
-## B. Cloudflare in front of your own server
-
-OHSMS runs for **one organization**, on **that organization's server and
-Postgres database**. Cloudflare sits in front of it:
-
-```
- browser ──https──▶  Cloudflare Worker  (ehs.example.com)
-                      │  serves the app (dist/) from Cloudflare's edge
-                      │  forwards /data /auth/* /rpc/* /presign /blob
-                      │           /health /runtime-config.js
-                      ▼
-                     Cloudflare Tunnel  (ehs-origin.example.com, Access-protected)
-                      │  outbound-only connection, no open ports on the server
-                      ▼
-           organization's server:  cloudflared ─▶ app (stack/, :8080) ─▶ SQLite file
-                                                   └─ uploaded files on disk
-```
-
-The browser only ever talks to `ehs.example.com`, so sign-in cookies, the
-`#session` redirect and every API call are same-origin. The server never needs
-an inbound port.
-
-There is a simpler variant: skip the Worker and point the Tunnel's public
-hostname straight at `ehs.example.com`. The server already serves the built
-app itself. Use the Worker when you want the app's static files cached at the
-edge and the server reached only for data.
-
-Everything below uses placeholders (`ehs.example.com`, `ehs-origin.example.com`).
-Keep real hostnames, tokens and secrets out of the repository.
-
-## What you need
-
-- A Cloudflare account with the organization's domain on it (DNS managed by
-  Cloudflare).
-- A Linux server (VM or on-premises) with Docker and the Docker Compose plugin:
-  2 vCPU, 4 GB RAM, 40 GB disk is comfortable for a few hundred users.
-- Node 22 on the machine you deploy the Worker from (or use Cloudflare's Git
-  integration, step 5).
-
-## 1. Build the server image
-
-From the repository root:
-
-```bash
-docker build -f stack/Dockerfile -t ohsms-server:3.0.0 .
-```
-
-Push it to a registry the server can pull from, or build it on the server
-itself. The image contains the server (`stack/`) and a copy of the built app.
-
-## 2. Create the Tunnel
-
-Cloudflare dashboard → **Zero Trust → Networks → Tunnels → Create a tunnel**
-(type _Cloudflared_). Name it, for example `ohsms`. Copy the **tunnel token**
-it shows under _Install connector_. You do not run the install command it
-suggests: compose runs `cloudflared` for you.
-
-Under **Public hostnames**, add:
-
-| Subdomain / domain       | Service             |
-| ------------------------ | ------------------- |
-| `ehs-origin.example.com` | `HTTP` → `app:8080` |
-
-`app` is the server's name inside the compose network.
-
-**Protect the origin hostname with Cloudflare Access**, so only the Worker can
-reach it: Zero Trust → **Access → Applications → Add → Self-hosted** for
-`ehs-origin.example.com`, with a policy of action **Service Auth** that allows
-one **service token** (Access → Service credentials → Service tokens → Create).
-Keep the token's Client ID and Client Secret for step 5.
-
-## 3. Install on the server
-
-Copy the `selfhost/` folder to the server, then:
-
-```bash
-cd selfhost && cp .env.example .env && chmod 600 .env
-```
-
-Fill in `.env`:
-
-- `WEEHS_IMAGE` — the image from step 1.
-- `COMPOSE_PROFILES=cloudflare`
-- `DOMAIN=ehs.example.com` — the **Worker's** hostname, the one people type.
-  The server builds every file link on it.
-- `TUNNEL_TOKEN` — from step 2.
-- `DATA_KEY_MASTER` — `openssl rand -base64 32`.
-- `SESSION_SECRET` — `openssl rand -hex 32`.
-- `ADMIN_EMAIL`, `ADMIN_PASSWORD` — the first administrator (first start only).
-- Optionally the `SMTP_` settings and `MAIL_FROM`, for invitation mail.
-
-**Back up `.env` somewhere off the server.** Without `DATA_KEY_MASTER`
-encrypted fields cannot be opened.
-
-Start it:
-
-```bash
-docker compose up -d
-```
-
-```bash
-docker compose ps
-```
-
-The app and `cloudflared` should be running, and the tunnel should
-show **Healthy** in the dashboard. Caddy does not start with the `cloudflare`
-profile, and nothing listens on a public port.
-
-## 4. Point the Worker at the server
-
-`wrangler.jsonc` has one setting to change:
-
-```jsonc
-"vars": { "ORIGIN_URL": "https://ehs-origin.example.com" }
-```
-
-Then store the Access service token as Worker secrets (asked for
-interactively; never put them in the file):
-
-```bash
-npx wrangler secret put CF_ACCESS_CLIENT_ID
-```
-
-```bash
-npx wrangler secret put CF_ACCESS_CLIENT_SECRET
-```
-
-## 5. Deploy the Worker
-
-From a checkout, signed in with `npx wrangler login`:
-
-```bash
-npm ci
-```
-
-```bash
-npm run deploy:cloudflare
-```
-
-That builds the app (`dist/`) and deploys `worker/index.js` with it. Or connect
-the repository in the Cloudflare dashboard (**Workers & Pages → Create → Import
-a repository**) with build command `npm ci && npm run build` and deploy command
-`npx wrangler deploy`; every push to `main` then redeploys the Worker.
-
-Finally give the Worker its address: Worker → **Settings → Domains & Routes →
-Add → Custom domain** → `ehs.example.com`.
-
-Check:
-
-```bash
-curl -s https://ehs.example.com/health
-```
-
-It answers `{"ok":true}` — that request went browser → Worker → Tunnel → server.
-
-## 6. Sign in
-
-Open `https://ehs.example.com` and sign in with `ADMIN_EMAIL` and
-`ADMIN_PASSWORD`. The organization and this first administrator were created
-when the server started; you are asked to choose your own password straight
-away. From there:
-
-1. **Settings** — organization details, departments, scope and granularity.
-2. **Sites** — add sites, including latitude and longitude.
-3. **Employees → Add employee** — each person gets a temporary password to
-   change at first sign-in. **Reset password** on the same page handles a
-   forgotten one.
+Until all three secrets exist the job **skips** the build and deploy and
+still shows as passed, with a notice saying why. A green run is therefore not
+proof of a live deployment: open the run and check that "Build and deploy the
+ohsms Worker" ran. After supplying secrets, use **Actions → Deploy OHSMS → Run
+workflow**, branch `main`.
 
 ## Updating
 
-- **App only** (UI change): redeploy the Worker (step 5).
-- **Server** (anything under `stack/`, or the schema): build a new image, set
-  `WEEHS_IMAGE` in `.env`, then `docker compose up -d`. The server applies its
-  schema on start; it never needs a manual migration step.
-
-Deploy the server first when a change touches both, so the app never calls a
-route the server does not have yet.
-
-## Backups
-
-Back up two things, together:
-
-1. The `data` volume — the database file (`ohsms.sqlite`) and uploaded files.
-   For a consistent copy while running:
-   `docker compose exec app node -e "new (require('node:sqlite').DatabaseSync)('/srv/stack/data/ohsms.sqlite').exec(\"VACUUM INTO '/srv/stack/data/backup.sqlite'\")"`
-   then copy `backup.sqlite` and the `files/` folder off the server.
-2. `.env` — the keys.
-
-A backup is only real once it has been restored somewhere else and signed in to.
+Push to `main` (or run the workflow). The app and the server deploy together
+as one Worker, so the app never calls a route the server does not have. The
+Worker applies its schema on the first request after a deploy; there is no
+manual migration step.
 
 ## Troubleshooting
 
-| Symptom                                                 | Likely cause                                                                                       |
-| ------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
-| `/health` answers 503 `not configured: PUBLIC_ORIGIN`  | (A) the address was never set on the Worker: deploy once with `--var PUBLIC_ORIGIN:https://<address>`, or set it under Settings → Variables and Secrets |
-| `/health` answers 503 `ORIGIN_URL is not configured`    | `ORIGIN_URL` missing or not `https://` in `wrangler.jsonc`                                         |
-| `/health` answers 403 from Cloudflare Access            | Worker secrets `CF_ACCESS_CLIENT_ID` / `_SECRET` missing or wrong                                  |
-| `/health` answers 502/530                               | Tunnel down: `docker compose logs cloudflared`, or the hostname's service is not `http://app:8080` |
-| Sign-in returns to the IdP with "redirect URI mismatch" | `DOMAIN` in `.env` is not the Worker hostname, or the IdP has another callback registered          |
-| Sign-in says "That email and password do not match" for the admin | the server started without `ADMIN_EMAIL`/`ADMIN_PASSWORD`, or an admin already existed |
-| Uploads fail                                            | the `files` volume is not writable, or the attachment is over 2 MB                                    |
+| Symptom | Likely cause |
+| --- | --- |
+| `/health` answers 503 `not configured: PUBLIC_ORIGIN` | the address was never set on the Worker: deploy once with `--var PUBLIC_ORIGIN:https://<address>`, or set it under Settings → Variables and Secrets |
+| `/health` answers 503 `The DB binding is not configured` | the `d1_databases` binding is missing or misnamed in `wrangler.jsonc` |
+| `/health` does not include `"files":true` | the `FILES` R2 binding is missing, or R2 is not enabled on the account |
+| Sign-in says "That email and password do not match" for the admin | the Worker started without `ADMIN_EMAIL`/`ADMIN_PASSWORD`, or an admin already existed |
+| Sign-in fails with error 1102 | the account is on Workers Free; a password check needs more CPU than Free allows (see Setting up) |
+| A save fails with `record too large` | the record is over 1,900,000 bytes; attach files through R2 rather than inside the record |
+| Uploads fail | the R2 binding is missing, or the attachment is over 2 MB |
+| The deploy run is green but nothing changed | the deployment secrets are not set, so the deploy step was skipped (see above) |

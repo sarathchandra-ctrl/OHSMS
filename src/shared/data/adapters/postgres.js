@@ -13,7 +13,7 @@
 // Timestamps are revived with .seconds / .toDate() / .toMillis(). They are
 // not ISO strings.
 // ─────────────────────────────────────────────────────────────────────────────
-import { currentAccessToken } from '../../auth/ownStackSession'
+import { currentAccessToken, noteSessionEnded } from '../../auth/ownStackSession'
 import {
   arrayUnion,
   assertOpts,
@@ -370,6 +370,7 @@ function httpIo(baseUrl) {
       })
       const payload = await res.json().catch(() => ({}))
       if (!res.ok) {
+        noteSessionEnded(res, payload)
         throw fail(
           payload.code || 'unavailable',
           payload.message || `data request failed (${res.status})`

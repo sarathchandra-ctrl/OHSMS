@@ -11,9 +11,8 @@
 //                     permits a year on (purgeClosedLotoPermits), and stale
 //                     public permit pages withdrawn (withdrawStaleMirrors)
 //
-// On Cloudflare these run from the cron triggers in wrangler.jsonc
-// (worker/index.js `scheduled`); on a self-hosted server, from
-// startNodeSchedule below. Both call the same two functions.
+// They run from the cron triggers in wrangler.jsonc (worker/index.js
+// `scheduled`).
 //
 // Each nightly job runs even if an earlier one failed, and the run then
 // throws, naming every failure: an unattended deletion job that fails quietly
@@ -56,35 +55,4 @@ export function jobForCron(cron) {
   if (cron === FREQUENT_CRON) return 'frequent'
   if (cron === NIGHTLY_CRON) return 'nightly'
   return ''
-}
-
-/**
- * The same schedule inside a long-running Node server. Checks once a minute;
- * a job still running is not started again, and the nightly run happens once
- * per UTC day at or after 22:15. `log` receives a line per failure.
- */
-export function startNodeSchedule({ engine, blobStore = null, log = console.error, clock = () => new Date() }) {
-  let busy = false
-  let lastNightly = ''
-  const tick = async () => {
-    if (busy) return
-    busy = true
-    const now = clock()
-    try {
-      if (now.getUTCMinutes() % 5 === 0) {
-        await runFrequent(engine, { now: now.getTime() }).catch((e) => log(`scheduled: ${e.message}`))
-      }
-      const day = now.toISOString().slice(0, 10)
-      const due = now.getUTCHours() * 60 + now.getUTCMinutes() >= 22 * 60 + 15
-      if (due && lastNightly !== day) {
-        lastNightly = day
-        await runNightly(engine, { blobStore, now: now.getTime() }).catch((e) => log(`scheduled: ${e.message}`))
-      }
-    } finally {
-      busy = false
-    }
-  }
-  const timer = setInterval(tick, 60 * 1000)
-  timer.unref?.()
-  return { stop: () => clearInterval(timer), tick }
 }

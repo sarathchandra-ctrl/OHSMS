@@ -2,6 +2,7 @@ import { useState } from 'react'
 import toast from 'react-hot-toast'
 import { toastCaught } from '../../../../shared/lib/toastCaught'
 import { useAuth } from '../../context/AuthContext'
+import { useAuth as useAppAuth } from '../../../../shared/auth/AuthContext'
 import { IMPORT_KINDS, importRows, templateCsv } from '../../utils/csvImport'
 import { addLock } from '../../services/locks'
 import { addGroupNumber } from '../../services/groupNumbers'
@@ -31,6 +32,7 @@ async function applyRow(kind, row, { user }) {
 
 export default function ImportData() {
   const { profile, platformRole } = useAuth()
+  const { isManager } = useAppAuth()
   const [kind, setKind] = useState('locks')
   const [text, setText] = useState('')
   const [busy, setBusy] = useState(false)
@@ -53,6 +55,11 @@ export default function ImportData() {
     }
     if (kind === 'groups' && platformRole !== 'admin') {
       toast.error('Only an Admin can import group numbers')
+      return
+    }
+    // The server refuses technicians from anyone but a manager (stack/policy.mjs).
+    if (kind === 'technicians' && !isManager) {
+      toast.error('Only a manager can import technicians')
       return
     }
     setBusy(true)

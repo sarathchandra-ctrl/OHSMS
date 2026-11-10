@@ -53,6 +53,6 @@ the server's own `/health` (database, file storage, deployed commit).
 Metrics, SLOs, on-call rotations, dashboards. The scheduled jobs
 (`stack/schedule.mjs`: the Recycle Bin purge, the closed LOTO permit purge,
 stale public permit pages, LOTO due/overdue flags) finish their work and then
-fail if anything went wrong, naming every failure: on Cloudflare a failed cron
-invocation in the Worker's logs, self-hosted a line in the container log.
+fail if anything went wrong, naming every failure: a failed cron invocation
+in the Worker's logs.
 Nothing alerts on those yet.

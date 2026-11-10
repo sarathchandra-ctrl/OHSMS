@@ -3,7 +3,7 @@
   "private": true,
   "version": "1.0.0",
   "type": "module",
-  "description": "OHS Management System — single-organization Occupational Health & Safety platform (incidents, HIRA, inspections, audits, permit-to-work, LOTO, fire marshal, HSE committee, training, documents/SDS), self-hosted on the organization's own server and Postgres database.",
+  "description": "OHS Management System — single-organization Occupational Health & Safety platform (incidents, HIRA, inspections, audits, permit-to-work, LOTO, fire marshal, HSE committee, training, documents/SDS), on Cloudflare Workers with D1 and R2.",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
@@ -16,7 +16,6 @@
     "format:check": "prettier --check .",
     "mobile:sync": "npm run build && npx cap sync ios",
     "mobile:ios": "npx cap open ios",
-    "server": "node stack/main.mjs",
     "deploy:cloudflare": "npm run build && wrangler deploy",
     "dev:local": "node scripts/dev-local.mjs"
   },

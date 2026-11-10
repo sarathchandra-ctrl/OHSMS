@@ -2,8 +2,8 @@ import { PlugZap } from 'lucide-react'
 import BrandMark from '../shared/branding/BrandMark'
 
 // Shown when the app cannot find its organization's server: the database is
-// not set up yet, the Worker has neither a database nor an ORIGIN_URL, the
-// Tunnel is down, or a local build has no VITE_DATA_GATEWAY.
+// not set up yet, the Worker has no database binding, or a local build has no
+// VITE_DATA_GATEWAY.
 // docs/CLOUDFLARE.md is the procedure.
 export default function SetupNeeded() {
   return (

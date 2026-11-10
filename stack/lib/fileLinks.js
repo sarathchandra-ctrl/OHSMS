@@ -12,6 +12,14 @@
 // path under files/. The host is ignored when matching, so a link saved under
 // another address (a local dev server, an old hostname) is re-signed onto the
 // current one.
+//
+// The caller decides whether each link is re-signed (`resign` returns the new
+// link, or null to leave the stored one as it is). Re-signing everything that
+// looked like a link let anyone launder a path into a working download: type
+// a /blob URL naming a medical file into any field you may write, read the
+// record back, and the server signed it — around the rule /presign applies.
+// handler.mjs re-signs only a link the server itself signed, for a reader
+// /presign would give that file to.
 
 function ownPath(value) {
   if (typeof value !== 'string' || !value.includes('/blob?')) return null
@@ -25,16 +33,20 @@ function ownPath(value) {
   }
 }
 
-/** A copy of `data` with each of this server's download links re-signed by `sign(path)`. */
-export function refreshFileLinks(data, sign) {
+/**
+ * A copy of `data` with this server's download links replaced by
+ * `resign(path, link)`, wherever that returns a string.
+ */
+export function refreshFileLinks(data, resign) {
   if (typeof data === 'string') {
     const path = ownPath(data)
-    return path ? sign(path) : data
+    const fresh = path ? resign(path, data) : null
+    return typeof fresh === 'string' ? fresh : data
   }
-  if (Array.isArray(data)) return data.map((v) => refreshFileLinks(v, sign))
+  if (Array.isArray(data)) return data.map((v) => refreshFileLinks(v, resign))
   if (data && typeof data === 'object') {
     const out = {}
-    for (const [k, v] of Object.entries(data)) out[k] = refreshFileLinks(v, sign)
+    for (const [k, v] of Object.entries(data)) out[k] = refreshFileLinks(v, resign)
     return out
   }
   return data

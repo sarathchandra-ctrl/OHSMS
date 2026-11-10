@@ -42,6 +42,23 @@ const isCryptoKey = (path, id) =>
   collectionOf(path) === 'cryptoKeys' || (collectionOf(path) === 'meta' && id === 'cryptoKeys')
 const PUBLIC_MIRRORS = ['qr', 'permitQr', 'procedureQr']
 
+// ── Fields the server writes, whatever the client sent ──────────────────────
+
+// Keys, not prose: an action, module or target reads as a label in the Audit
+// Log, and free text there is a place to write "approved by the admin".
+const AUDIT_KEY = /^[a-zA-Z][a-zA-Z0-9_.-]{0,63}$/
+
+/**
+ * An audit entry's time and name are the server's to state. actorUid was
+ * pinned (S-12), but `at` and `actorName` were whatever the writer sent, so
+ * an entry could carry an admin's name and a backdated time. Applied by the
+ * engine to every non-server insert before the policy decides.
+ */
+export function serverStampedInsert(path, data, ctx, now) {
+  if (ctx.worker || collectionOf(path) !== 'auditLogs' || !data) return data
+  return { ...data, at: now(), actorName: str(ctx.profile?.name) || 'Unknown' }
+}
+
 // ── The caller ──────────────────────────────────────────────────────────────
 
 // A temporary password still to replace, or two-step login required and not
@@ -208,6 +225,20 @@ export function visibleRow(path, id, row, ctx) {
   if (path !== 'users' || !row || ctx.worker || isAdmin(ctx) || id === ctx.uid) return row
   const allowed = isManager(ctx) ? MANAGER_DIRECTORY_FIELDS : DIRECTORY_FIELDS
   return Object.fromEntries(Object.entries(row).filter(([k]) => allowed.includes(k)))
+}
+
+/**
+ * A users query that filters or sorts on a field this caller is not shown,
+ * or ''. visibleRow narrows what comes back, but a `where mfaEnabled == false`
+ * answered the question anyway: which colleagues have no two-step login, or
+ * still hold a temporary password. The rows that matched were the answer.
+ */
+export function queryProblem(path, opts, ctx) {
+  if (path !== 'users' || ctx.worker || isAdmin(ctx)) return ''
+  const allowed = isManager(ctx) ? MANAGER_DIRECTORY_FIELDS : DIRECTORY_FIELDS
+  const fields = [...(opts?.where || []).map((c) => c?.field), ...(opts?.orderBy ? [opts.orderBy[0]] : [])]
+  const hidden = fields.find((f) => !allowed.includes(String(f || '').split('.')[0]))
+  return hidden === undefined ? '' : `users-field:${hidden}`
 }
 
 // ── Reading ─────────────────────────────────────────────────────────────────
@@ -420,6 +451,30 @@ function restrictWrite(op, path, id, ctx, { next, prev } = {}) {
   if (op === 'insert' && isAuditor(ctx) && collectionOf(path) !== 'auditLogs') return 'auditor'
   if ((op === 'update' || op === 'delete') && isAuditor(ctx)) return 'auditor'
   if ((op === 'update' || op === 'delete') && collectionOf(path) === 'auditLogs') return 'audit-log'
+  // Who is an authorised technician is what decides who may be named on an
+  // isolation permit and hang a personal padlock (loto/utils/permitModel.js).
+  // Any employee with the LOTO module could add themselves, licence and all.
+  if (path === 'technicians' && !isManager(ctx)) return 'technicians'
+  // A training record is a certification. An employee writes one only by
+  // completing a course themselves (selfTrainingProblem, at insert), and
+  // never changes or removes one afterwards.
+  if ((op === 'update' || op === 'delete') && path === 'trainingRecords' && !isManager(ctx)) {
+    return 'training-record'
+  }
+  // An entry is in its writer's own name (S-12), with key-shaped labels.
+  // Here, not only in insert_audit: insert_writer let every employee who can
+  // write records past that branch, so the pin held for auditors alone.
+  if (op === 'insert' && collectionOf(path) === 'auditLogs') {
+    const d = next || {}
+    if (!ctx.uid || str(d.actorUid) !== ctx.uid) return 'audit-actor'
+    if (
+      !AUDIT_KEY.test(str(d.action)) ||
+      !AUDIT_KEY.test(str(d.module || 'core')) ||
+      !AUDIT_KEY.test(str(d.target || 'record'))
+    ) {
+      return 'audit-shape'
+    }
+  }
   // The LOTO activity log and each permit's timeline are what an investigator
   // reads after somebody is hurt: append-only, like the audit trail.
   if ((op === 'update' || op === 'delete') && isLotoLog(path)) return 'loto-log'
@@ -507,6 +562,10 @@ export function insertAllowed(path, id, data, ctx, lookup) {
   }
   const d = data || {}
   const signedOut = !ctx.uid
+  if (path === 'trainingRecords' && !isManager(ctx)) {
+    const self = selfTrainingProblem(d, ctx, lookup)
+    if (self) return self
+  }
 
   // insert_writer
   if (isWriter(ctx) && !specialPath(path)) return ''
@@ -661,6 +720,136 @@ export function decisionChanged(path, prev, next) {
     const before = str(at(prev, keys))
     const after = str(at(next, keys))
     if (before !== after && (states.includes(before) || states.includes(after))) return keys.join('.')
+  }
+  return ''
+}
+
+// ── Training an employee records for themselves ─────────────────────────────
+// My Learning lets a person mark a course complete (training/lib/data.js
+// selfCompleteTraining). That was the only shape checked by nobody: an
+// employee could write a "trainer-led" record for themselves, valid until
+// 2099, or one for a colleague. Now an employee's record must be exactly the
+// self-completion: theirs, flagged self, no trainer, dated today, and
+// expiring when the real course says it does.
+
+const isoDay = (date) =>
+  `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}-${String(date.getUTCDate()).padStart(2, '0')}`
+
+/** training/lib/status.js computeExpiry, in UTC: '' for a course that never expires. */
+export function trainingExpiry(completedOn, validityMonths) {
+  const months = Number(validityMonths) || 0
+  const [y, m, d] = String(completedOn || '').split('-').map(Number)
+  if (months <= 0 || !y || !m || !d) return ''
+  const base = new Date(Date.UTC(y, m - 1 + months, d))
+  if (base.getUTCDate() !== d) base.setUTCDate(0)
+  return isoDay(base)
+}
+
+function selfTrainingProblem(d, ctx, lookup, now = Date.now()) {
+  if (d.loggedBy !== 'self' || str(d.employeeUid) !== ctx.uid || str(d.createdBy) !== ctx.uid) {
+    return 'training-self'
+  }
+  if (str(d.trainerName)) return 'training-trainer'
+  // The person's own "today" may be a day either side of the server's.
+  const day = 24 * 60 * 60 * 1000
+  const today = [now - day, now, now + day].map((t) => isoDay(new Date(t)))
+  if (!today.includes(str(d.completedOn))) return 'training-date'
+  const course = lookup('trainingCourses', str(d.courseId))
+  if (!course) return 'training-course'
+  const months = Number(course.validityMonths) || 0
+  if ((Number(d.validityMonths) || 0) !== months) return 'training-validity'
+  if (str(d.expiresOn) !== trainingExpiry(d.completedOn, months)) return 'training-expiry'
+  return ''
+}
+
+// ── Work permits after a decision, and their public QR record ───────────────
+// An employee carries out a permit's work, so `permits` is a field
+// collection (any employee may write it) and approving is a manager's
+// (DECISION_STATES). That left everything around the decision open:
+//   • on an approved permit an employee could push validTo out, and an
+//     expired permit read as in progress again with no extension approved;
+//     or rewrite its hazards and PPE after the approvers had signed them;
+//   • the public QR record (permitQr) carried copies of the approvals, and
+//     nothing tied them to the permit: an employee could mark an unapproved
+//     permit approved and current on the page read at the work location.
+
+// After a decision a non-manager may only move the permit along: ask for
+// closure or an extension, record an unsafe observation's closure, and keep
+// the derived status and the mailed report current. The app writes nothing
+// else to a decided permit (ptw/lib/data.js).
+const AFTER_DECISION_FIELDS = [
+  'closure', 'extension', 'closedDueToObservation', 'storedStatus', 'updatedAt',
+  'reportPdfPath', 'qrToken',
+]
+
+function approvedPermitProblem(prev, next) {
+  const decided = (keys) => DECIDED.includes(str(at(prev, keys)))
+  if (decided(['engineering', 'status']) || decided(['operations', 'status'])) {
+    const field = changedKeys(prev, next).find((k) => !AFTER_DECISION_FIELDS.includes(k))
+    if (field) return `permit-decided:${field}`
+  }
+  // An approved extension's end date became the permit's validTo; it is not
+  // an employee's to move afterwards.
+  if (
+    (decided(['extension', 'engineering', 'status']) || decided(['extension', 'operations', 'status'])) &&
+    str(at(prev, ['extension', 'newValidTo'])) !== str(at(next, ['extension', 'newValidTo']))
+  ) {
+    return 'permit-decided:extension.newValidTo'
+  }
+  return ''
+}
+
+// What the QR record copies from its permit. The public page works the
+// status out from these (derivePermitStatus), so they must be the permit's:
+// for every writer, managers included, since the copy is only ever written
+// after the permit (ptw/lib/data.js mirrorStatusFields, liveFields).
+const orPending = (permit, keys, whenAbsent = '') =>
+  at(permit, keys.slice(0, -1)) ? str(at(permit, keys)) || 'pending' : whenAbsent
+const MIRROR_FROM_PERMIT = [
+  [['engineering', 'status'], (p) => str(at(p, ['engineering', 'status'])) || 'pending'],
+  [['operations', 'status'], (p) => str(at(p, ['operations', 'status'])) || 'pending'],
+  ...['closure', 'extension'].flatMap((block) =>
+    ['engineering', 'operations'].map((who) => [
+      [block, who, 'status'],
+      (p) => (at(p, [block]) ? orPending(p, [block, who, 'status'], 'pending') : ''),
+    ])
+  ),
+  [['extension', 'newValidTo'], (p) => (at(p, ['extension']) ? str(at(p, ['extension', 'newValidTo'])) : '')],
+  [['validFrom'], (p) => str(p.validFrom)],
+  [['validTo'], (p) => str(p.validTo)],
+  [['permitNo'], (p) => str(p.permitNo)],
+  [['docId'], (p) => str(p.docId)],
+  [['site'], (p) => str(p.site)],
+  [['typeOfWork'], (p) => str(p.typeOfWork)],
+]
+// The display half: the permit's own value, or blanked once the job is over
+// (withdrawnFields in ptw/lib/publicPermit.js). Never a third thing.
+const MIRROR_DISPLAY = {
+  jobLocation: [(p) => str(p.jobLocation), ''],
+  jobDescription: [(p) => str(p.jobDescription), ''],
+  issuingDepartment: [(p) => str(p.issuingDepartment), ''],
+  issuedToName: [(p) => str(p.issuedToName), ''],
+  hazards: [(p) => p.hazards || [], []],
+  ppe: [(p) => p.ppe || [], []],
+  precautions: [(p) => p.precautions || [], []],
+  jsa: [(p) => p.jsa || [], []],
+  participantCount: [(p) => (Array.isArray(p.participants) ? p.participants.length : 0), 0],
+  fireWatcherCount: [(p) => (Array.isArray(p.fireWatchers) ? p.fireWatchers.length : 0), 0],
+  hasConfinedWatcher: [(p) => Boolean(p.confinedWatcher), false],
+}
+const same = (a, b) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null)
+
+/** The first field of a permit's QR record that disagrees with the permit, or ''. */
+export function permitMirrorProblem(token, mirror, permit) {
+  if (!permit) return 'no-permit'
+  if (str(permit.qrToken) !== str(token)) return 'token'
+  for (const [keys, expected] of MIRROR_FROM_PERMIT) {
+    if (str(at(mirror, keys)) !== expected(permit)) return keys.join('.')
+  }
+  if (!same(mirror?.closedDueToObservation, permit.closedDueToObservation)) return 'closedDueToObservation'
+  for (const [field, [live, blank]] of Object.entries(MIRROR_DISPLAY)) {
+    if (!(field in (mirror || {}))) continue
+    if (!same(mirror[field], live(permit)) && !same(mirror[field], blank)) return field
   }
   return ''
 }
@@ -848,7 +1037,8 @@ const num = (v) => {
 
 /**
  * The checks that held whatever the policy said (the Postgres triggers):
- *   users_keep_privilege   role, status, site, access, department change only
+ *   users_keep_privilege   role, status, site, access, department, email,
+ *                          name and mfaRequired change only
  *                          by an approved admin, judged on the STORED actor;
  *                          nobody but the server clears mustChangePassword
  *                          or sets mfaEnabled (only the server has the secret)
@@ -856,7 +1046,7 @@ const num = (v) => {
  *   manager_decisions      a decision (DECISION_STATES): managers only
  * `prev` is undefined for an insert.
  */
-export function invariantProblem(path, id, prev, next, ctx) {
+export function invariantProblem(path, id, prev, next, ctx, lookup = () => undefined) {
   const n = next || {}
   if (prev && path === 'users' && !ctx.worker) {
     if (prev.mustChangePassword === true && n.mustChangePassword !== true) return 'password-flag'
@@ -864,6 +1054,10 @@ export function invariantProblem(path, id, prev, next, ctx) {
     // mfaEnabled says a verified authenticator exists. A client that could set
     // it would clear its own mfaRequired gate without ever enrolling.
     if (changed('mfaEnabled')) return 'mfa-flag'
+    // The epoch every session token is checked against (handler.mjs
+    // liveSession). Set back by a client, it would revive tokens a password
+    // change or an admin had ended.
+    if (changed('sessionEpoch')) return 'session-epoch'
     const changedText = (k) => str(prev[k]) !== str(n[k])
     const privileged =
       changed('role') ||
@@ -872,10 +1066,17 @@ export function invariantProblem(path, id, prev, next, ctx) {
       changed('access') ||
       changedText('department') ||
       changedText('dept') ||
-      changed('mfaRequired')
+      changed('mfaRequired') ||
+      // The address is the sign-in name and where reset links go. Anyone who
+      // could set it on their own profile could take a colleague's.
+      changedText('email') ||
+      // The name is what approvals, owner pickers and the Audit Log show.
+      // A self-rename to "Ana (Administrator)" made honest entries mislead.
+      changedText('name')
     if (privileged && !isAdmin(ctx)) return 'privilege'
   }
   if (!prev && path === 'users' && !ctx.worker && n.mfaEnabled != null) return 'mfa-flag'
+  if (!prev && path === 'users' && !ctx.worker && n.sessionEpoch != null) return 'session-epoch'
   if (!ctx.worker && mirrorProblem(path, prev, n)) return 'mirror-field'
   // A LOTO log entry is written in its writer's own name.
   if (!ctx.worker && !prev && isLotoLog(path) && str(n.by) !== ctx.uid) return 'loto-log-actor'
@@ -895,5 +1096,13 @@ export function invariantProblem(path, id, prev, next, ctx) {
     }
   }
   if (!ctx.worker && !isManager(ctx) && decisionChanged(path, prev, n)) return 'manager-decision'
+  if (!ctx.worker && !isManager(ctx) && path === 'permits' && prev) {
+    const frozen = approvedPermitProblem(prev, n)
+    if (frozen) return frozen
+  }
+  if (!ctx.worker && path === 'permitQr') {
+    const mirror = permitMirrorProblem(id, n, lookup('permits', str(n.permitId || prev?.permitId)))
+    if (mirror) return `mirror-permit:${mirror}`
+  }
   return ''
 }

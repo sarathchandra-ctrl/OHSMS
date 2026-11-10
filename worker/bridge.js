@@ -1,5 +1,5 @@
 // The smallest Node-shaped request/response stack/handler.mjs needs, over a
-// Fetch Request, so the same handler serves Docker and Cloudflare.
+// Fetch Request, so the same handler serves Cloudflare and local development.
 //
 // The handler reads `req.method`, `req.url` (path + query), `req.headers`
 // (lower-case keys) and iterates `req` for the body; it answers with

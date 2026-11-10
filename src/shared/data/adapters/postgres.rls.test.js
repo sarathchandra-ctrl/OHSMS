@@ -2,6 +2,7 @@ import { describe, expect, it, beforeAll } from 'vitest'
 import { openSqlite } from '../../../../stack/sqlite.mjs'
 import { applySchema, createEngine } from '../../../../stack/engine.mjs'
 import { createPostgresAdapter } from './postgres'
+import { mirrorDisplayFields } from '../../../modules/ptw/lib/publicPermit'
 
 // The access rules, through the real engine and the app's own data client.
 // SQLite has no row-level security: every rule here is stack/policy.mjs,
@@ -945,5 +946,328 @@ describe('two-step login flags', () => {
         mfaEnabled: true,
       })
     ).rejects.toThrow()
+  })
+})
+
+describe('the sign-in address', () => {
+  beforeAll(async () => {
+    await seed('users', 'emailOwner', { role: 'member', status: 'approved', name: 'Em', email: 'em@example.test' })
+  })
+
+  it("refuses a member taking a colleague's address, or changing their own", async () => {
+    await expect(
+      as('memberA').update('users', 'memberA', { email: 'ada@example.test' })
+    ).rejects.toThrow()
+    await expect(
+      as('emailOwner').update('users', 'emailOwner', { email: 'EM@example.test ' })
+    ).rejects.toThrow()
+    await expect(as('managerA').update('users', 'emailOwner', { email: 'mia@example.test' })).rejects.toThrow()
+    expect((await adminEngine.get(null, 'users', 'emailOwner')).email).toBe('em@example.test')
+  })
+
+  it('leaves correcting an address to an admin', async () => {
+    await as('adminA').update('users', 'emailOwner', { email: 'emma@example.test' })
+    expect((await adminEngine.get(null, 'users', 'emailOwner')).email).toBe('emma@example.test')
+  })
+})
+
+describe('audit entries say who and when, as the server knows it', () => {
+  const entry = (extra = {}) => ({
+    actorUid: 'memberA',
+    actorName: 'Ada (Administrator)',
+    action: 'record.update',
+    module: 'ptw',
+    target: 'permit',
+    summary: 'x',
+    at: { __ohsms: 'ts', s: 1, ns: 0 },
+    ...extra,
+  })
+
+  it("stamps the writer's stored name and the server's time over what was sent", async () => {
+    const before = Date.now()
+    await as('memberA').set('auditLogs', 'forged1', entry())
+    const got = await adminEngine.get(null, 'auditLogs', 'forged1')
+    expect(got.actorName).toBe('Mo')
+    expect(got.at.toMillis()).toBeGreaterThanOrEqual(before - 1000)
+  })
+
+  it('refuses prose in the fields the log shows as labels', async () => {
+    for (const extra of [
+      { action: 'Permit approved by Ada' },
+      { module: 'ptw <b>' },
+      { target: ' ' },
+      { action: '' },
+    ]) {
+      await expect(as('memberA').set('auditLogs', `bad-${Math.random()}`, entry(extra))).rejects.toThrow()
+    }
+  })
+
+  it('still refuses an entry in someone else’s name', async () => {
+    await expect(as('memberA').set('auditLogs', 'forged2', entry({ actorUid: 'adminA' }))).rejects.toThrow()
+  })
+
+  it('refuses a self-rename, and leaves renaming to an admin', async () => {
+    await expect(as('memberA').update('users', 'memberA', { name: 'Mo (Administrator)' })).rejects.toThrow()
+    await expect(as('managerA').update('users', 'memberA', { name: 'Mo M' })).rejects.toThrow()
+    await as('adminA').update('users', 'auditorA', { name: 'Audrey' })
+    expect((await adminEngine.get(null, 'users', 'auditorA')).name).toBe('Audrey')
+  })
+})
+
+describe('work permits after a decision, and their public QR record', () => {
+  const window = { validFrom: '2026-11-10T06:00:00.000Z', validTo: '2026-11-10T14:00:00.000Z' }
+  const decision = (status) => ({ status, by: 'managerA', byName: 'Mia', at: '2026-11-10T06:10:00.000Z', note: '' })
+  const permit = (id, extra = {}) => ({
+    permitNo: `PTW-2026-${id}`,
+    docId: `D-${id}`,
+    qrToken: `tok-${id}`,
+    site: 'Depot',
+    typeOfWork: 'hot_work',
+    jobLocation: 'Bay 2',
+    jobDescription: 'Weld rail',
+    issuedToName: 'Raj',
+    hazards: ['fire'],
+    ppe: ['gloves'],
+    participants: [{ name: 'A' }, { name: 'B' }],
+    engineering: { status: 'pending' },
+    operations: { status: 'pending' },
+    closure: null,
+    extension: null,
+    storedStatus: 'draft',
+    createdBy: 'memberA',
+    ...window,
+    ...extra,
+  })
+  // What ptw/lib/data.js writes: mirrorDisplayFields + mirrorStatusFields.
+  const statusOf = (p) => ({
+    storedStatus: p.storedStatus,
+    engineering: { status: p.engineering?.status || 'pending' },
+    operations: { status: p.operations?.status || 'pending' },
+    closure: p.closure
+      ? { engineering: { status: p.closure.engineering?.status || 'pending' }, operations: { status: p.closure.operations?.status || 'pending' } }
+      : null,
+    extension: p.extension
+      ? { engineering: { status: p.extension.engineering?.status || 'pending' }, operations: { status: p.extension.operations?.status || 'pending' }, newValidTo: p.extension.newValidTo || null }
+      : null,
+    closedDueToObservation: p.closedDueToObservation || null,
+    validFrom: p.validFrom || null,
+    validTo: p.validTo || null,
+  })
+  const mirrorOf = (id, p) => ({
+    orgName: 'Keel Works',
+    permitId: id,
+    token: p.qrToken,
+    permitNo: p.permitNo,
+    docId: p.docId,
+    site: p.site,
+    ...mirrorDisplayFields(p, Date.parse('2026-11-10T07:00:00.000Z')),
+    ...statusOf(p),
+  })
+  const approved = { engineering: decision('approved'), operations: decision('approved') }
+
+  beforeAll(async () => {
+    await seed('permits', 'pOpen', permit('1'))
+    await seed('permits', 'pApproved', permit('2', approved))
+    await seed('permitQr', 'tok-2', mirrorOf('pApproved', permit('2', approved)))
+    await seed('permits', 'pExtended', permit('3', {
+      ...approved,
+      extension: { newValidTo: '2026-11-10T18:00:00.000Z', engineering: decision('approved'), operations: decision('approved') },
+      validTo: '2026-11-10T18:00:00.000Z',
+    }))
+  })
+
+  it('refuses an employee moving the dates or rewriting the content of an approved permit', async () => {
+    for (const data of [
+      { validTo: '2099-01-01T00:00:00.000Z' },
+      { validFrom: '2026-11-11T06:00:00.000Z' },
+      { hazards: [] },
+      { jobDescription: 'Something else' },
+    ]) {
+      await expect(as('memberA').update('permits', 'pApproved', data), JSON.stringify(data)).rejects.toThrow()
+    }
+    expect((await adminEngine.get(null, 'permits', 'pApproved')).validTo).toBe(window.validTo)
+  })
+
+  it('refuses an employee moving the end date of an approved extension', async () => {
+    await expect(
+      as('memberA').update('permits', 'pExtended', { 'extension.newValidTo': '2099-01-01T00:00:00.000Z' })
+    ).rejects.toThrow()
+  })
+
+  it('still lets an employee carry the permit along: closure, extension, an unsafe stop', async () => {
+    const pending = { engineering: { status: 'pending' }, operations: { status: 'pending' } }
+    await as('memberA').update('permits', 'pApproved', { closure: { requestedBy: 'memberA', ...pending } })
+    await as('memberA').update('permits', 'pApproved', {
+      extension: { requestedBy: 'memberA', newValidTo: '2026-11-10T20:00:00.000Z', ...pending },
+    })
+    await as('memberA').update('permits', 'pApproved', {
+      closedDueToObservation: { observationId: 'o1', by: 'memberA' },
+      storedStatus: 'closed_noncompliance',
+    })
+    // ...and an unapproved draft stays theirs to edit.
+    await as('memberA').update('permits', 'pOpen', { hazards: ['fire', 'fumes'] })
+  })
+
+  it('leaves a decided permit’s dates to a manager', async () => {
+    await as('managerA').update('permits', 'pExtended', { validTo: '2026-11-10T19:00:00.000Z' })
+  })
+
+  it('accepts the QR record the app writes, from an employee', async () => {
+    await as('memberA').set('permitQr', 'tok-1', mirrorOf('pOpen', await adminEngine.get(null, 'permits', 'pOpen')))
+    const now = await adminEngine.get(null, 'permits', 'pApproved')
+    const { orgName: _o, permitId: _p, token: _t, ...merge } = mirrorOf('pApproved', now)
+    await as('memberA').set('permitQr', 'tok-2', merge, { merge: true })
+  })
+
+  it('refuses a QR record that disagrees with its permit, from anyone', async () => {
+    const real = mirrorOf('pOpen', await adminEngine.get(null, 'permits', 'pOpen'))
+    for (const fake of [
+      { engineering: { status: 'approved' }, operations: { status: 'approved' }, storedStatus: 'approved' },
+      { validTo: '2099-01-01T00:00:00.000Z' },
+      { hazards: ['none'] },
+      { issuedToName: 'Someone else' },
+    ]) {
+      for (const uid of ['memberA', 'managerA']) {
+        await expect(
+          as(uid).set('permitQr', 'tok-1', { ...real, ...fake }),
+          `${uid} ${JSON.stringify(fake)}`
+        ).rejects.toThrow()
+      }
+    }
+    // Blanking the detail once the job is over is the app's own move.
+    await as('memberA').set('permitQr', 'tok-1', { ...real, hazards: [], jobDescription: '', withdrawn: true })
+  })
+
+  it('refuses a QR record for no permit, or under another permit’s token', async () => {
+    const real = mirrorOf('pOpen', await adminEngine.get(null, 'permits', 'pOpen'))
+    await expect(as('memberA').set('permitQr', 'tok-x', { ...real, token: 'tok-x' })).rejects.toThrow()
+    await expect(
+      as('memberA').set('permitQr', 'tok-ghost', { ...real, permitId: 'nope', token: 'tok-ghost' })
+    ).rejects.toThrow()
+  })
+})
+
+describe('the people directory cannot be searched by what it hides', () => {
+  beforeAll(async () => {
+    await seed('users', 'noMfa', { role: 'member', status: 'approved', name: 'Nia', mfaEnabled: false, mustChangePassword: true })
+  })
+
+  it('refuses an employee or a manager filtering or sorting people by a hidden field', async () => {
+    for (const uid of ['memberA', 'managerA', 'auditorA']) {
+      for (const opts of [
+        { where: [{ field: 'mfaEnabled', op: '==', value: false }] },
+        { where: [{ field: 'mustChangePassword', op: '==', value: true }] },
+        { where: [{ field: 'accessRequest.sites', op: '!=', value: null }] },
+        { orderBy: ['mfaRequired', 'desc'] },
+      ]) {
+        await expect(as(uid).list('users', opts), `${uid} ${JSON.stringify(opts)}`).rejects.toThrow()
+        await expect(as(uid).count('users', opts), `${uid} count`).rejects.toThrow()
+      }
+    }
+    // A manager may search by access, which a manager is shown; an employee may not.
+    const byAccess = { where: [{ field: 'access.sites', op: '!=', value: null }] }
+    await as('managerA').list('users', byAccess)
+    await expect(as('memberA').list('users', byAccess)).rejects.toThrow()
+  })
+
+  it('still lets anyone search by what the directory shows, and an admin by anything', async () => {
+    const byName = { where: [{ field: 'name', op: '==', value: 'Nia' }], orderBy: ['name', 'asc'] }
+    expect((await as('memberA').list('users', byName)).map((u) => u.id)).toEqual(['noMfa'])
+    const flagged = await as('adminA').list('users', { where: [{ field: 'mfaEnabled', op: '==', value: false }] })
+    expect(flagged.map((u) => u.id)).toContain('noMfa')
+  })
+})
+
+describe('certifying yourself', () => {
+  const todayIso = () => new Date().toISOString().slice(0, 10)
+  beforeAll(async () => {
+    await seed('technicians', 'techReal', {
+      name: 'Ravi',
+      lockNo: 'P-1',
+      licenceNo: 'WL-1',
+      licenceExp: '2025-01-01',
+      active: true,
+      createdBy: 'managerA',
+    })
+    await seed('trainingCourses', 'confined', { name: 'Confined space', validityMonths: 12 })
+    await seed('trainingCourses', 'induction', { name: 'Induction', validityMonths: 0 })
+  })
+
+  it('leaves the technician register to managers', async () => {
+    await expect(
+      as('memberA').set('technicians', 'techSelf', {
+        name: 'Mo',
+        lockNo: 'P-9',
+        licenceNo: 'MADE-UP',
+        licenceExp: '2099-01-01',
+        active: true,
+        createdBy: 'memberA',
+      })
+    ).rejects.toThrow()
+    await expect(as('memberA').update('technicians', 'techReal', { active: false })).rejects.toThrow()
+    await expect(as('memberA').remove('technicians', 'techReal')).rejects.toThrow()
+    await as('managerA').update('technicians', 'techReal', { licenceExp: '2027-01-01' })
+    await as('managerA').set('technicians', 'techNew', { name: 'Ana', lockNo: 'P-2', licenceNo: 'WL-2', active: true, createdBy: 'managerA' })
+  })
+
+  // What My Learning writes (training/lib/data.js selfCompleteTraining).
+  const selfRecord = (extra = {}) => {
+    const completedOn = todayIso()
+    const [y, m, d] = completedOn.split('-').map(Number)
+    const exp = new Date(Date.UTC(y, m - 1 + 12, d))
+    if (exp.getUTCDate() !== d) exp.setUTCDate(0)
+    return {
+      courseId: 'confined',
+      courseName: 'Confined space',
+      category: 'Other',
+      validityMonths: 12,
+      employeeUid: 'memberA',
+      employeeName: 'Mo',
+      trainerName: '',
+      completedOn,
+      expiresOn: exp.toISOString().slice(0, 10),
+      loggedBy: 'self',
+      createdBy: 'memberA',
+      ...extra,
+    }
+  }
+
+  it('accepts the self-completion the app writes', async () => {
+    await as('memberA').set('trainingRecords', 'selfOk', selfRecord())
+    await as('memberA').set(
+      'trainingRecords',
+      'selfNoExpiry',
+      selfRecord({ courseId: 'induction', courseName: 'Induction', validityMonths: 0, expiresOn: '' })
+    )
+  })
+
+  it('refuses an employee certifying themselves any other way, or a colleague', async () => {
+    for (const [label, data] of [
+      ['trainer-led', selfRecord({ trainerName: 'Chief Trainer', loggedBy: undefined })],
+      ['not flagged self', selfRecord({ loggedBy: undefined })],
+      ['a colleague', selfRecord({ employeeUid: 'managerA', employeeName: 'Mia' })],
+      ['valid until 2099', selfRecord({ expiresOn: '2099-01-01' })],
+      ['a longer validity', selfRecord({ validityMonths: 120 })],
+      ['backdated', selfRecord({ completedOn: '2024-01-01' })],
+      ['a course that does not exist', selfRecord({ courseId: 'ghost' })],
+    ]) {
+      await expect(as('memberA').set('trainingRecords', `bad-${label}`, data), label).rejects.toThrow()
+    }
+  })
+
+  it('refuses an employee changing or removing a record afterwards', async () => {
+    await expect(as('memberA').update('trainingRecords', 'selfOk', { expiresOn: '2099-01-01' })).rejects.toThrow()
+    await expect(as('memberA').remove('trainingRecords', 'selfOk')).rejects.toThrow()
+  })
+
+  it('leaves trainer-led records, for anyone, to managers', async () => {
+    await as('managerA').set('trainingRecords', 'logged', {
+      courseId: 'confined',
+      employeeUid: 'memberA',
+      trainerName: 'Chief Trainer',
+      completedOn: '2026-01-05',
+      expiresOn: '2027-01-05',
+      createdBy: 'managerA',
+    })
   })
 })

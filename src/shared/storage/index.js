@@ -3,7 +3,8 @@
 //
 // Callers deal in {url, path} and never see the backend. The backend is the
 // presign endpoint (adapters/s3.js): by default this installation's own server,
-// which keeps the bytes on its disk (stack/blobs.mjs). VITE_S3_PRESIGN_ENDPOINT
+// which keeps the bytes in R2 (worker/files.js; on disk locally, stack/blobs.mjs).
+// VITE_S3_PRESIGN_ENDPOINT
 // can point it at another presign host in front of an S3-compatible bucket.
 //
 // Adding a backend = one adapter file implementing { put(path, blob) -> {url},

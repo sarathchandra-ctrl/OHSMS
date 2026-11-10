@@ -1,6 +1,6 @@
 // The organization's server, running inside the Cloudflare Worker.
 //
-// Same handler as the Docker server (stack/handler.mjs). What differs:
+// Same handler as the local Node server (stack/handler.mjs). What differs:
 //   - The database is Cloudflare D1 (the DB binding): SQLite, with every
 //     access rule enforced in stack/policy.mjs before any SQL runs.
 //   - Uploaded files live in the FILES R2 bucket (worker/files.js).

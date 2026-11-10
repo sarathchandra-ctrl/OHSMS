@@ -1,4 +1,4 @@
-// The database: one SQLite file (Cloudflare D1, or Node's SQLite in Docker).
+// The database: SQLite (Cloudflare D1; Node's SQLite locally and in tests).
 //
 // Every record the app stores is a row of `documents`, addressed by
 // (collection path, id) with its fields as JSON — the shape the app's data

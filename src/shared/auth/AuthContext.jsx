@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useMemo, useState, useCallback } from 'react'
+import { createContext, useContext, useEffect, useMemo, useRef, useState, useCallback } from 'react'
 import { clearKeyring } from '../crypto'
 import { clearSharedSubscriptions } from '../org/sharedSubscription'
 import { startSession, endSession } from './sessionConstants'
@@ -13,6 +13,7 @@ import {
   clearAccessToken,
   currentAccessToken,
   ownStackGateway,
+  SESSION_ENDED_EVENT,
   sessionUid,
   setAccessToken,
 } from './ownStackSession'
@@ -119,7 +120,9 @@ export function AuthProvider({ children }) {
   const acceptToken = async (token) => {
     setAccessToken(token)
     const uid = sessionUid(token)
-    const sessionUser = { uid, getIdToken: async () => token }
+    // Read at call time: a job can hand this session a fresh token
+    // (adoptReissuedToken), and the one from sign-in then no longer works.
+    const sessionUser = { uid, getIdToken: async () => currentAccessToken() }
     setUser(sessionUser)
     startSession()
     await refreshProfile(uid)
@@ -136,6 +139,19 @@ export function AuthProvider({ children }) {
     setUser(null)
     setProfile(null)
   }
+
+  // The server ended this session (a password change elsewhere, an admin
+  // signing the person out, expiry): sign out here too, so the screen goes to
+  // the sign-in page instead of waiting on reads that now come back empty.
+  const signOutRef = useRef(signOut)
+  signOutRef.current = signOut
+  useEffect(() => {
+    const onEnded = () => {
+      signOutRef.current()
+    }
+    window.addEventListener(SESSION_ENDED_EVENT, onEnded)
+    return () => window.removeEventListener(SESSION_ENDED_EVENT, onEnded)
+  }, [])
 
   const role = profile?.role || null
   // What this person may open: the organization's modules, narrowed to the

@@ -15,6 +15,7 @@ const REASONS = {
   code: 'That code is not right. Use the current code from your authenticator app.',
   expired: 'Setting up took too long. Start again.',
   required: 'Your administrator requires two-step login for your account.',
+  locked: 'Too many wrong codes. Try again in 15 minutes.',
   'already-on': 'Two-step login is already on.',
   'not-configured': 'Two-step login is not set up on this server. Ask an administrator.',
   'not-allowed': 'Change your temporary password first.',

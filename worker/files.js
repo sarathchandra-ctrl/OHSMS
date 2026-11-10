@@ -25,6 +25,7 @@ export function createR2FileStore({ bucket, key, origin }) {
   return {
     uploadUrl: (path) => signer.uploadUrl(path),
     downloadUrl: (path) => signer.downloadUrl(path),
+    signedPath: (href) => signer.signedPath(href, 'get'),
     /** Store bytes from the server itself (the legacy-file copy). Never replaces. */
     async put(path, bytes, type) {
       if (await bucket.head(path)) return false

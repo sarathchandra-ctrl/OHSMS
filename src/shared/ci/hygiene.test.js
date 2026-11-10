@@ -1,11 +1,11 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Pins the CI / Docker / hosting hygiene this review closed, so a later edit
+// Pins the CI / hosting hygiene this review closed, so a later edit
 // cannot quietly put the previous failure modes back.
 //
 // These are string assertions against YAML/JSON/JS, not a workflow runner.
 // That is deliberate: the defects they catch are all of the form "the file
-// says X when it must say Y", and they failed in production (or would have
-// on `docker compose up`) without any test ever opening the file.
+// says X when it must say Y", and they failed in production without any test
+// ever opening the file.
 // ─────────────────────────────────────────────────────────────────────────────
 import { readFileSync, readdirSync, statSync } from 'node:fs'
 import { join } from 'node:path'

@@ -5,7 +5,7 @@ import { Readable, Writable } from 'node:stream'
 import { afterAll, describe, expect, it } from 'vitest'
 import { createBlobStore, blobKeyFrom } from './blobs.mjs'
 
-// The disk store behind /blob on a self-hosted server.
+// The disk store behind /blob in local development (stack/app.mjs).
 const dirs = []
 async function store() {
   const dir = await mkdtemp(join(tmpdir(), 'ohsms-blobs-'))

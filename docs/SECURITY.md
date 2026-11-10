@@ -528,6 +528,229 @@ public QR surface; missing `keys().hasOnly()` on public `/reports` and
 enumerable and turned the permit mirrors into a cross-tenant PII dump; and the
 first round of URL-scheme validation before binding to `href`/`src`.
 
+### S-19 · A member could take a colleague's sign-in address — HIGH
+
+The self-update on `users` pinned role, status, site, access and department,
+but not `email`, which is the sign-in name and where reset links go. Sign-in
+and password reset looked the address up with `LIMIT 1` and no order, and
+nothing made it unique. So a member could write an admin's address onto their
+own profile, and whichever row SQLite returned first owned it:
+- when the planted row came first, the admin's correct password failed and
+  every attempt counted against the address;
+- the attacker signed in under it with their own password, and a reset link
+  for it went to the attacker's account;
+- an address claimed in advance made `createMember` refuse the real person.
+A sole admin had no recovery short of editing the database.
+
+**Fixed** in two places, each enough alone:
+- `email` is admin-only (`invariantProblem`, `users_keep_privilege`);
+- an address carried by more than one profile signs in to neither and gets no
+  reset link (`userByEmail` in `stack/passwords.mjs`). Picking a row is what
+  made the copy a takeover; refusing turns it into a visible lockout an admin
+  can see and correct. Adding someone still refuses any address already on a
+  profile (`emailTaken`).
+
+Tests: `postgres.rls.test.js` "the sign-in address" (a member and a manager
+refused, an admin allowed) and `passwords.limits.test.js` "an address on two
+profiles" (planted sorted after the real row, so a first-row lookup would
+pass).
+
+### S-20 · Two-step login codes could be guessed in bursts — HIGH
+
+The code step counted tries after checking the code: it read the ticket's
+try count and the source's failure count, checked the code, then wrote the
+counts back. Parallel requests all read zero, so 200 simultaneous wrong codes
+on one ticket were all evaluated where five were meant to be. Wrong codes
+also never counted against the account, and a right password issued a fresh
+ticket, so the count restarted. With the password in hand, the second factor
+fell to enough parallel guesses. Turning it off with a code, from a signed-in
+session, had no limit at all.
+
+**Fixed** by taking a try before checking, with `bump()`, one atomic statement
+that returns the new count (`completeTotpSignIn`, `stack/passwords.mjs`):
+- five codes per ticket, then the ticket is burnt;
+- `TOTP_FAILURES_PER_ACCOUNT` wrong codes lock the code step for that person
+  for 15 minutes; a right password does not clear it, only a right code;
+- the per-source limit is taken the same way and given back on success.
+Turning it off uses the per-person count; confirming setup allows five codes
+per pending secret.
+
+Tests: `passwords.totp.test.js` "guessing codes" (a burst of 200, fresh
+tickets from many sources, turning off in parallel, setup), each failing on
+the previous code.
+
+### S-21 · Audit entries and names could be forged — MEDIUM
+
+S-12 pinned `actorUid`, but only inside the auditor's insert branch. The
+general writer branch admitted every employee first, so for them nothing was
+pinned. And for anyone, `at`, `actorName`, `action` and `module` were what the
+writer sent: an entry could read "Ada (Administrator) approved a permit",
+backdated. Separately, a person could rename themselves, and the name is what
+approvals, owner pickers and the Audit Log show.
+
+**Fixed:**
+- the actor pin and key-shaped `action` / `module` / `target` are in
+  `restrictWrite`, which every insert passes (the permissive-union pattern in
+  `AGENTS.md`, again);
+- the server stamps `at` and `actorName` from its clock and the writer's
+  stored profile on every non-server insert (`serverStampedInsert`, applied
+  by the engine before the policy decides);
+- `name` joined the admin-only profile fields; an admin renames people from
+  Employees → Edit.
+
+Tests: `postgres.rls.test.js` "audit entries say who and when, as the server
+knows it".
+
+### S-22 · A work permit's dates and its public QR page could be faked — MEDIUM-HIGH
+
+`permits` and `permitQr` are field collections, because employees carry out
+the work, and approving is a manager's decision (`DECISION_STATES`). Only the
+approval status fields were guarded, and only on `permits`:
+- on an approved permit an employee could set `validTo` years out, and an
+  expired permit read as in progress with no extension approved, or rewrite
+  its hazards and PPE after the approvers had signed them;
+- the public QR record carried its own copies of the approvals, tied to
+  nothing: an employee could mark an unapproved permit approved and current
+  on the page read at the work location. The same change on the permit itself
+  was refused.
+
+**Fixed** in `stack/policy.mjs`:
+- after a decision, a non-manager may change only what the app changes on a
+  decided permit (closure, extension, an unsafe stop, the derived status, the
+  mailed report, the QR token); an approved extension's end date is frozen;
+- every write of a permit's QR record must agree with the permit it names,
+  for every writer: approvals, dates, extension, unsafe stop, number, site and
+  type exactly; each display field either the permit's value or blanked. The
+  engine loads the permit (from the stored record when a merge update omits
+  `permitId`) and guards it with the rest of the batch.
+
+Tests: `postgres.rls.test.js` "work permits after a decision, and their public
+QR record", including the records the app itself writes, built with its own
+`mirrorDisplayFields`.
+
+### S-23 · Any path could be laundered into a working download link — MEDIUM
+
+Records are re-signed as they leave the server, so the links the app shows
+never expire (`stack/lib/fileLinks.js`). It re-signed every string shaped
+like a `/blob` link, whoever had written it and whatever file it named. A
+member could type a link naming a medical record's file, or a mailed meeting
+report, into any field they may write, read the record back, and receive a
+valid download: around `/presign`, which refuses both. It also revived any
+expired link, including one the reader had held only while they were allowed.
+
+**Fixed:** a link is re-signed only when
+- this server signed it (`signedPath` in `stack/blobSign.mjs`: an expired
+  signature, or the older one from before links expired, but a signature);
+- and `/presign` would give that file to this reader now (`decidePresign`
+  with the reader's live profile: medical files to admins and managers,
+  mailed reports to no browser).
+Otherwise the stored text goes out unchanged. The app asks `/presign` by path
+for anything it shows, under the same rules.
+
+Tests: `worker/fileLinks.handler.test.js` (through the request handler, R2
+store) and `src/shared/data/server.test.js` (disk store).
+
+### S-24 · Self-hosted, one stranger could lock everyone out of signing in — HIGH
+
+**Since moot:** self-hosting was removed afterwards; the app runs only on
+Cloudflare, where the Worker reads the visitor from `cf-connecting-ip`. The
+files named below went with it. Kept as the record of the finding.
+
+The sign-in, reset and two-step limits count per source address, read from
+the socket. In the Docker install nobody reaches the app's socket directly:
+Caddy or the Cloudflare Tunnel connects to it over the compose network, so
+every visitor had the proxy's address. Each "per source" limit was one limit
+for the organization: fifty failed sign-ins against made-up addresses, from
+one machine, and the admin's correct password answered `throttled`. The
+per-address lock, meant to stop a stranger and not the person, could not
+tell the two apart. The Cloudflare-hosted Worker was not affected; it reads
+`cf-connecting-ip`.
+
+**Fixed** (`stack/clientIp.mjs`):
+- compose passes the front door to the app (`FRONT_DOOR`, from
+  `COMPOSE_PROFILES`); behind Caddy the visitor is the last
+  `X-Forwarded-For` entry (Caddy writes it and does not trust an incoming
+  one), behind the tunnel it is `X-OHSMS-Client-Ip`, which the Worker sets
+  from `cf-connecting-ip` and strips from what browsers send;
+- either header is believed only when the connection comes from a private
+  address, the proxy beside the app.
+
+Tests: `stack/clientIp.test.js` (fifty failures from one visitor behind the
+proxy, then the admin from another, through a real HTTP server) and
+`worker/index.test.js`.
+
+### S-25 · The people directory could be searched by the fields it hides — LOW
+
+`visibleRow` narrows what an employee or a manager is shown of a colleague's
+profile: no `mfaEnabled`, `mfaRequired`, `mustChangePassword`, access
+request or widget settings (a manager also sees `access`). But a list or a
+count could still filter or sort on any field, so `where mfaEnabled ==
+false` or `where mustChangePassword == true` answered the question the
+narrowing hid: the rows that came back were the colleagues without two-step
+login, or still on a temporary password. That is a target list.
+
+**Fixed:** a non-admin's query on `users` may filter and sort only on fields
+that caller is shown (`queryProblem` in `stack/policy.mjs`, checked by the
+engine's `list` and `count`); anything else is refused. The app filters
+people by no field at all, so nothing it does changed.
+
+Tests: `postgres.rls.test.js` "the people directory cannot be searched by
+what it hides".
+
+### S-26 · A session could not be ended — MEDIUM
+
+A session token was good for its whole eight hours whatever happened. A
+password change, a reset by email, an administrator's password reset, or
+turning two-step login on, off or resetting it for a lost phone all left
+every token already issued working. A stolen session survived the very steps
+someone takes after noticing the theft; only suspending the account ended it.
+
+**Fixed:**
+- every profile carries a `sessionEpoch` that only the server writes
+  (`invariantProblem`), and every token records the epoch it was issued
+  under (`stack/session.mjs`);
+- each authenticated request compares the two (`liveSession` in
+  `stack/handler.mjs`), and a token from an older epoch is answered 401
+  `session-ended`; the app then signs out (`noteSessionEnded`);
+- the epoch moves on a password change or reset, on two-step login turned on,
+  off or reset, on "Sign out other devices" (Account security) and on an
+  admin's "Sign out everywhere" (Employees → Edit). Where the caller's own
+  session should continue, the job hands it a fresh token.
+
+The same change made an admin's or an email reset lift the per-source sign-in
+lock: both cleared a key with no source in it and left the real lock, so the
+person stayed locked out on their own machine.
+
+Tests: `src/shared/data/server.test.js` "ending sessions" (a second session
+dies on a password change, other devices, an admin's revoke and reset; no one
+can set the epoch back) and `stack/passwords.limits.test.js` "a reset lifts
+the lock".
+
+### S-27 · An employee could certify themselves — HIGH
+
+Two registers say who is qualified, and both were open to any employee with
+the module:
+- **LOTO technicians.** Who is an authorised technician, with a wireman
+  licence and its expiry, decides who may be named on an isolation permit
+  and hang a personal padlock (`loto/utils/permitModel.js`). Any employee
+  with LOTO could add themselves, licence number and expiry made up.
+- **Training records.** My Learning lets a person mark a course complete,
+  flagged `loggedBy: 'self'`. Nothing held a record to that shape: an
+  employee could write a trainer-led record for themselves valid until 2099,
+  write one for a colleague, or extend their own record's expiry afterwards.
+
+**Fixed** in `stack/policy.mjs`:
+- the technician register is a manager's to change (`restrictWrite`); the
+  page is read-only for everyone else, and its import refuses technicians;
+- an employee may create a training record only as the self-completion the
+  app writes: their own, flagged self, no trainer, dated today (a day either
+  side for time zones), with the course's real validity and the expiry it
+  gives (`selfTrainingProblem`; the engine loads the course). They may not
+  change or remove a record afterwards. Trainer-led records stay a manager's.
+
+Tests: `postgres.rls.test.js` "certifying yourself", including the record
+My Learning writes.
+
 ---
 
 ## Testing
