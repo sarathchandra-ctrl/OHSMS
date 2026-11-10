@@ -24,6 +24,9 @@ export function decidePresign({ op, path, profile }) {
   // A fresh download link, for a signed-in, approved person. Medical files
   // only for the people who may read the medical records they belong to.
   if (op === 'get') {
+    // Mailed reports are the decrypted print of a meeting (names, minutes),
+    // made for the mail job; no browser reads them back.
+    if (p.includes('/mailed-reports/')) return { ok: false, reason: 'server-only' }
     const medical = [MEDICAL, '/illness-files/'].some((m) => p.includes(m))
     if (medical && profile.role !== 'admin' && profile.role !== 'manager') {
       return { ok: false, reason: 'medical' }

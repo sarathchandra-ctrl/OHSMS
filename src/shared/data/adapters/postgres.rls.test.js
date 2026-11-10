@@ -820,3 +820,31 @@ describe('the people directory', () => {
     expect(await as('memberA').get('users', 'memberA')).toHaveProperty('access')
   })
 })
+
+describe('LOTO log and padlock claims', () => {
+  beforeAll(async () => {
+    await seed('lockClaims', 'L-12', { lockNo: 'L-12', procedureId: 'pr-a', equipment: 'Pump A' })
+    await seed('lotoEvents', 'ev1', { action: 'lock', by: 'memberA' })
+    await seed('lotoPermits', 'lp-log', { status: 'active', requestedBy: 'memberA' })
+    await seed('lotoPermits/lp-log/events', 'pe1', { type: 'started', by: 'memberA' })
+  })
+  const denied = { code: 'permission-denied' }
+
+  it('keeps the activity log and permit timelines append-only, in the writer\'s own name', async () => {
+    const m = as('memberA')
+    await m.set('lotoEvents', 'ev2', { action: 'unlock', by: 'memberA' })
+    await expect(m.set('lotoEvents', 'ev3', { action: 'unlock', by: 'adminA' })).rejects.toMatchObject(denied)
+    await expect(m.update('lotoEvents', 'ev1', { action: 'nothing' })).rejects.toMatchObject(denied)
+    await expect(as('adminA').remove('lotoEvents', 'ev1')).rejects.toMatchObject(denied)
+    await expect(m.update('lotoPermits/lp-log/events', 'pe1', { type: 'returned' })).rejects.toMatchObject(denied)
+    await m.set('lotoPermits/lp-log/events', 'pe2', { type: 'note', by: 'memberA' })
+  })
+
+  it('will not move a held padlock to another machine, and lets anyone release it', async () => {
+    const m = as('memberA')
+    await expect(m.set('lockClaims', 'L-12', { lockNo: 'L-12', procedureId: 'pr-b', equipment: 'Pump B' })).rejects.toMatchObject(denied)
+    await m.set('lockClaims', 'L-12', { lockNo: 'L-12', procedureId: 'pr-a', equipment: 'Pump A (dept lock)' })
+    await m.remove('lockClaims', 'L-12')
+    await m.set('lockClaims', 'L-12', { lockNo: 'L-12', procedureId: 'pr-b', equipment: 'Pump B' })
+  })
+})

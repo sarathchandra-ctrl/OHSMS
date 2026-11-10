@@ -420,6 +420,8 @@ describe('fresh download links', () => {
       expect((await s.post('/presign', { op: 'get', path }, emp)).status, path).toBe(403)
       expect((await s.post('/presign', { op: 'get', path }, admin)).status, path).toBe(200)
     }
+    // The decrypted print of a meeting, made for the mail job: nobody reads it back.
+    expect((await s.post('/presign', { op: 'get', path: 'files/mailed-reports/m.pdf' }, admin)).status).toBe(403)
     expect((await s.post('/presign', { op: 'get', path: 'files/a/b.jpg' })).status).toBe(401)
     expect((await s.post('/presign', { op: 'get', path: 'secrets/x' }, admin)).status).toBe(403)
     await s.stop()

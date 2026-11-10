@@ -264,11 +264,13 @@ export const ownedBy = (row, uid) =>
 // Sites page's job (site.manage), and that is a manager's.
 const MANAGER_ONLY_COLLECTIONS = ['sites', 'lotoSettings']
 
-// An employee creates, views and closes; deleting is a manager's. Two
+// An employee creates, views and closes; deleting is a manager's. Three
 // deletes are part of an employee's own flow rather than removing a record:
-// defect locks are released when a defect is closed, and a person may
-// withdraw their own training request (ownsRow).
-const MEMBER_DELETABLE = ['defectLocks']
+// defect locks are released when a defect is closed, a padlock claim is
+// released when its lock comes off (by whoever is there: a claim nobody can
+// clear strands the physical lock), and a person may withdraw their own
+// training request (ownsRow).
+const MEMBER_DELETABLE = ['defectLocks', 'lockClaims']
 const MEMBER_WITHDRAWABLE = ['trainingRequests']
 
 // Fields that name the person a row belongs to. Compared against the session
@@ -389,6 +391,9 @@ function restrictWrite(op, path, id, ctx, { next, prev } = {}) {
   if (op === 'insert' && isAuditor(ctx) && collectionOf(path) !== 'auditLogs') return 'auditor'
   if ((op === 'update' || op === 'delete') && isAuditor(ctx)) return 'auditor'
   if ((op === 'update' || op === 'delete') && collectionOf(path) === 'auditLogs') return 'audit-log'
+  // The LOTO activity log and each permit's timeline are what an investigator
+  // reads after somebody is hurt: append-only, like the audit trail.
+  if ((op === 'update' || op === 'delete') && isLotoLog(path)) return 'loto-log'
   // Writing a record into a site the writer does not reach (a new record, or
   // moving one there). Reaching the record's current site is canRead's.
   if ((op === 'insert' || op === 'update') && siteBlocked(path, next, ctx)) return 'site'
@@ -752,6 +757,9 @@ function oversized(v, depth = 0) {
   return false
 }
 
+const isLotoLog = (path) =>
+  path === 'lotoEvents' || (rootOf(path) === 'lotoPermits' && collectionOf(path) === 'events')
+
 // ── What a public mirror may carry ──────────────────────────────────────────
 // qr, permitQr and procedureQr are read by anyone holding a token, without an
 // account. Each may carry only the fields its builder writes (fire/lib/data.js
@@ -834,6 +842,13 @@ export function invariantProblem(path, id, prev, next, ctx) {
     if (privileged && !isAdmin(ctx)) return 'privilege'
   }
   if (!ctx.worker && mirrorProblem(path, prev, n)) return 'mirror-field'
+  // A LOTO log entry is written in its writer's own name.
+  if (!ctx.worker && !prev && isLotoLog(path) && str(n.by) !== ctx.uid) return 'loto-log-actor'
+  // A padlock claim stays with the procedure that holds it: taking it for
+  // another machine needs the holder to release it first (lockClaims.js).
+  if (!ctx.worker && prev && path === 'lockClaims' && str(n.procedureId) !== str(prev.procedureId)) {
+    return 'lock-claim-held'
+  }
   if (!ctx.worker && path === 'lotoPermits') {
     const loto = lotoPermitProblem(prev, n, ctx)
     if (loto) return loto
