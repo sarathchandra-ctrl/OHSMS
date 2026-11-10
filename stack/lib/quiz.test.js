@@ -31,7 +31,7 @@ describe('the quiz page', () => {
 })
 
 describe('a submission', () => {
-  const body = (q, answers = right(q)) => ({ employeeId: ' E-17 ', name: 'Asha  Rao', centerName: 'Koramangala', answers })
+  const body = (q, answers = right(q)) => ({ employeeId: ' E-17 ', name: 'Asha  Rao', centerName: 'Koramangala', email: ' Asha@Example.com ', answers })
 
   it('needs the taker’s details and one valid option per question', () => {
     const q = quiz(3)
@@ -39,6 +39,11 @@ describe('a submission', () => {
     expect(readSubmission(q, { ...body(q), employeeId: '' }).reason).toBe('employee-id')
     expect(readSubmission(q, { ...body(q), name: '  ' }).reason).toBe('name')
     expect(readSubmission(q, { ...body(q), centerName: '' }).reason).toBe('center')
+    // The certificate is mailed there, so it must be an address.
+    expect(readSubmission(q, body(q)).taker.email).toBe('asha@example.com')
+    for (const email of ['', 'asha', 'asha@', 'a b@x.com', 'asha@example', '<x>@y.com']) {
+      expect(readSubmission(q, { ...body(q), email }).reason, email).toBe('email')
+    }
     for (const answers of [[0, 1], [0, 1, 2, 0], [0, 1, 9], [0, 1, '2'], [0, 1, 1.5], 'all', null]) {
       expect(readSubmission(q, body(q, answers)).reason, JSON.stringify(answers)).toBe('answers')
     }

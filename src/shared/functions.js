@@ -298,9 +298,25 @@ export async function publicQuiz(token) {
  * Submit a quiz: the taker's details and one option index per question. The
  * server scores it and returns { score, total, percent, passed, certificateNo, … }.
  */
-export async function submitQuiz({ token, employeeId, name, centerName, answers } = {}) {
+export async function submitQuiz({ token, employeeId, name, centerName, email, answers } = {}) {
   const fn = await callable('submitQuiz', { timeout: 20000 })
-  return (await fn({ token, employeeId, name, centerName, answers })).data.result
+  return (await fn({ token, employeeId, name, centerName, email, answers })).data.result
+}
+
+/** A passing certificate, opened from the link in its email. Public. */
+export async function quizCertificate(token) {
+  const fn = await callable('quizCertificate', { timeout: 15000 })
+  return (await fn({ token })).data.certificate
+}
+
+/**
+ * Send a passing certificate again, to the address on the response or a
+ * corrected one. Managers only. Issues a new link; the old one stops working.
+ * Returns { ok, sent, email }.
+ */
+export async function resendQuizCertificate({ responseId, email } = {}) {
+  const fn = await callable('resendQuizCertificate', { timeout: 30000 })
+  return (await fn({ responseId, email })).data
 }
 
 export async function fetchSiteWeather({ lat, lng } = {}) {

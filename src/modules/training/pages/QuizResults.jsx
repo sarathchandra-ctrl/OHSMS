@@ -44,7 +44,7 @@ export default function QuizResults() {
       if (outcome === 'pass' && !r.passed) return false
       if (outcome === 'fail' && r.passed) return false
       if (!needle) return true
-      return [r.name, r.employeeId, r.centerName, r.quizTitle].join(' ').toLowerCase().includes(needle)
+      return [r.name, r.employeeId, r.centerName, r.email, r.quizTitle].join(' ').toLowerCase().includes(needle)
     })
   }, [responses, quizId, outcome, q])
 
@@ -119,7 +119,10 @@ export default function QuizResults() {
                     <Link className="font-semibold text-brand-700 hover:underline" to={`/training/quiz/${r.quizId}`}>{r.quizTitle}</Link>
                   </td>
                   <td className="px-4 py-2 font-mono text-xs">{r.employeeId}</td>
-                  <td className="px-4 py-2 font-semibold text-ink-900">{r.name}</td>
+                  <td className="px-4 py-2">
+                    <p className="font-semibold text-ink-900">{r.name}</p>
+                    {r.email && <p className="text-xs text-ink-500">{r.email}</p>}
+                  </td>
                   <td className="px-4 py-2">{r.centerName}</td>
                   <td className="px-4 py-2">{r.score}/{r.total} ({r.percent}%)</td>
                   <td className="px-4 py-2">

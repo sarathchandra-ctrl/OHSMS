@@ -16,7 +16,15 @@ export const QUIZ_PASS_PERCENT = 80
 export const QUIZ_MAX_QUESTIONS = 100
 export const QUIZ_MAX_OPTIONS = 6
 export const QUIZ_TEXT_MAX = { title: 200, description: 2000, question: 1000, option: 300 }
-export const TAKER_MAX = { employeeId: 40, name: 120, centerName: 120 }
+export const TAKER_MAX = { employeeId: 40, name: 120, centerName: 120, email: 254 }
+
+// The address a passing certificate is mailed to. The same shape the
+// sign-in form accepts (stack/passwords.mjs normalizeEmail).
+const EMAIL = /^[^\s@<>()"',;:]+@[^\s@<>()"',;:.]+(?:\.[^\s@<>()"',;:.]+)+$/
+export function quizEmail(value) {
+  const email = str(value).trim().toLowerCase()
+  return email.length <= TAKER_MAX.email && EMAIL.test(email) ? email : ''
+}
 
 const str = (v) => (v === undefined || v === null ? '' : String(v))
 const clean = (v, max) => str(v).replace(/\s+/g, ' ').trim().slice(0, max)
@@ -65,10 +73,12 @@ export function readSubmission(quiz = {}, body = {}) {
     employeeId: clean(body.employeeId, TAKER_MAX.employeeId),
     name: clean(body.name, TAKER_MAX.name),
     centerName: clean(body.centerName, TAKER_MAX.centerName),
+    email: quizEmail(body.email),
   }
   if (!taker.employeeId) return { ok: false, reason: 'employee-id' }
   if (!taker.name) return { ok: false, reason: 'name' }
   if (!taker.centerName) return { ok: false, reason: 'center' }
+  if (!taker.email) return { ok: false, reason: 'email' }
   const qs = quiz.questions || []
   const answers = Array.isArray(body.answers) ? body.answers : null
   if (!answers || answers.length !== qs.length) return { ok: false, reason: 'answers' }
@@ -99,6 +109,28 @@ export function answerDetail(quiz = {}, answers = []) {
     chosen: clean((q?.options || [])[answers[i]], QUIZ_TEXT_MAX.option),
     correct: answers[i] === q?.answer,
   }))
+}
+
+/**
+ * The mail that carries a passing certificate: a link to it, never the
+ * certificate as a file (the server's mail is text; stack/notify.js). It goes
+ * to the person it certifies, at the address they gave.
+ */
+export function certificateMail(response, url) {
+  return {
+    to: response.email,
+    subject: `Your certificate: ${response.quizTitle}`,
+    text: [
+      `Dear ${response.name},`,
+      '',
+      `Congratulations: you passed "${response.quizTitle}" with ${response.percent}% (${response.score} of ${response.total}).`,
+      '',
+      `View, print or save your certificate: ${url}`,
+      `Certificate no. ${response.certificateNo}`,
+      '',
+      'Provided by the Safety & Security Team, Cult Fit.',
+    ].join('\n'),
+  }
 }
 
 /** The certificate number for a passing response: stable, and traceable to it. */

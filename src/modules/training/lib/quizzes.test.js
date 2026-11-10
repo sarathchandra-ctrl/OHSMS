@@ -46,7 +46,7 @@ describe('quiz helpers', () => {
     const r = { submittedAt: '2026-11-10T09:30:00.000Z', employeeId: 'E-1', name: 'Asha', centerName: 'HSR', score: 1, total: 2, percent: 50, passed: false, answers: [0, 1] }
     const { header, rows } = quizResultTable(quiz, [r])
     expect(header.slice(-2)).toEqual(['Q1. Extinguisher?', 'Q2. Lift?'])
-    expect(rows[0].slice(1, 4)).toEqual(['E-1', 'Asha', 'HSR'])
+    expect(rows[0].slice(1, 5)).toEqual(['E-1', 'Asha', 'HSR', ''])
     expect(rows[0].slice(-2)).toEqual(['Water (wrong)', 'Never (correct)'])
     expect(rows[0][0]).toMatch(/2026/)
     expect(quizResultsCsv(quiz, [r]).split('\r\n')).toHaveLength(2)

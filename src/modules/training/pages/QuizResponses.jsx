@@ -4,11 +4,13 @@
 // CSV or Excel with a column per question. Managers only (stack/policy.mjs).
 // ─────────────────────────────────────────────────────────────────────────────
 import { Fragment, useEffect, useMemo, useState } from 'react'
+import toast from 'react-hot-toast'
 import { Link, useParams } from 'react-router-dom'
 import {
-  ArrowLeft, Award, CheckCircle2, ChevronDown, ChevronRight, FileSpreadsheet, FileText, ListChecks, XCircle,
+  ArrowLeft, Award, CheckCircle2, ChevronDown, ChevronRight, FileSpreadsheet, FileText, ListChecks, Mail, XCircle,
 } from 'lucide-react'
-import { PageHeader, Button, IconButton, Badge, EmptyState, SkeletonTable, Field, Input, Select } from '../../../shared/ui'
+import { PageHeader, Button, IconButton, Badge, EmptyState, SkeletonTable, Field, Input, Select, Modal } from '../../../shared/ui'
+import { resendQuizCertificate } from '../../../shared/functions'
 import { useAuth } from '../../../shared/auth/AuthContext'
 import { toastCaught } from '../../../shared/lib/toastCaught'
 import { formatDateTime } from '../../../shared/lib/format'
@@ -35,6 +37,9 @@ export default function QuizResponses() {
   const [outcome, setOutcome] = useState('all')
   const [q, setQ] = useState('')
   const [certificate, setCertificate] = useState(null)
+  const [resending, setResending] = useState(null) // the response
+  const [resendTo, setResendTo] = useState('')
+  const [busy, setBusy] = useState(false)
 
   useEffect(() => subscribeQuizzes(setQuizzes), [])
   useEffect(() => subscribeResponsesForQuiz(id, setResponses), [id])
@@ -45,7 +50,7 @@ export default function QuizResponses() {
     return (responses || []).filter((r) => {
       if (outcome === 'pass' && !r.passed) return false
       if (outcome === 'fail' && r.passed) return false
-      return !needle || [r.name, r.employeeId, r.centerName].join(' ').toLowerCase().includes(needle)
+      return !needle || [r.name, r.employeeId, r.centerName, r.email].join(' ').toLowerCase().includes(needle)
     })
   }, [responses, outcome, q])
 
@@ -56,6 +61,20 @@ export default function QuizResponses() {
   const passed = (responses || []).filter((r) => r.passed).length
   const average = responses.length ? Math.round(responses.reduce((n, r) => n + (r.percent || 0), 0) / responses.length) : 0
   const toggle = (rid) => setOpen((s) => { const n = new Set(s); n.has(rid) ? n.delete(rid) : n.add(rid); return n })
+  const openResend = (r) => { setResending(r); setResendTo(r.email || '') }
+  const resend = async () => {
+    setBusy(true)
+    try {
+      const r = await resendQuizCertificate({ responseId: resending.id, email: resendTo.trim() })
+      if (r?.sent) toast.success(`Certificate sent to ${r.email}`)
+      else toast.error('The certificate could not be emailed. Try again later.')
+      setResending(null)
+    } catch (err) {
+      toastCaught(err, err?.reason === 'no-mail' ? 'Email is not set up on this server' : 'Could not send the certificate')
+    } finally {
+      setBusy(false)
+    }
+  }
   const exportWith = (fn) => async () => {
     try { await fn(quiz || { title, questions: [] }, shown) } catch (err) { toastCaught(err, 'Could not export') }
   }
@@ -93,7 +112,7 @@ export default function QuizResponses() {
           </Select>
         </Field>
         <Field label="Search">
-          <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Name, employee ID or centre" />
+          <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Name, employee ID, centre or email" />
         </Field>
       </div>
 
@@ -127,12 +146,28 @@ export default function QuizResponses() {
                       </td>
                       <td className="whitespace-nowrap px-3 py-2 text-ink-600">{formatDateTime(r.submittedAt)}</td>
                       <td className="px-3 py-2 font-mono text-xs">{r.employeeId}</td>
-                      <td className="px-3 py-2 font-semibold text-ink-900">{r.name}</td>
+                      <td className="px-3 py-2">
+                        <p className="font-semibold text-ink-900">{r.name}</p>
+                        {r.email && <p className="text-xs text-ink-500">{r.email}</p>}
+                      </td>
                       <td className="px-3 py-2">{r.centerName}</td>
                       <td className="px-3 py-2">{r.score}/{r.total} ({r.percent}%)</td>
-                      <td className="px-3 py-2"><Badge tone={r.passed ? 'green' : 'red'}>{r.passed ? 'Passed' : 'Not passed'}</Badge></td>
                       <td className="px-3 py-2">
-                        {r.passed && <IconButton icon={Award} size="sm" label={`Certificate for ${r.name}`} onClick={() => setCertificate(r)} />}
+                        <Badge tone={r.passed ? 'green' : 'red'}>{r.passed ? 'Passed' : 'Not passed'}</Badge>
+                        {r.passed && (
+                          <p className="mt-1 text-[11px] text-ink-500">
+                            {r.certificateEmailedAt ? `Emailed ${formatDateTime(r.certificateEmailedAt)}`
+                              : r.certificateEmailError ? 'Email not sent' : 'Not emailed'}
+                          </p>
+                        )}
+                      </td>
+                      <td className="px-3 py-2">
+                        {r.passed && (
+                          <div className="flex gap-1">
+                            <IconButton icon={Award} size="sm" label={`Certificate for ${r.name}`} onClick={() => setCertificate(r)} />
+                            <IconButton icon={Mail} size="sm" label={`Send ${r.name}’s certificate again`} onClick={() => openResend(r)} />
+                          </div>
+                        )}
                       </td>
                     </tr>
                     {isOpen && (
@@ -163,6 +198,17 @@ export default function QuizResponses() {
       )}
 
       {certificate && <QuizCertificate result={certificate} onClose={() => setCertificate(null)} />}
+
+      <Modal open={!!resending} onClose={() => setResending(null)} size="sm" title="Send the certificate again"
+        subtitle={resending ? `${resending.name} · ${resending.percent}% · ${resending.certificateNo}` : ''}>
+        <Field label="Email ID" hint="Correct it here if it was mistyped. A new link is sent; the old one stops working.">
+          <Input type="email" value={resendTo} onChange={(e) => setResendTo(e.target.value)} />
+        </Field>
+        <div className="mt-4 flex justify-end gap-2">
+          <Button variant="ghost" onClick={() => setResending(null)}>Cancel</Button>
+          <Button icon={Mail} loading={busy} disabled={busy || !resendTo.trim()} onClick={resend}>Send certificate</Button>
+        </div>
+      </Modal>
     </div>
   )
 }
