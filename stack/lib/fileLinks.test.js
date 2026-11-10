@@ -29,4 +29,15 @@ describe('refreshFileLinks', () => {
     }
     expect(refreshFileLinks(data, sign)).toEqual(data)
   })
+
+  it('leaves a link as stored when the caller declines to re-sign it', () => {
+    const link = 'https://ehs.test/blob?op=get&path=files%2Fmedical-records%2Fx.pdf&exp=1&sig=s'
+    const seen = []
+    const out = refreshFileLinks({ a: link }, (path, original) => {
+      seen.push([path, original])
+      return null
+    })
+    expect(out.a).toBe(link)
+    expect(seen).toEqual([['files/medical-records/x.pdf', link]])
+  })
 })

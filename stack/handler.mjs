@@ -177,9 +177,19 @@ export function createOwnStackHandler({
     const session = sessionOf(req, sessionSecret)
     const roleSession = { role: 'ohsms_browser', uid: session?.sub || '' }
     // Every record goes out with fresh download links (stack/lib/fileLinks.js):
-    // the reader has just passed the access rules for it.
-    const fresh = (row) =>
-      blobStore && row ? refreshFileLinks(row, (path) => blobStore.downloadUrl(path)) : row
+    // the reader has just passed the access rules for the record. Each link
+    // must also be one this server signed, and name a file /presign would
+    // give this reader (medical files, mailed reports): a path typed into a
+    // field is not a grant.
+    const reader =
+      blobStore && (body.op === 'get' || body.op === 'list') && roleSession.uid
+        ? await engine.get(roleSession, 'users', roleSession.uid)
+        : null
+    const resign = (path, link) =>
+      blobStore.signedPath(link) === path && decidePresign({ op: 'get', path, profile: reader }).ok
+        ? blobStore.downloadUrl(path)
+        : null
+    const fresh = (row) => (blobStore && row ? refreshFileLinks(row, resign) : row)
     if (body.op === 'get') {
       const doc = await engine.get(roleSession, body.path, body.id, { rev: Boolean(body.rev) })
       send(res, 200, { doc: fresh(doc) })

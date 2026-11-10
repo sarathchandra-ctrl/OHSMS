@@ -55,6 +55,26 @@ export function createBlobSigner({ key, origin }) {
       const q = new URLSearchParams({ op: 'get', path, exp, sig: sign(key, ['get', path, exp]) })
       return `${origin}/blob?${q}`
     },
+    /**
+     * The path of a download link this server signed, expired or not, or
+     * null. For re-signing a stored link (lib/fileLinks.js): an expired link
+     * is the normal case there, a link it never signed is not.
+     */
+    signedPath(href, op = 'get') {
+      let url
+      try {
+        url = new URL(href)
+      } catch {
+        return null
+      }
+      const path = url.searchParams.get('path') || ''
+      const exp = url.searchParams.get('exp')
+      if (url.searchParams.get('op') !== op || !isAppFilePath(path)) return null
+      // A link from before expiry existed was signed over (op, path) alone.
+      // Old records may hold only that; it is still this server's signature.
+      const parts = exp === null ? [op, path] : /^\d+$/.test(exp) ? [op, path, exp] : null
+      return parts && same(url.searchParams.get('sig'), sign(key, parts)) ? path : null
+    },
     /** The file path a signed URL names, or null when the link is not valid. */
     check(url, op, now = Date.now()) {
       const path = url.searchParams.get('path') || ''

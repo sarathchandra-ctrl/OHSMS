@@ -628,6 +628,28 @@ Tests: `postgres.rls.test.js` "work permits after a decision, and their public
 QR record", including the records the app itself writes, built with its own
 `mirrorDisplayFields`.
 
+### S-23 · Any path could be laundered into a working download link — MEDIUM
+
+Records are re-signed as they leave the server, so the links the app shows
+never expire (`stack/lib/fileLinks.js`). It re-signed every string shaped
+like a `/blob` link, whoever had written it and whatever file it named. A
+member could type a link naming a medical record's file, or a mailed meeting
+report, into any field they may write, read the record back, and receive a
+valid download: around `/presign`, which refuses both. It also revived any
+expired link, including one the reader had held only while they were allowed.
+
+**Fixed:** a link is re-signed only when
+- this server signed it (`signedPath` in `stack/blobSign.mjs`: an expired
+  signature, or the older one from before links expired, but a signature);
+- and `/presign` would give that file to this reader now (`decidePresign`
+  with the reader's live profile: medical files to admins and managers,
+  mailed reports to no browser).
+Otherwise the stored text goes out unchanged. The app asks `/presign` by path
+for anything it shows, under the same rules.
+
+Tests: `worker/fileLinks.handler.test.js` (through the request handler, R2
+store) and `src/shared/data/server.test.js` (disk store).
+
 ---
 
 ## Testing

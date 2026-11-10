@@ -9,6 +9,8 @@ import { runInNewContext } from 'node:vm'
 import { describe, expect, it } from 'vitest'
 import { createDedicatedApp, runtimeConfigScript } from '../../../stack/app.mjs'
 import { MAX_FAILURES } from '../../../stack/passwords.mjs'
+import { blobKeyFrom } from '../../../stack/blobSign.mjs'
+import { createHmac } from 'node:crypto'
 
 const ADMIN = { email: 'ana@cult.test', password: 'first-admin-pass-1' }
 const SECRET = 's'.repeat(40)
@@ -435,9 +437,16 @@ describe('records leave with fresh download links', () => {
     const { join } = await import('node:path')
     const s = await start({ blobDir: await mkdtemp(join(tmpdir(), 'ohsms-rs-')) })
     const admin = await readyAdmin(s)
-    const stale = 'https://ehs.example.com/blob?op=get&path=files%2Fincident-photos%2Fa.jpg&sig=never-expired'
-    await s.post('/data', { op: 'commit', ops: [{ type: 'set', path: 'incidents', id: 'rs1', merge: false, data: { photo: { url: stale, path: 'files/incident-photos/a.jpg' } } }] }, admin)
+    // A link from before expiry existed: signed by this server over (op, path).
+    const oldSig = createHmac('sha256', blobKeyFrom(SECRET))
+      .update(['get', 'files/incident-photos/a.jpg'].join('\n'))
+      .digest('base64url')
+    const stale = `https://ehs.example.com/blob?op=get&path=files%2Fincident-photos%2Fa.jpg&sig=${oldSig}`
+    // One it never signed: a path typed into a field is not a grant.
+    const typed = 'https://ehs.example.com/blob?op=get&path=files%2Fincident-photos%2Fb.jpg&sig=never-expired'
+    await s.post('/data', { op: 'commit', ops: [{ type: 'set', path: 'incidents', id: 'rs1', merge: false, data: { photo: { url: stale, path: 'files/incident-photos/a.jpg' }, other: typed } }] }, admin)
     const got = await s.read(admin, 'incidents', 'rs1')
+    expect(got.other).toBe(typed)
     expect(got.photo.url).not.toBe(stale)
     expect(got.photo.url).toMatch(/^https:\/\/ehs\.example\.com\/blob\?op=get&path=files%2Fincident-photos%2Fa\.jpg&exp=\d+&sig=/)
     const listed = (await s.post('/data', { op: 'list', path: 'incidents' }, admin)).body.rows

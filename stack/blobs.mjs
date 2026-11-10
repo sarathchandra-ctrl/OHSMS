@@ -44,6 +44,7 @@ export function createBlobStore({ dir, key, origin }) {
 
   const signer = createBlobSigner({ key, origin })
   const { uploadUrl, downloadUrl } = signer
+  const signedPath = (href) => signer.signedPath(href, 'get')
 
   async function remove(path) {
     const file = fileFor(path)
@@ -152,5 +153,5 @@ export function createBlobStore({ dir, key, origin }) {
     return true
   }
 
-  return { uploadUrl, downloadUrl, put, remove, handle, fileFor }
+  return { uploadUrl, downloadUrl, signedPath, put, remove, handle, fileFor }
 }
