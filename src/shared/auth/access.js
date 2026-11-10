@@ -124,3 +124,25 @@ export function sitesInSelection(sites, { region = 'all', entity = 'all', siteId
       (any(siteId) || s.id === siteId)
   )
 }
+
+/**
+ * The names behind a granted (or requested) scope, for display: which
+ * regions, entities and sites, not just how many. A site id that is no longer
+ * in the inventory is shown as its id rather than dropped, so a stale grant
+ * stays visible to the admin who can remove it.
+ */
+export function accessDetail(scope, sites = []) {
+  const nameOf = (id) => arr(sites).find((x) => x.id === id)?.name || id
+  return {
+    regions: [...arr(scope?.regions)].sort(),
+    entities: [...arr(scope?.entities)].sort(),
+    sites: arr(scope?.sites).map(nameOf).sort((a, b) => a.localeCompare(b)),
+  }
+}
+
+/** "A, B, C +2 more" — a short list that never grows without bound. */
+export function shortList(names, max = 3) {
+  const list = arr(names)
+  if (list.length <= max) return list.join(', ')
+  return `${list.slice(0, max).join(', ')} +${list.length - max} more`
+}

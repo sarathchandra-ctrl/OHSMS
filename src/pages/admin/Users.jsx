@@ -8,8 +8,10 @@ import {
 } from '../../shared/org/orgData'
 import { ROLES, roleLabel } from '../../shared/auth/permissions'
 import { enabledModules } from '../../shared/modules/entitlements'
+import { MODULE_BY_KEY } from '../../shared/modules/registry'
 import {
   orgDepartments, regionsOf, entitiesOf, resolveAccessibleSites, accessSummary, hasPendingAccessRequest,
+  accessDetail, shortList,
 } from '../../shared/auth/access'
 import {
   PageHeader, Badge, Button, Select, Field, Modal, MultiSelect, SkeletonTable, EmptyState, Pager,
@@ -20,6 +22,29 @@ import { resetMemberPassword } from '../../shared/functions'
 
 const STATUS_TONE = { approved: 'green', pending: 'amber', suspended: 'red' }
 const emptyScope = { sites: [], regions: [], entities: [] }
+
+const moduleNames = (keys) => keys.map((k) => MODULE_BY_KEY[k]?.label || k)
+
+/** Which regions, entities and sites a person has, by name. */
+function ScopeLines({ scope, sites }) {
+  const d = accessDetail(scope, sites)
+  const rows = [
+    ['Regions', d.regions],
+    ['Entities', d.entities],
+    ['Sites', d.sites],
+  ].filter(([, names]) => names.length)
+  if (!rows.length) return <span className="text-xs text-ink-400">No access</span>
+  return (
+    <dl className="space-y-0.5 text-xs">
+      {rows.map(([label, names]) => (
+        <div key={label} className="flex gap-1.5" title={names.join(', ')}>
+          <dt className="flex-none font-semibold text-ink-500">{label}:</dt>
+          <dd className="min-w-0 text-ink-700">{shortList(names)}</dd>
+        </div>
+      ))}
+    </dl>
+  )
+}
 
 export default function Users() {
   const { actor, user, org, orgModuleMap } = useAuth()
@@ -244,12 +269,15 @@ export default function Users() {
                     </td>
                     <td className="px-5 py-3.5">
                       <div className="flex flex-col gap-1">
-                        <span className="text-xs text-ink-600">
-                          {u.role === 'admin' ? 'All sites (admin)' : accessSummary(u.access, sites)}
-                        </span>
+                        {u.role === 'admin' ? (
+                          <span className="text-xs text-ink-600">All sites (admin)</span>
+                        ) : (
+                          <ScopeLines scope={u.access} sites={sites} />
+                        )}
                         {(u.role || 'member') === 'member' && Array.isArray(u.access?.modules) && (
-                          <span className="text-xs text-ink-400">
-                            {u.access.modules.length} module{u.access.modules.length === 1 ? '' : 's'}
+                          <span className="text-xs text-ink-500" title={moduleNames(u.access.modules).join(', ')}>
+                            <b className="font-semibold">Modules:</b>{' '}
+                            {u.access.modules.length ? shortList(moduleNames(u.access.modules)) : 'none'}
                           </span>
                         )}
                         {reqPending && <Badge tone="violet">Requested: {accessSummary(u.accessRequest, sites)}</Badge>}

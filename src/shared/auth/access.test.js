@@ -8,6 +8,8 @@ import {
   canUseModule,
   personalModuleMap,
   sitesInSelection,
+  accessDetail,
+  shortList,
 } from './access'
 
 const sites = [
@@ -138,5 +140,31 @@ describe('sitesInSelection', () => {
     expect(ids({ entity: 'E1' })).toEqual(['a', 'c'])
     expect(ids({ region: 'North', entity: 'E1' })).toEqual(['a'])
     expect(ids({ region: 'South', siteId: 'a' })).toEqual([])
+  })
+})
+
+describe('accessDetail / shortList', () => {
+  const inventory = [
+    { id: 's1', name: 'Valley Works' },
+    { id: 's2', name: 'Harbour Depot' },
+  ]
+
+  it('names the regions, entities and sites of a scope, sorted', () => {
+    expect(
+      accessDetail({ regions: ['South', 'North'], entities: ['E1'], sites: ['s1', 's2'] }, inventory)
+    ).toEqual({ regions: ['North', 'South'], entities: ['E1'], sites: ['Harbour Depot', 'Valley Works'] })
+  })
+
+  it('keeps a site that left the inventory visible by its id', () => {
+    expect(accessDetail({ sites: ['gone'] }, inventory).sites).toEqual(['gone'])
+  })
+
+  it('is empty for no scope', () => {
+    expect(accessDetail(undefined)).toEqual({ regions: [], entities: [], sites: [] })
+  })
+
+  it('caps a long list', () => {
+    expect(shortList(['a', 'b'])).toBe('a, b')
+    expect(shortList(['a', 'b', 'c', 'd', 'e'])).toBe('a, b, c +2 more')
   })
 })

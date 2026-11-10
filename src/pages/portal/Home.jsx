@@ -31,7 +31,7 @@ import {
   collectionsAnswered,
 } from '../../shared/org/orgData'
 import { useAccessibleSitesRead } from '../../shared/org/useAccessibleSites'
-import { regionsOf, entitiesOf, sitesInSelection } from '../../shared/auth/access'
+import { regionsOf, entitiesOf, sitesInSelection, shortList } from '../../shared/auth/access'
 import { subscribeActions, NORM_BY_KEY, SOURCES } from '../../modules/actions/lib/sources'
 import { subscribeAssignmentsRead } from '../../modules/training/lib/firestore'
 import { INCIDENT_TYPE_BY_KEY } from '../../modules/incidents/lib/constants'
@@ -488,11 +488,27 @@ export default function PortalHome() {
               <Skeleton className="h-3 w-56 max-w-full" />
             </div>
           ) : (
+            <>
+            {scopedSites.length > 0 && (
+              <dl className="space-y-1 rounded-xl bg-surface-50 px-3 py-2.5 text-[12px] ring-1 ring-ink-900/5">
+                {[
+                  ['Regions', regionsOf(scopedSites)],
+                  ['Entities', entitiesOf(scopedSites)],
+                  ['Sites', scopedSites.map((s) => s.name).sort((a, b) => a.localeCompare(b))],
+                ].map(([label, names]) => (
+                  <div key={label} className="flex gap-1.5" title={names.join(', ')}>
+                    <dt className="flex-none font-semibold text-ink-500">{label}:</dt>
+                    <dd className="min-w-0 text-ink-800">{names.length ? shortList(names, 4) : '—'}</dd>
+                  </div>
+                ))}
+              </dl>
+            )}
             <p className="text-[11.5px] leading-relaxed text-ink-400">
               {sites.length === 0
                 ? 'No sites are mapped to you yet, so these figures cover nothing. Ask an admin to map your site.'
                 : 'Only the regions, entities and sites your account can see are listed. Every figure on this page follows this selection.'}
             </p>
+            </>
           )}
           {actionsReady && open.length > 0 && (
             <div className="mt-auto flex flex-col gap-2 border-t border-ink-100 pt-3">
