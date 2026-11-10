@@ -242,7 +242,7 @@ export async function signInWithPassword(engine, db, { email, password, ip = '' 
     const ticket = randomBytes(32).toString('base64url')
     await db
       .prepare('INSERT INTO auth_pending (key, value, expires_at) VALUES (?, ?, ?)')
-      .bind(`mfaticket:${sha256(ticket)}`, JSON.stringify({ uid, tries: 0 }), Date.now() + TICKET_TTL_S * 1000)
+      .bind(`mfaticket:${sha256(ticket)}`, JSON.stringify({ uid }), Date.now() + TICKET_TTL_S * 1000)
       .run()
     return { ok: true, uid, mfa: true, ticket }
   }
@@ -295,13 +295,19 @@ export async function confirmTotpEnrollment(engine, db, { uid, code, master, now
   if (!row) return { ok: false, reason: 'expired' }
   const secret = safeOpen(row.value, master)
   if (!secret) return { ok: false, reason: 'expired' }
+  // Bounded like every other code check, though only the person setting up
+  // reaches it: the pending secret then has to be started again.
+  if (!(await takeTry(db, `totpenroltry:${uid}`, TICKET_TRIES, ENROL_TTL_S))) {
+    await dropKeys(db, `totpenrol:${uid}`, `totpenroltry:${uid}`)
+    return { ok: false, reason: 'expired' }
+  }
   const step = verifyTotp(secret, code, { nowMs })
   if (step === null) return { ok: false, reason: 'code' }
   await db
     .prepare('INSERT OR REPLACE INTO auth_totp (uid, secret, last_step, enabled_at) VALUES (?, ?, ?, ?)')
     .bind(uid, sealSecret(secret, master), step, nowMs)
     .run()
-  await db.prepare('DELETE FROM auth_pending WHERE key = ?').bind(`totpenrol:${uid}`).run()
+  await dropKeys(db, `totpenrol:${uid}`, `totpenroltry:${uid}`)
   await setMfaEnabled(engine, uid, true)
   return { ok: true }
 }
@@ -332,35 +338,72 @@ async function spendCode(db, uid, code, master, nowMs) {
   return (res?.meta?.changes ?? res?.changes ?? 1) > 0
 }
 
+// Code attempts are counted BEFORE the code is checked. Checking first and
+// counting after let a burst of parallel requests all read the count as
+// zero: 200 simultaneous wrong codes on one ticket were all evaluated, where
+// five were meant to be. bump() is one atomic statement that returns the new
+// count, so taking a try is the check.
+//
+//   mfatries:<ticket>  TICKET_TRIES per ticket, then the ticket is burnt;
+//   totpfail:<uid>     TOTP_FAILURES_PER_ACCOUNT wrong codes lock the code
+//                      step for that person for LOCK_SECONDS. A right
+//                      password does not clear it (it used to restart the
+//                      count with a fresh ticket); only a right code does;
+//   totpip:<ip>        MAX_FAILURES_PER_SOURCE tries from one source.
+export const TOTP_FAILURES_PER_ACCOUNT = 10
+
+async function takeTry(db, key, limit, ttlSeconds) {
+  return (await bump(db, key, ttlSeconds)) <= limit
+}
+
+async function refundTry(db, key) {
+  await db
+    .prepare('UPDATE auth_pending SET value = max(CAST(value AS INTEGER) - 1, 0) WHERE key = ?')
+    .bind(key)
+    .run()
+}
+
+async function dropKeys(db, ...keys) {
+  for (const key of keys) await db.prepare('DELETE FROM auth_pending WHERE key = ?').bind(key).run()
+}
+
 /**
- * The second step of signing in. A ticket allows TICKET_TRIES codes; each
- * wrong one also counts against the source, like a wrong password.
- * Returns { ok, uid } or { ok: false, reason }.
+ * The second step of signing in. Returns { ok, uid } or { ok: false, reason }:
+ * 'ticket' (expired, spent or burnt), 'code', 'locked', 'throttled', 'disabled'.
  */
 export async function completeTotpSignIn(engine, db, { ticket, code, master, ip = '', nowMs = Date.now() }) {
   const source = String(ip || '').slice(0, 64)
-  if ((await counter(db, `pwfailip:${source}`)) >= MAX_FAILURES_PER_SOURCE) return { ok: false, reason: 'throttled' }
   if (typeof ticket !== 'string' || ticket.length < 20) return { ok: false, reason: 'ticket' }
-  const key = `mfaticket:${sha256(ticket)}`
+  const hash = sha256(ticket)
+  const key = `mfaticket:${hash}`
+  const triesKey = `mfatries:${hash}`
   const row = await db
     .prepare('SELECT value FROM auth_pending WHERE key = ? AND expires_at > ?')
     .bind(key, nowMs)
     .first()
   if (!row) return { ok: false, reason: 'ticket' }
-  const claim = JSON.parse(row.value)
-  if (await spendCode(db, claim.uid, code, master, nowMs)) {
-    await db.prepare('DELETE FROM auth_pending WHERE key = ?').bind(key).run()
-    const profile = await liveProfile(engine, claim.uid)
-    if (!profile || !['approved', 'pending'].includes(profile.status)) return { ok: false, reason: 'disabled' }
-    return { ok: true, uid: claim.uid }
+  const { uid } = JSON.parse(row.value)
+  const ipKey = `totpip:${source}`
+  const failKey = `totpfail:${uid}`
+  if (!(await takeTry(db, ipKey, MAX_FAILURES_PER_SOURCE, LOCK_SECONDS))) {
+    return { ok: false, reason: 'throttled' }
   }
-  await bump(db, `pwfailip:${source}`, LOCK_SECONDS)
-  const tries = Number(claim.tries || 0) + 1
-  if (tries >= TICKET_TRIES) {
-    await db.prepare('DELETE FROM auth_pending WHERE key = ?').bind(key).run()
+  if (!(await takeTry(db, failKey, TOTP_FAILURES_PER_ACCOUNT, LOCK_SECONDS))) {
+    return { ok: false, reason: 'locked' }
+  }
+  if (!(await takeTry(db, triesKey, TICKET_TRIES, TICKET_TTL_S))) {
+    await dropKeys(db, key)
     return { ok: false, reason: 'ticket' }
   }
-  await db.prepare('UPDATE auth_pending SET value = ? WHERE key = ?').bind(JSON.stringify({ ...claim, tries }), key).run()
+  if (await spendCode(db, uid, code, master, nowMs)) {
+    // A right code is not a failure: give back this source's try, and clear
+    // the person's count. The ticket is spent.
+    await refundTry(db, ipKey)
+    await dropKeys(db, key, triesKey, failKey)
+    const profile = await liveProfile(engine, uid)
+    if (!profile || !['approved', 'pending'].includes(profile.status)) return { ok: false, reason: 'disabled' }
+    return { ok: true, uid }
+  }
   return { ok: false, reason: 'code' }
 }
 
@@ -369,7 +412,14 @@ export async function disableOwnTotp(engine, db, { uid, code, master, nowMs = Da
   const profile = await liveProfile(engine, uid)
   if (!profile) return { ok: false, reason: 'not-allowed' }
   if (profile.mfaRequired === true) return { ok: false, reason: 'required' }
+  // The same per-person count as signing in: a stolen session must not be
+  // able to guess its way to switching the second step off.
+  const failKey = `totpfail:${uid}`
+  if (!(await takeTry(db, failKey, TOTP_FAILURES_PER_ACCOUNT, LOCK_SECONDS))) {
+    return { ok: false, reason: 'locked' }
+  }
   if (!(await spendCode(db, uid, code, master, nowMs))) return { ok: false, reason: 'code' }
+  await dropKeys(db, failKey)
   await db.prepare('DELETE FROM auth_totp WHERE uid = ?').bind(uid).run()
   await setMfaEnabled(engine, uid, false)
   return { ok: true }

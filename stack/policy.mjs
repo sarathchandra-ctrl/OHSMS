@@ -42,6 +42,23 @@ const isCryptoKey = (path, id) =>
   collectionOf(path) === 'cryptoKeys' || (collectionOf(path) === 'meta' && id === 'cryptoKeys')
 const PUBLIC_MIRRORS = ['qr', 'permitQr', 'procedureQr']
 
+// ── Fields the server writes, whatever the client sent ──────────────────────
+
+// Keys, not prose: an action, module or target reads as a label in the Audit
+// Log, and free text there is a place to write "approved by the admin".
+const AUDIT_KEY = /^[a-zA-Z][a-zA-Z0-9_.-]{0,63}$/
+
+/**
+ * An audit entry's time and name are the server's to state. actorUid was
+ * pinned (S-12), but `at` and `actorName` were whatever the writer sent, so
+ * an entry could carry an admin's name and a backdated time. Applied by the
+ * engine to every non-server insert before the policy decides.
+ */
+export function serverStampedInsert(path, data, ctx, now) {
+  if (ctx.worker || collectionOf(path) !== 'auditLogs' || !data) return data
+  return { ...data, at: now(), actorName: str(ctx.profile?.name) || 'Unknown' }
+}
+
 // ── The caller ──────────────────────────────────────────────────────────────
 
 // A temporary password still to replace, or two-step login required and not
@@ -420,6 +437,20 @@ function restrictWrite(op, path, id, ctx, { next, prev } = {}) {
   if (op === 'insert' && isAuditor(ctx) && collectionOf(path) !== 'auditLogs') return 'auditor'
   if ((op === 'update' || op === 'delete') && isAuditor(ctx)) return 'auditor'
   if ((op === 'update' || op === 'delete') && collectionOf(path) === 'auditLogs') return 'audit-log'
+  // An entry is in its writer's own name (S-12), with key-shaped labels.
+  // Here, not only in insert_audit: insert_writer let every employee who can
+  // write records past that branch, so the pin held for auditors alone.
+  if (op === 'insert' && collectionOf(path) === 'auditLogs') {
+    const d = next || {}
+    if (!ctx.uid || str(d.actorUid) !== ctx.uid) return 'audit-actor'
+    if (
+      !AUDIT_KEY.test(str(d.action)) ||
+      !AUDIT_KEY.test(str(d.module || 'core')) ||
+      !AUDIT_KEY.test(str(d.target || 'record'))
+    ) {
+      return 'audit-shape'
+    }
+  }
   // The LOTO activity log and each permit's timeline are what an investigator
   // reads after somebody is hurt: append-only, like the audit trail.
   if ((op === 'update' || op === 'delete') && isLotoLog(path)) return 'loto-log'
@@ -848,8 +879,8 @@ const num = (v) => {
 
 /**
  * The checks that held whatever the policy said (the Postgres triggers):
- *   users_keep_privilege   role, status, site, access, department, email and
- *                          mfaRequired change only
+ *   users_keep_privilege   role, status, site, access, department, email,
+ *                          name and mfaRequired change only
  *                          by an approved admin, judged on the STORED actor;
  *                          nobody but the server clears mustChangePassword
  *                          or sets mfaEnabled (only the server has the secret)
@@ -876,7 +907,10 @@ export function invariantProblem(path, id, prev, next, ctx) {
       changed('mfaRequired') ||
       // The address is the sign-in name and where reset links go. Anyone who
       // could set it on their own profile could take a colleague's.
-      changedText('email')
+      changedText('email') ||
+      // The name is what approvals, owner pickers and the Audit Log show.
+      // A self-rename to "Ana (Administrator)" made honest entries mislead.
+      changedText('name')
     if (privileged && !isAdmin(ctx)) return 'privilege'
   }
   if (!prev && path === 'users' && !ctx.worker && n.mfaEnabled != null) return 'mfa-flag'

@@ -253,12 +253,14 @@ export function createOwnStackHandler({
       const message =
         result.reason === 'throttled'
           ? 'Too many failed sign-ins from this network. Try again in 15 minutes.'
-          : result.reason === 'code'
+          : result.reason === 'locked'
+            ? 'Too many wrong codes for this account. Try again in 15 minutes, or ask an administrator.'
+            : result.reason === 'code'
             ? 'That code is not right. Use the current code from your authenticator app.'
             : result.reason === 'disabled'
               ? 'This account is disabled. Ask an administrator.'
               : 'This sign-in has expired. Enter your email and password again.'
-      send(res, result.reason === 'throttled' ? 429 : 401, {
+      send(res, result.reason === 'throttled' || result.reason === 'locked' ? 429 : 401, {
         code: 'unauthenticated',
         reason: result.reason,
         message,

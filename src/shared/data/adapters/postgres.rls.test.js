@@ -969,3 +969,46 @@ describe('the sign-in address', () => {
     expect((await adminEngine.get(null, 'users', 'emailOwner')).email).toBe('emma@example.test')
   })
 })
+
+describe('audit entries say who and when, as the server knows it', () => {
+  const entry = (extra = {}) => ({
+    actorUid: 'memberA',
+    actorName: 'Ada (Administrator)',
+    action: 'record.update',
+    module: 'ptw',
+    target: 'permit',
+    summary: 'x',
+    at: { __ohsms: 'ts', s: 1, ns: 0 },
+    ...extra,
+  })
+
+  it("stamps the writer's stored name and the server's time over what was sent", async () => {
+    const before = Date.now()
+    await as('memberA').set('auditLogs', 'forged1', entry())
+    const got = await adminEngine.get(null, 'auditLogs', 'forged1')
+    expect(got.actorName).toBe('Mo')
+    expect(got.at.toMillis()).toBeGreaterThanOrEqual(before - 1000)
+  })
+
+  it('refuses prose in the fields the log shows as labels', async () => {
+    for (const extra of [
+      { action: 'Permit approved by Ada' },
+      { module: 'ptw <b>' },
+      { target: ' ' },
+      { action: '' },
+    ]) {
+      await expect(as('memberA').set('auditLogs', `bad-${Math.random()}`, entry(extra))).rejects.toThrow()
+    }
+  })
+
+  it('still refuses an entry in someone else’s name', async () => {
+    await expect(as('memberA').set('auditLogs', 'forged2', entry({ actorUid: 'adminA' }))).rejects.toThrow()
+  })
+
+  it('refuses a self-rename, and leaves renaming to an admin', async () => {
+    await expect(as('memberA').update('users', 'memberA', { name: 'Mo (Administrator)' })).rejects.toThrow()
+    await expect(as('managerA').update('users', 'memberA', { name: 'Mo M' })).rejects.toThrow()
+    await as('adminA').update('users', 'auditorA', { name: 'Audrey' })
+    expect((await adminEngine.get(null, 'users', 'auditorA')).name).toBe('Audrey')
+  })
+})

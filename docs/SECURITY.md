@@ -555,6 +555,52 @@ refused, an admin allowed) and `passwords.limits.test.js` "an address on two
 profiles" (planted sorted after the real row, so a first-row lookup would
 pass).
 
+### S-20 · Two-step login codes could be guessed in bursts — HIGH
+
+The code step counted tries after checking the code: it read the ticket's
+try count and the source's failure count, checked the code, then wrote the
+counts back. Parallel requests all read zero, so 200 simultaneous wrong codes
+on one ticket were all evaluated where five were meant to be. Wrong codes
+also never counted against the account, and a right password issued a fresh
+ticket, so the count restarted. With the password in hand, the second factor
+fell to enough parallel guesses. Turning it off with a code, from a signed-in
+session, had no limit at all.
+
+**Fixed** by taking a try before checking, with `bump()`, one atomic statement
+that returns the new count (`completeTotpSignIn`, `stack/passwords.mjs`):
+- five codes per ticket, then the ticket is burnt;
+- `TOTP_FAILURES_PER_ACCOUNT` wrong codes lock the code step for that person
+  for 15 minutes; a right password does not clear it, only a right code;
+- the per-source limit is taken the same way and given back on success.
+Turning it off uses the per-person count; confirming setup allows five codes
+per pending secret.
+
+Tests: `passwords.totp.test.js` "guessing codes" (a burst of 200, fresh
+tickets from many sources, turning off in parallel, setup), each failing on
+the previous code.
+
+### S-21 · Audit entries and names could be forged — MEDIUM
+
+S-12 pinned `actorUid`, but only inside the auditor's insert branch. The
+general writer branch admitted every employee first, so for them nothing was
+pinned. And for anyone, `at`, `actorName`, `action` and `module` were what the
+writer sent: an entry could read "Ada (Administrator) approved a permit",
+backdated. Separately, a person could rename themselves, and the name is what
+approvals, owner pickers and the Audit Log show.
+
+**Fixed:**
+- the actor pin and key-shaped `action` / `module` / `target` are in
+  `restrictWrite`, which every insert passes (the permissive-union pattern in
+  `AGENTS.md`, again);
+- the server stamps `at` and `actorName` from its clock and the writer's
+  stored profile on every non-server insert (`serverStampedInsert`, applied
+  by the engine before the policy decides);
+- `name` joined the admin-only profile fields; an admin renames people from
+  Employees → Edit.
+
+Tests: `postgres.rls.test.js` "audit entries say who and when, as the server
+knows it".
+
 ---
 
 ## Testing

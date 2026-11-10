@@ -11,6 +11,7 @@ import {
   signInWithPassword,
   startTotpEnrollment,
   totpStatus,
+  TOTP_FAILURES_PER_ACCOUNT,
 } from './passwords.mjs'
 import { stepAt, totpCode } from './totp.mjs'
 
@@ -195,6 +196,145 @@ describe('signing in', () => {
         })
       ).reason
     ).toBe('code')
+  })
+})
+
+describe('guessing codes', () => {
+  const wrongCodes = (n) => Array.from({ length: n }, (_, i) => String(100000 + i))
+
+  it('evaluates at most five codes on one ticket, even all at once', async () => {
+    const secret = await enrol(adminUid, T0)
+    const later = T0 + 60_000
+    const { ticket } = await signInWithPassword(engine, db, { ...ADMIN, ip: '198.51.100.1' })
+    const results = await Promise.all(
+      wrongCodes(200).map((code) =>
+        completeTotpSignIn(engine, db, {
+          ticket,
+          code,
+          master: MASTER,
+          ip: '203.0.113.5',
+          nowMs: later,
+        })
+      )
+    )
+    expect(results.filter((r) => r.reason === 'code').length).toBeLessThanOrEqual(5)
+    // The burst burnt the ticket: the right code no longer opens it.
+    expect(
+      (
+        await completeTotpSignIn(engine, db, {
+          ticket,
+          code: codeAt(secret, later),
+          master: MASTER,
+          nowMs: later,
+        })
+      ).ok
+    ).toBe(false)
+  })
+
+  it('locks the code step for the person, and a right password does not reset it', async () => {
+    const secret = await enrol(adminUid, T0)
+    const later = T0 + 60_000
+    let evaluated = 0
+    // Fresh tickets from many sources, each spending a few wrong codes.
+    for (let round = 0; round < 6; round++) {
+      const { ticket } = await signInWithPassword(engine, db, {
+        ...ADMIN,
+        ip: `198.51.100.${round}`,
+      })
+      for (const code of wrongCodes(4)) {
+        const r = await completeTotpSignIn(engine, db, {
+          ticket,
+          code,
+          master: MASTER,
+          ip: `203.0.113.${round}`,
+          nowMs: later,
+        })
+        if (r.reason === 'code') evaluated += 1
+      }
+    }
+    expect(evaluated).toBe(TOTP_FAILURES_PER_ACCOUNT)
+    const { ticket } = await signInWithPassword(engine, db, { ...ADMIN, ip: '198.51.100.99' })
+    expect(
+      (
+        await completeTotpSignIn(engine, db, {
+          ticket,
+          code: codeAt(secret, later),
+          master: MASTER,
+          nowMs: later,
+        })
+      ).reason
+    ).toBe('locked')
+  })
+
+  it('clears the count after a right code', async () => {
+    const secret = await enrol(adminUid, T0)
+    const later = T0 + 60_000
+    const first = await signInWithPassword(engine, db, { ...ADMIN, ip: '198.51.100.1' })
+    for (const code of wrongCodes(4)) {
+      await completeTotpSignIn(engine, db, {
+        ticket: first.ticket,
+        code,
+        master: MASTER,
+        nowMs: later,
+      })
+    }
+    const { ticket } = await signInWithPassword(engine, db, { ...ADMIN, ip: '198.51.100.1' })
+    expect(
+      (
+        await completeTotpSignIn(engine, db, {
+          ticket,
+          code: codeAt(secret, later),
+          master: MASTER,
+          nowMs: later,
+        })
+      ).ok
+    ).toBe(true)
+    const row = await db
+      .prepare('SELECT 1 FROM auth_pending WHERE key = ?')
+      .bind(`totpfail:${adminUid}`)
+      .first()
+    expect(row).toBeFalsy()
+  })
+
+  it('bounds guessing the code that turns it off, from a signed-in session', async () => {
+    const secret = await enrol(adminUid, T0)
+    const later = T0 + 60_000
+    const results = await Promise.all(
+      wrongCodes(50).map((code) =>
+        disableOwnTotp(engine, db, { uid: adminUid, code, master: MASTER, nowMs: later })
+      )
+    )
+    expect(results.filter((r) => r.reason === 'code').length).toBeLessThanOrEqual(
+      TOTP_FAILURES_PER_ACCOUNT
+    )
+    expect(
+      (
+        await disableOwnTotp(engine, db, {
+          uid: adminUid,
+          code: codeAt(secret, later),
+          master: MASTER,
+          nowMs: later,
+        })
+      ).reason
+    ).toBe('locked')
+    expect((await totpStatus(db, { uid: adminUid })).enabled).toBe(true)
+  })
+
+  it('bounds guessing while setting up', async () => {
+    const started = await startTotpEnrollment(engine, db, { uid: adminUid, master: MASTER })
+    for (const code of wrongCodes(5)) {
+      await confirmTotpEnrollment(engine, db, { uid: adminUid, code, master: MASTER, nowMs: T0 })
+    }
+    expect(
+      (
+        await confirmTotpEnrollment(engine, db, {
+          uid: adminUid,
+          code: codeAt(started.secret, T0),
+          master: MASTER,
+          nowMs: T0,
+        })
+      ).reason
+    ).toBe('expired')
   })
 })
 
