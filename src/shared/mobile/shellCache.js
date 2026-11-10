@@ -2,15 +2,19 @@
 //
 // The worker exists so a phone that has opened the app once can still paint
 // the shell in a dead spot on site. It must not become a second cache of
-// account or equipment data. Firebase Auth, Firestore, Storage and App Check
-// are requests to Google; they already have the SDK's own persistence, which
-// is off unless VITE_OFFLINE_CACHE is set. Intercepting them here would replay
-// one person's responses to the next person on the device, or hide a rules
-// change behind a cached allow. Anything that is not this origin's static
-// shell is passed straight through.
+// account or equipment data. The server's endpoints — records (/data), jobs
+// (/rpc), sign-in (/auth), upload links (/presign), stored files (/blob) and
+// /health — are passed straight through and never stored. Storing them would
+// replay one person's records or files to the next person on a shared device,
+// keep a file after its download link expired, or hide an access change
+// behind a cached answer. Anything that is not this origin's static shell is
+// passed straight through.
 
-// v2: v1 may hold index.html saved as a script chunk; activate drops other names.
-export const SHELL_CACHE = 'ohsms-shell-v2'
+// Renamed whenever an old cache may hold something it should not; activate
+// drops every other name. v2: v1 may hold index.html saved as a script chunk.
+// v3: v2 may hold stored files and server answers, from before /blob and the
+// server endpoints were passed through.
+export const SHELL_CACHE = 'ohsms-shell-v3'
 
 export const PRECACHE_URLS = [
   '/',
@@ -26,14 +30,11 @@ export const PRECACHE_URLS = [
 // reporting. A same-origin check already skips these when the page origin is
 // the app; the suffix list is the backstop for a request whose origin was not
 // passed in, and for a bug that compared the wrong origin.
-const PASS_HOST_SUFFIXES = [
-  'googleapis.com',
-  'gstatic.com',
-  'google.com',
-  'recaptcha.net',
-  'firebaseio.com',
-  'sentry.io',
-]
+const PASS_HOST_SUFFIXES = ['sentry.io']
+
+// This origin's server endpoints (stack/handler.mjs, worker/index.js).
+const SERVER_PATHS = ['/data', '/presign', '/blob', '/health']
+const SERVER_PREFIXES = ['/rpc/', '/auth/']
 
 /**
  * @returns {'pass' | 'asset' | 'navigate'}
@@ -58,6 +59,9 @@ export function shellCacheDecision(rawUrl, { method = 'GET', origin = '' } = {})
   // the app and the auth domain share a host, and caching it would replay a
   // sign-in.
   if (url.pathname.startsWith('/__/')) return 'pass'
+  if (SERVER_PATHS.includes(url.pathname) || SERVER_PREFIXES.some((p) => url.pathname.startsWith(p))) {
+    return 'pass'
+  }
   // The uptime probe. A cached 200 is a lie about a deploy that is down.
   if (url.pathname === '/health.json') return 'pass'
   // A dedicated environment's settings (stack/app.mjs), written when it goes

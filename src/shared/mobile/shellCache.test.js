@@ -4,7 +4,22 @@ import { shellCacheDecision } from './shellCache'
 const ORIGIN = 'https://suite.weehs.org'
 
 describe('shellCacheDecision', () => {
-  it('does not touch Firebase Auth or Firestore', () => {
+  // A stored file or a record cached here would be handed to the next person
+  // on a shared phone, and a file would outlive its expiring download link.
+  it('never stores the server: files, records, jobs, sign-in, health', () => {
+    for (const path of [
+      '/blob?op=get&path=files%2Fincident-photos%2Fa.jpg&exp=1&sig=s',
+      '/data',
+      '/presign',
+      '/health',
+      '/rpc/getDataKeys',
+      '/auth/password',
+    ]) {
+      expect(shellCacheDecision(`${ORIGIN}${path}`, { origin: ORIGIN }), path).toBe('pass')
+    }
+  })
+
+  it('does not touch requests to other hosts', () => {
     const urls = [
       'https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=k',
       'https://securetoken.googleapis.com/v1/token?key=k',
