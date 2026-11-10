@@ -25,7 +25,7 @@ function staticDir() {
   return dir
 }
 
-async function start({ db, dir = '', bootstrap, mail } = {}) {
+async function start({ db, dir = '', bootstrap, mail, fetchImpl } = {}) {
   const database = db || (await hostedLikeDb())
   const app = await createDedicatedApp({
     db: database,
@@ -34,6 +34,7 @@ async function start({ db, dir = '', bootstrap, mail } = {}) {
     dataKeyMaster: Buffer.alloc(32, 7).toString('base64'),
     staticDir: dir,
     mail,
+    fetchImpl,
     bootstrap: bootstrap ?? { orgName: 'Cult Fit', adminEmail: ADMIN.email, adminPassword: ADMIN.password },
   })
   await new Promise((resolve) => app.server.listen(0, '127.0.0.1', resolve))
@@ -251,6 +252,99 @@ describe('an administrator password chosen by the operator', () => {
     })
     const token = await s.signIn(ADMIN.email, 'Chosen*Pass*123')
     expect(await s.read(token, 'organization', 'profile')).toMatchObject({ name: 'Cult Fit' })
+    await s.stop()
+  })
+})
+
+describe('site weather', () => {
+  it('answers for a site the caller can see, through the server, and refuses others', async () => {
+    const asked = []
+    const NOW = Date.now()
+    const ts = [NOW - 3_600_000, NOW - 60_000, NOW + 3_600_000]
+    const ok = (json) => ({ ok: true, status: 200, headers: { get: () => null }, json: async () => json, text: async () => '' })
+    const fetchImpl = async (url) => {
+      asked.push(String(url))
+      if (String(url).includes('air-quality')) return ok({ hourly: { time: [NOW - 60_000], us_aqi: [40] } })
+      const fill = (v) => ts.map(() => v)
+      return ok({
+        hourly: {
+          time: ts,
+          temperature_2m: fill(29),
+          relative_humidity_2m: fill(60),
+          precipitation: fill(0),
+          cape: fill(0),
+          weather_code: fill(0),
+          wind_speed_10m: fill(1),
+        },
+      })
+    }
+    const s = await start({ fetchImpl })
+    const admin = await readyAdmin(s)
+    await s.post(
+      '/data',
+      { op: 'commit', ops: [{ type: 'set', path: 'sites', id: 'w1', merge: false, data: { name: 'Depot', lat: 19.08, lng: 72.88 } }] },
+      admin
+    )
+    const here = await s.rpc(admin, 'fetchSiteWeather', { lat: 19.08, lng: 72.88 })
+    expect(here.status).toBe(200)
+    expect(here.body.obs.tempC).toBe(29)
+    const elsewhere = await s.rpc(admin, 'fetchSiteWeather', { lat: 51.5, lng: -0.12 })
+    expect(elsewhere.status).toBe(403)
+    // The cached reading is the server's: the data API neither shows nor takes it.
+    const cache = await s.post('/data', { op: 'list', path: 'weatherCache' }, admin)
+    expect(cache.body.rows).toEqual([])
+    const poison = await s.post(
+      '/data',
+      { op: 'commit', ops: [{ type: 'set', path: 'weatherCache', id: 'om_19.08_72.88', merge: false, data: { slot: 'x', obs: { tempC: 99 } } }] },
+      admin
+    )
+    expect(poison.status).toBe(403)
+    expect(asked.every((u) => u.startsWith('https://api.open-meteo.com/') || u.startsWith('https://air-quality-api.open-meteo.com/'))).toBe(true)
+    await s.stop()
+  })
+})
+
+describe('subject access export', () => {
+  it('gathers a person\'s records for a manager, and refuses everyone else', async () => {
+    const s = await start()
+    const admin = await readyAdmin(s)
+    const made = await s.rpc(admin, 'createMember', {
+      email: 'sam@cult.test',
+      name: 'Sam',
+      role: 'member',
+      password: 'temporary-pass-9',
+    })
+    const sam = made.body.uid
+    const commit = (ops) => s.post('/data', { op: 'commit', ops }, admin)
+    await commit([
+      { type: 'set', path: 'trainingAssignments', id: 't1', merge: false, data: { employeeUid: sam, courseName: 'Fire' } },
+      { type: 'set', path: 'trainingAssignments', id: 't2', merge: false, data: { employeeUid: 'someone-else' } },
+      { type: 'set', path: 'lotoPermits', id: 'lp1', merge: false, data: { requestedBy: sam, personnelUids: [sam] } },
+      { type: 'set', path: 'lotoPermits', id: 'lp2', merge: false, data: { requestedBy: 'x', personnelUids: ['y', sam] } },
+      { type: 'set', path: 'injuries', id: 'inj1', merge: false, data: { personId: 'P-7', status: 'open' } },
+    ])
+
+    const out = await s.rpc(admin, 'exportSubjectData', { uid: sam, personId: 'P-7' })
+    expect(out.status).toBe(200)
+    expect(out.body.records.users.map((r) => r.id)).toEqual([sam])
+    expect(out.body.records.trainingAssignments.map((r) => r.id)).toEqual(['t1'])
+    // Matched by either join, listed once.
+    expect(out.body.records.lotoPermits.map((r) => r.id).sort()).toEqual(['lp1', 'lp2'])
+    expect(out.body.records.injuries.map((r) => r.id)).toEqual(['inj1'])
+    // The half it cannot search is named, not reported as "nothing found".
+    expect(out.body.mentions.length).toBeGreaterThan(0)
+    expect(out.body.problems).toEqual([])
+
+    // An employee cannot assemble a colleague's record, not even their own way round.
+    await s.rpc(await s.signIn('sam@cult.test', 'temporary-pass-9'), 'completePasswordChange', {
+      current: 'temporary-pass-9',
+      password: 'sam-own-pass-10',
+    })
+    const samToken = await s.signIn('sam@cult.test', 'sam-own-pass-10')
+    expect((await s.rpc(samToken, 'exportSubjectData', { uid: sam })).status).toBe(403)
+    // Ids are checked before anything is read.
+    expect((await s.rpc(admin, 'exportSubjectData', { uid: '../users' })).status).toBe(403)
+    expect((await s.rpc(admin, 'exportSubjectData', { uid: 'nobody-here' })).status).toBe(403)
     await s.stop()
   })
 })

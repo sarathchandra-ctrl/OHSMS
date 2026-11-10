@@ -1,12 +1,16 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import toast from 'react-hot-toast'
-import { Play, Check, Bug, QrCode, Lock, UserCheck } from 'lucide-react'
-import { Card, Button } from '../../shared/ui'
+import { Play, Check, Bug, QrCode, Lock, UserCheck, FileDown } from 'lucide-react'
+import { Card, Button, Field, Select, Input } from '../../shared/ui'
 import { reportError } from '../../shared/monitoring'
 import { backfillProcedureMirrors } from '../../modules/loto/services/procedures'
 import { backfillLockClaims } from '../../modules/loto/services/lockClaims'
 import { backfillAll } from '../../shared/crypto/backfill'
 import { backfillCreatorUids } from '../../shared/org/creatorBackfill'
+import { exportSubjectData } from '../../shared/functions'
+import { logAudit, subscribeOrgUsers } from '../../shared/org/orgData'
+import { sealingEnabled } from '../../shared/crypto'
+import { useAuth } from '../../shared/auth/AuthContext'
 
 /**
  * Maintenance jobs an administrator runs from the browser. Each is idempotent
@@ -15,6 +19,7 @@ import { backfillCreatorUids } from '../../shared/org/creatorBackfill'
 export default function Maintenance() {
   return (
     <div className="space-y-4">
+      <SubjectAccess />
       <SealHistory />
       <ProcedureMirrors />
       <LockClaims />
@@ -420,6 +425,108 @@ function CreatorUids() {
       <p>
         This matches each name or email to a person. Where two people share a name it is left
         alone rather than guessed; a manager can still edit those.
+      </p>
+    </Job>
+  )
+}
+
+/**
+ * A subject access request: everything held about one person, as a JSON file.
+ *
+ * The server gathers it (exportSubjectData, stack/workers.mjs) for admins and
+ * managers only. What comes back has two halves that mean different things —
+ * see docs/DATA-RIGHTS.md §2 — and the summary below says which is which, so
+ * nobody hands a person the complete half and calls it everything.
+ */
+function SubjectAccess() {
+  const { actor } = useAuth()
+  const [people, setPeople] = useState([])
+  const [uid, setUid] = useState('')
+  const [personId, setPersonId] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [result, setResult] = useState(null)
+
+  useEffect(() => subscribeOrgUsers((list) => setPeople(list.sort((a, b) => String(a.name).localeCompare(String(b.name))))), [])
+
+  const gather = async () => {
+    setBusy(true)
+    try {
+      const data = await exportSubjectData({ uid, personId, encryptionOn: sealingEnabled })
+      setResult(data)
+      const who = people.find((p) => p.uid === uid)?.name || uid || personId
+      // The export itself is an access to the person's records, medical ones
+      // included, so it goes on the trail like any other.
+      await logAudit(actor, 'user.subject_access_export', {
+        target: 'user',
+        targetId: uid || personId,
+        targetLabel: who,
+        summary: `Exported the records held about ${who}`,
+      })
+    } catch (err) {
+      reportError(err, { where: 'exportSubjectData' })
+      toast.error(err?.message || 'Failed')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const download = () => {
+    const blob = new Blob([JSON.stringify(result, null, 2)], { type: 'application/json' })
+    const a = document.createElement('a')
+    a.href = URL.createObjectURL(blob)
+    a.download = `subject-access-${result.subject.uid || result.subject.personId}-${result.generatedAt.slice(0, 10)}.json`
+    a.click()
+    URL.revokeObjectURL(a.href)
+  }
+
+  const counts = result
+    ? Object.entries(result.records).filter(([, rows]) => rows.length).map(([path, rows]) => `  ${path}: ${rows.length}`)
+    : []
+
+  return (
+    <Job
+      icon={FileDown}
+      title="Subject access request"
+      result={result && [
+        'Records found by a key (complete for these):',
+        ...(counts.length ? counts : ['  none']),
+        '',
+        `Places to check by hand (names in free text, not searched): ${result.mentions.length} collections, listed in the file`,
+        result.scan?.feasible === false ? `Note: ${result.scan.note}` : '',
+        result.problems.length ? `\nCould not read: ${result.problems.map((p) => p.path).join(', ')} — the export is incomplete` : '',
+      ].filter((l) => l !== '').join('\n')}
+      actions={
+        <>
+          <Button variant="ghost" icon={Play} loading={busy} disabled={busy || (!uid && !personId.trim())} onClick={gather}>
+            Gather
+          </Button>
+          <Button icon={FileDown} disabled={!result} onClick={download}>
+            Download JSON
+          </Button>
+        </>
+      }
+    >
+      <p>
+        Everything this organization holds about one person, for a data access request. Choose
+        the person, and add their injury person id if they have injury records.
+      </p>
+      <div className="grid gap-3 pt-1 sm:grid-cols-2">
+        <Field label="Person" htmlFor="sar-person">
+          <Select id="sar-person" value={uid} onChange={(e) => { setUid(e.target.value); setResult(null) }}>
+            <option value="">—</option>
+            {people.map((p) => (
+              <option key={p.uid} value={p.uid}>{p.name || p.email}</option>
+            ))}
+          </Select>
+        </Field>
+        <Field label="Injury person id (optional)" htmlFor="sar-person-id">
+          <Input id="sar-person-id" value={personId} onChange={(e) => { setPersonId(e.target.value); setResult(null) }} />
+        </Field>
+      </div>
+      <p>
+        The file has two halves. Records joined by a key are complete. Names written in free text
+        (meeting attendees, people named in an incident) cannot be searched reliably, so the file
+        lists where to look instead of claiming none were found.
       </p>
     </Job>
   )

@@ -35,9 +35,10 @@ claiming completeness it does not have is to say where it stopped.
 
 ### WhatsApp site lookup
 
-The WhatsApp lookup (`docs/WHATSAPP.md`) adds personal-data collections
-at the database root, tenanted by an `orgId` field and **server-only** in
-`firestore.rules`:
+The WhatsApp lookup (`docs/WHATSAPP.md`) adds the personal-data
+collections below. Its server half has not been carried over from the Cloud
+Functions tier, so the feature is switched off (`src/shared/serverFeatures.js`)
+and nothing writes these today; the export still looks for them:
 
 | Collection | What | Reached by | Kept |
 |---|---|---|---|
@@ -64,17 +65,22 @@ and the DPA.
 
 ## 2. Subject access (implemented)
 
-**Admin → Maintenance → Subject access request.** Enter the person's uid,
-press Gather, download the JSON.
+**Admin → Maintenance → Subject access request.** Choose the person (and
+their injury person id, if they have one), press Gather, download the JSON.
+The export is written to the audit log.
 
-Server-side it is `exportSubjectData` in `functions/index.js`:
+Server-side it is the `exportSubjectData` job (`exportSubject` in
+`stack/workers.mjs`), planned by `stack/lib/subjectData.js`:
 
-- **Manager-only.** The same standing `firestore.rules` requires to read
-  `/injuries` and `/illnesses` (`isManagerOf`). Anything less would let a member
-  assemble a colleague's medical history in a single call — a bulk export
-  concentrates data in a way the individual screens do not.
-- **Org-scoped, checked against the subject's own profile.** A uid is not a
-  secret, so without this a manager of any tenant could export any uid.
+- **Manager-only.** The same standing `stack/policy.mjs` requires to read
+  `injuries` and `illnesses`, judged on the caller's live profile. Anything
+  less would let an employee assemble a colleague's medical history in a
+  single call — a bulk export concentrates data in a way the individual
+  screens do not.
+- **Checked against the subject's own profile.** The uid must be a person in
+  this installation, and both ids are validated before anything is read.
+- **Sealed values stay sealed.** The server returns what is stored; with
+  encryption on, the requesting manager's browser holds the keys.
 - **Reports its own failures.** A collection that cannot be read appears in
   `problems` rather than being quietly absent.
 
@@ -144,10 +150,10 @@ existed.
 **That half is now built**: `deleteInjury` / `restoreInjury` / `purgeInjury`
 (`src/modules/incidents/lib/injuries.js`), the Recycle Bin shows injury reports,
 and `stack/lib/retention.js` purges them thirty days after deletion together
-with the `records` subcollection and the Storage objects behind it. Writing
-`deletedAt` on an injury is manager-only in `firestore.rules`
-(`keepsInjuryDeletion`), because it now schedules an irreversible deletion rather
-than hiding a row.
+with the `records` subcollection and the Storage objects behind it. Only managers
+can write `deletedAt` on an injury — injuries are readable, and so writable,
+by managers alone (`stack/policy.mjs`) — because it schedules an irreversible
+deletion rather than hiding a row.
 
 **What is deliberately NOT built is a maximum age.** An injury nobody deletes is
 kept indefinitely, exactly as before, and that is this section's general finding

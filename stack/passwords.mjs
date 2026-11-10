@@ -131,7 +131,7 @@ export async function liveAdmin(engine, uid) {
 // Kept in auth_pending, which the data API never reads.
 
 /** Adds one to a counter that resets after `ttlSeconds`; returns the new count. */
-async function bump(db, key, ttlSeconds) {
+export async function bump(db, key, ttlSeconds) {
   const now = Date.now()
   const row = await db
     .prepare(

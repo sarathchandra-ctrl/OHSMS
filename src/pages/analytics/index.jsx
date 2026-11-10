@@ -29,6 +29,7 @@ import InspectionsTab from './InspectionsTab'
 import OdinTab from './OdinTab'
 import AuditorsTab from './AuditorsTab'
 import PreLaunchTab from './PreLaunchTab'
+import { SERVER_FEATURES } from '../../shared/serverFeatures'
 
 // Icons match the portal registry's, so a tab here and the tile it reports on
 // are recognisably the same thing.
@@ -96,7 +97,13 @@ export default function Analytics() {
   // add-on the platform operator grants per customer — see ADDONS in the
   // module registry and the note on TABS below.
   const tabs = useMemo(
-    () => TABS.filter((t) => !t.needs || moduleEnabled(t.needs)),
+    () =>
+      TABS.filter(
+        (t) =>
+          (!t.needs || moduleEnabled(t.needs)) &&
+          // The ODIN tabs read Metabase through a server job not yet ported.
+          (t.needs !== 'odin' || SERVER_FEATURES.metabase)
+      ),
     [moduleEnabled],
   )
   const sites = useAccessibleSites()

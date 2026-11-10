@@ -15,6 +15,11 @@ import {
 } from '../stack/lib/retentionPolicy.js'
 import { planWithdrawals, withdrawnFields } from '../stack/lib/permitMirror.js'
 import { planFlags } from '../stack/lib/lotoPermitSweep.js'
+import { serveSiteWeather, WEATHER_FETCH_LIMIT, WEATHER_FETCH_WINDOW_S } from '../stack/lib/siteWeather.js'
+
+import { planExport, planScan, scanFeasibility, classifyErasure } from '../stack/lib/subjectData.js'
+
+export { WEATHER_FETCH_LIMIT, WEATHER_FETCH_WINDOW_S }
 
 const WORKER = { role: 'ohsms_worker', uid: '' }
 
@@ -129,4 +134,130 @@ export async function sweepLoto(engine, { nowMs = Date.now() } = {}) {
     flagged += 1
   }
   return { checked: permits.length, flagged }
+}
+
+// ── Site weather (fetchSiteWeather) ─────────────────────────────────────────
+// The decisions are stack/lib/siteWeather.js; this wires them to the engine.
+// The cache is the server-only `weatherCache` collection (policy serverOnly):
+// a member who could write it would put a temperature on every screen.
+
+const cacheId = (key) => `om_${String(key || '').replace(/[^0-9A-Za-z._-]/g, '_')}`
+
+function weatherCacheStore(engine) {
+  return {
+    get: (key) => engine.get(WORKER, 'weatherCache', cacheId(key)),
+    async set(key, slot, obs) {
+      const plain = {}
+      for (const [field, value] of Object.entries(obs || {})) {
+        if (typeof value === 'number' && Number.isFinite(value)) plain[field] = value
+        else if (typeof value === 'string' && value.trim()) plain[field] = value.trim()
+      }
+      if (!Object.keys(plain).length) return
+      await engine.commit(WORKER, [
+        {
+          type: 'set',
+          path: 'weatherCache',
+          id: cacheId(key),
+          merge: false,
+          data: { slot, obs: plain, fetchedAt: Date.now() },
+        },
+      ])
+    },
+  }
+}
+
+export async function siteWeather(engine, { uid, data, takeRate, fetchImpl = globalThis.fetch }) {
+  const profile = await liveProfile(engine, uid)
+  const sites = await engine.list(WORKER, 'sites', {})
+  const result = await serveSiteWeather({
+    profile,
+    data,
+    sites,
+    cache: weatherCacheStore(engine),
+    fetchImpl,
+    takeRate,
+  })
+  if (result.error) return { ok: false, code: result.error, reason: result.error, message: result.message }
+  return result.body
+}
+
+// ── Subject access (exportSubjectData) ──────────────────────────────────────
+// Everything this organization holds about one person. Ported from the Cloud
+// Functions tier; the plan of what to gather, and what an export may NOT
+// claim, is stack/lib/subjectData.js, shared with the app.
+//
+// Admins and managers only, judged on the live profile: the same people the
+// policy lets read injuries and illnesses. Anything less would let an employee
+// assemble a colleague's medical history in one call.
+//
+// `records` is complete for every source joined by a key. `mentions` is a list
+// of PLACES TO LOOK, not results: names in free text cannot be searched
+// reliably, and over sealed fields not at all (docs/DATA-RIGHTS.md §2).
+// Sealed values come back sealed; the requesting manager's browser opens them.
+//
+// The engine's SQL filters cannot look inside a list, so each source is read
+// whole and matched here. One installation is one organization, so there is
+// no tenant to scope by.
+
+const SEGMENT = /^[A-Za-z0-9_-]{1,128}$/
+
+function joinMatches(row, q) {
+  if (q.kind === 'field') return row?.[q.field] === q.value
+  if (q.kind === 'arrayContains') return Array.isArray(row?.[q.field]) && row[q.field].includes(q.value)
+  if (q.kind === 'arrayField') {
+    return Array.isArray(row?.[q.field]) && row[q.field].some((item) => item?.[q.matchField] === q.value)
+  }
+  return false
+}
+
+export async function exportSubject(engine, { uid, subjectUid, personId, encryptionOn }) {
+  const caller = await liveProfile(engine, uid)
+  const isManager =
+    caller &&
+    caller.status === 'approved' &&
+    caller.mustChangePassword !== true &&
+    ['admin', 'manager'].includes(caller.role)
+  if (!isManager) return { ok: false, reason: 'not-manager', message: 'Administrators and managers only.' }
+
+  const who = String(subjectUid || '').trim()
+  const person = String(personId || '').trim()
+  if (!who && !person) return { ok: false, reason: 'no-subject', message: 'Give a uid, a personId, or both.' }
+  if ((who && !SEGMENT.test(who)) || (person && !SEGMENT.test(person))) {
+    return { ok: false, reason: 'invalid', message: 'That is not a valid id.' }
+  }
+  if (who && !(await engine.get(WORKER, 'users', who))) {
+    return { ok: false, reason: 'no-subject', message: 'No person in this organization has that uid.' }
+  }
+
+  const records = {}
+  const problems = []
+  const read = new Map()
+  for (const q of planExport({ uid: who, personId: person })) {
+    try {
+      if (q.kind === 'docId') {
+        const row = await engine.get(WORKER, q.path, q.value)
+        records[q.path] = row ? [row] : []
+        continue
+      }
+      if (!read.has(q.path)) read.set(q.path, await engine.list(WORKER, q.path, {}))
+      const found = read.get(q.path).filter((row) => joinMatches(row, q))
+      // Two joins on one collection (a permit requested by them, a permit they
+      // worked on) must not list the same record twice.
+      const seen = new Set((records[q.path] || []).map((r) => r.id))
+      records[q.path] = [...(records[q.path] || []), ...found.filter((r) => !seen.has(r.id))]
+    } catch (err) {
+      // A source that could not be read is reported, never silently empty.
+      problems.push({ path: q.path, error: err?.message || String(err) })
+    }
+  }
+
+  return {
+    subject: { uid: who || null, personId: person || null },
+    generatedAt: new Date().toISOString(),
+    records,
+    mentions: planScan(),
+    scan: scanFeasibility({ encryptionOn: Boolean(encryptionOn) }),
+    erasure: classifyErasure(),
+    problems,
+  }
 }

@@ -30,7 +30,8 @@ export const collectionOf = (path) => String(path).split('/').pop()
 export const rootOf = (path) => String(path).split('/')[0]
 export const isMedical = (path) => /^(injuries|illnesses)(\/|$)/.test(String(path))
 /** Written and read only by the server. */
-export const serverOnly = (path) => ['scimTokens', 'scimUsers', 'scimGroups'].includes(rootOf(path))
+export const serverOnly = (path) =>
+  ['scimTokens', 'scimUsers', 'scimGroups', 'weatherCache'].includes(rootOf(path))
 /** Documents with their own, narrower write rules. */
 export const specialPath = (path) => ['users', 'organization', 'moduleEntitlements'].includes(path)
 const isCryptoKey = (path, id) =>

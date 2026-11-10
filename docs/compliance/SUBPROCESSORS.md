@@ -53,9 +53,10 @@ are not given a dump of the tenant. The allowed hosts are the
 | OpenStreetMap tiles, Nominatim, Overpass (and the failover mirrors in the CSP) | Map tile coordinates; a site's coordinates or address when looking up nearby services | No tenant records. |
 | Google Places API | A site's coordinates, when finding nearby hospitals and fire stations | Only when the build sets `VITE_GOOGLE_MAPS_API_KEY`; otherwise the OpenStreetMap services above are used. |
 
-Weather: the weather screens ask the organization's own server for
-conditions. The current server does not call any weather provider, so no
-coordinates leave it for that purpose.
+Weather: the weather screens ask the organization's own server, which asks
+Open-Meteo's public forecast and air-quality APIs (`stack/lib/openMeteo.js`).
+What leaves is a coordinate rounded to about a kilometre: no site name, no
+organization, no record, no API key. The browser does not call Open-Meteo.
 
 ## Legacy: Google Firebase Storage
 

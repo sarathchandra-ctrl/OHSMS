@@ -85,11 +85,16 @@ import {
 } from '../../shared/ui'
 import MetabaseSettings from './MetabaseSettings'
 import WhatsAppConnect from './WhatsAppConnect.jsx'
+import { SERVER_FEATURES } from '../../shared/serverFeatures'
 
 const TABS = [
   { key: 'general', label: 'General', icon: Settings },
   { key: 'scope', label: 'Scope & Granularity', icon: Layers },
-  { key: 'integrations', label: 'Integrations', icon: Plug },
+  // Every integration on this tab still needs a server job that has not been
+  // ported (src/shared/serverFeatures.js), so the tab is hidden with them.
+  ...(SERVER_FEATURES.whatsapp || SERVER_FEATURES.metabase
+    ? [{ key: 'integrations', label: 'Integrations', icon: Plug }]
+    : []),
 ]
 
 // A logo rides on every page load for every member, so it gets a far tighter
@@ -1100,8 +1105,8 @@ export default function OrgSettings() {
 
       {tab === 'integrations' && (
         <div className="space-y-8">
-          <WhatsAppConnect actor={actor} />
-          <MetabaseSettings actor={actor} />
+          {SERVER_FEATURES.whatsapp && <WhatsAppConnect actor={actor} />}
+          {SERVER_FEATURES.metabase && <MetabaseSettings actor={actor} />}
         </div>
       )}
     </>

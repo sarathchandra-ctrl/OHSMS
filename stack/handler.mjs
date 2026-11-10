@@ -16,6 +16,10 @@ import {
   withdrawStaleMirrors,
   sweepLoto,
   isLiveAdmin,
+  siteWeather,
+  exportSubject,
+  WEATHER_FETCH_LIMIT,
+  WEATHER_FETCH_WINDOW_S,
   stampIdentity,
 } from './workers.mjs'
 import {
@@ -25,6 +29,7 @@ import {
   requestPasswordReset,
   resetMemberPassword,
   signInWithPassword,
+  bump,
 } from './passwords.mjs'
 
 const WORKER = { role: 'ohsms_worker', uid: '' }
@@ -95,6 +100,9 @@ export function createOwnStackHandler({
   // Cloudflare sets itself. A client-sent X-Forwarded-For is never trusted:
   // anyone could rotate it to dodge every limit.
   clientIp = (req) => req.socket?.remoteAddress || '',
+  // Outbound requests (the weather provider). Injected so tests never touch
+  // the network.
+  fetchImpl = globalThis.fetch,
 }) {
   async function handle(req, res) {
     try {
@@ -299,6 +307,22 @@ export function createOwnStackHandler({
       purgeSoftDeleted: () => runRetention(engine, { uid }),
       withdrawStalePermitMirrors: () => withdrawStaleMirrors(engine),
       sweepLotoPermits: () => sweepLoto(engine, { uid }),
+      exportSubjectData: () =>
+        exportSubject(engine, {
+          uid,
+          subjectUid: body.uid,
+          personId: body.personId,
+          encryptionOn: body.encryptionOn,
+        }),
+      fetchSiteWeather: () =>
+        siteWeather(engine, {
+          uid,
+          data: body,
+          // Provider fetches per person; cache hits never reach this.
+          takeRate: async () =>
+            (await bump(db, `weatherrate:${uid}`, WEATHER_FETCH_WINDOW_S)) <= WEATHER_FETCH_LIMIT,
+          fetchImpl,
+        }),
     }
     const fn = table[name]
     if (!fn) {
