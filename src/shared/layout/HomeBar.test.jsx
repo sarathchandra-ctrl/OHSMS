@@ -25,11 +25,11 @@ describe('HomeBar', () => {
   })
 
   it('names the portal page the person is on', () => {
-    renderAt('/portal/actions')
+    renderAt('/portal/training')
     const trail = screen.getByRole('navigation', { name: 'Breadcrumb' })
     expect(trail).toBeTruthy()
     expect(screen.getByRole('link', { name: /home/i }).getAttribute('href')).toBe('/portal')
-    expect(screen.getByText('My actions')).toBeTruthy()
+    expect(screen.getByText('My training')).toBeTruthy()
   })
 
   it('names a field page without repeating a scan token', () => {

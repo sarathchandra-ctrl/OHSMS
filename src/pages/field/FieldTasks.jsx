@@ -9,7 +9,7 @@ import {
 } from 'lucide-react'
 
 const LINKS = [
-  { to: '/portal/actions', label: 'My actions', detail: 'Items assigned to you', icon: ListChecks },
+  { to: '/actions', label: 'Actions', detail: 'Open actions across modules', icon: ListChecks },
   { to: '/inspections', label: 'Inspection schedule', detail: 'What is due', icon: CalendarClock },
   {
     to: '/inspections/overdue',

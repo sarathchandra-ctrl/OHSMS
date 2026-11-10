@@ -173,14 +173,14 @@ describe('isShellHome', () => {
     expect(isShellHome('/', '/field')).toBe(true)
     expect(isShellHome('/field/tasks', '/field')).toBe(false)
     expect(isShellHome('/field/scan', '/field')).toBe(false)
-    expect(isShellHome('/portal/report', '/field')).toBe(false)
+    expect(isShellHome('/portal/training', '/field')).toBe(false)
     expect(isShellHome('/dashboard', '/field')).toBe(false)
   })
 
   it('follows a desktop shell home without also claiming the phone grid', () => {
     expect(isShellHome('/portal', '/portal')).toBe(true)
     expect(isShellHome('/portal/', '/portal')).toBe(true)
-    expect(isShellHome('/portal/actions', '/portal')).toBe(false)
+    expect(isShellHome('/portal/training', '/portal')).toBe(false)
     expect(isShellHome('/field', '/portal')).toBe(false)
     expect(isShellHome('', '/field')).toBe(false)
   })

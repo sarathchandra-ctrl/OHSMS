@@ -107,8 +107,8 @@ test('a module list page is clean', async ({ page }) => {
 // control here must come back with a name.
 test('a form page is clean, and every control has a name', async ({ page }) => {
   await signIn(page)
-  await page.goto('/portal/report')
-  await ready(page, /report/i)
+  await page.goto('/incidents/new')
+  await ready(page, /incident/i)
   await expectNoSeriousViolations(page, 'Report an incident')
 
   // Said directly as well as via axe, because this is the specific regression

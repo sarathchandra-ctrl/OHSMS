@@ -124,7 +124,7 @@ function stripTrailingSlash(value) {
  * opens /portal, and while this bar is mounted (mobile view only) that index
  * renders the same grid as /field. Treating only /field as home left the
  * control looking idle on the screen people actually land on. Nested portal
- * routes are not home: /portal/report is the Report tab.
+ * routes are not home: /portal/training is its own page.
  */
 export function isShellHome(pathname, homePath) {
   const path = stripTrailingSlash(pathname)

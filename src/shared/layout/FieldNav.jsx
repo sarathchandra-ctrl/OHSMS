@@ -17,7 +17,7 @@ import { isShellHome, shellForMode } from '../mobile/viewMode'
 const ITEMS = [
   { to: '/field/scan', label: 'QR Scan', icon: QrCode },
   { to: '/field/tasks', label: 'Tasks', icon: ClipboardCheck },
-  { to: '/portal/report', label: 'Report', icon: AlertTriangle },
+  { to: '/incidents/new', label: 'Report', icon: AlertTriangle },
   { to: '/equipment/defects', label: 'Defects', icon: Wrench },
   { to: '/field/alerts', label: 'Alerts', icon: Bell },
 ]

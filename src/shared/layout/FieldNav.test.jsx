@@ -31,7 +31,7 @@ describe('FieldNav', () => {
     expect(links[0].getAttribute('href')).toBe('/field')
     expect(screen.getByRole('link', { name: 'QR Scan' }).getAttribute('href')).toBe('/field/scan')
     expect(screen.getByRole('link', { name: 'Tasks' }).getAttribute('href')).toBe('/field/tasks')
-    expect(screen.getByRole('link', { name: 'Report' }).getAttribute('href')).toBe('/portal/report')
+    expect(screen.getByRole('link', { name: 'Report' }).getAttribute('href')).toBe('/incidents/new')
     expect(screen.getByRole('link', { name: 'Defects' }).getAttribute('href')).toBe(
       '/equipment/defects'
     )

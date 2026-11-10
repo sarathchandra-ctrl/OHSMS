@@ -90,8 +90,6 @@ export default function HomeBar() {
 }
 
 const PORTAL_PAGES = {
-  '/portal/report': 'Report an incident',
-  '/portal/actions': 'My actions',
   '/portal/training': 'My training',
 }
 

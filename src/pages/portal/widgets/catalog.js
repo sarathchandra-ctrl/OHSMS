@@ -61,7 +61,7 @@ export const WIDGETS = [
     hint: 'Assigned to you, not yet done',
     group: 'Safety',
     tone: '#dd5a41',
-    to: '/portal/actions',
+    to: '/actions',
     value: (d) => (d.myOpenActions == null ? null : d.myOpenActions),
   },
   {

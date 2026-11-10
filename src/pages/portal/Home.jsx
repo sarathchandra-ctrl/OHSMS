@@ -11,7 +11,6 @@ import { Link, useNavigate } from 'react-router-dom'
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, Legend } from 'recharts'
 import ChartFrame from '../../shared/ui/ChartFrame'
 import {
-  AlertTriangle,
   ArrowRight,
   MapPin,
   Building2,
@@ -32,7 +31,7 @@ import {
 } from '../../shared/org/orgData'
 import { useAccessibleSitesRead } from '../../shared/org/useAccessibleSites'
 import { regionsOf, entitiesOf, sitesInSelection, shortList } from '../../shared/auth/access'
-import { subscribeActions, NORM_BY_KEY, SOURCES } from '../../modules/actions/lib/sources'
+import { subscribeActions, SOURCES } from '../../modules/actions/lib/sources'
 import { subscribeAssignmentsRead } from '../../modules/training/lib/data'
 import { INCIDENT_TYPE_BY_KEY } from '../../modules/incidents/lib/constants'
 import { enabledModules } from '../../shared/modules/entitlements'
@@ -403,8 +402,10 @@ export default function PortalHome() {
       ) : (
       <div>
       <ViewModeSwitch />
-      <div className="mb-5 grid gap-4 lg:grid-cols-[1.55fr_1fr]">
-        <Raised className="relative overflow-hidden px-6 py-6 sm:px-7">
+      {/* Stacked rather than side by side: in two columns the greeting
+          stretched to the height of the three pickers and was mostly empty. */}
+      <div className="mb-5 flex flex-col gap-3">
+        <Raised className="relative flex flex-wrap items-center justify-between gap-4 overflow-hidden px-6 py-4 sm:px-7">
           <div
             aria-hidden="true"
             className="pointer-events-none absolute inset-0"
@@ -414,6 +415,7 @@ export default function PortalHome() {
                 'radial-gradient(50% 80% at 88% 96%, rgba(127,196,187,.16), transparent 60%)',
             }}
           />
+          <div className="relative min-w-0">
           <p className="relative text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-400">
             {new Date().toLocaleDateString(undefined, {
               weekday: 'long',
@@ -421,41 +423,32 @@ export default function PortalHome() {
               month: 'long',
             })}
           </p>
-          <h1 className="relative mt-2 break-words text-[28px] font-extrabold leading-[1.15] tracking-[-0.025em] text-ink-900 sm:text-[30px]">
+          <h1 className="relative mt-1 break-words text-[24px] font-extrabold leading-[1.15] tracking-[-0.025em] text-ink-900 sm:text-[26px]">
             {greeting()}, {firstName}.
           </h1>
           {actionsReady ? (
-            <p className="relative mt-2 max-w-[46ch] text-sm leading-relaxed text-ink-500">
+            <p className="relative mt-1 text-sm leading-relaxed text-ink-500">
               {open.length
                 ? `${open.length} action${open.length === 1 ? '' : 's'} assigned to you. Everything below is scoped to ${scopeLabel}.`
                 : `Nothing is waiting on you. Everything below is scoped to ${scopeLabel}.`}
             </p>
           ) : (
-            <div className="relative mt-2 max-w-[46ch]">
+            <div className="relative mt-1">
               <Skeleton className="h-4 w-72 max-w-full" />
             </div>
           )}
-          <div className="relative mt-5 flex flex-wrap gap-2.5">
-            {/* With no navigation bar, this is the only way to the report
-                wizard — and reporting is the thing most people open the portal
-                to do, so it leads. */}
-            <Button type="button" onClick={() => navigate('/portal/report')} icon={AlertTriangle}>
-              Report an incident
-            </Button>
-            <Button type="button" variant="soft" onClick={() => navigate('/portal/actions')}>
-              {actionsReady && open.length
-                ? `My ${open.length} open action${open.length === 1 ? '' : 's'}`
-                : 'My actions'}
-              <ArrowRight size={14} strokeWidth={2.4} />
-            </Button>
-            <Button type="button" variant="ghost" onClick={() => navigate('/portal/training')}>
+          </div>
+          <div className="relative">
+            <Button type="button" variant="soft" onClick={() => navigate('/portal/training')}>
               My training
+              <ArrowRight size={14} strokeWidth={2.4} />
             </Button>
           </div>
         </Raised>
 
-        <Raised className="flex flex-col gap-3 p-5">
+        <Raised className="flex flex-col gap-3 px-5 py-4">
           <SectionLabel className="tracking-[0.14em]">Viewing</SectionLabel>
+          <div className="grid gap-3 sm:grid-cols-3">
           <ScopeSelect
             id="region-scope"
             label="Region"
@@ -483,6 +476,7 @@ export default function PortalHome() {
             options={siteOptions.map((s) => ({ value: s.id, label: s.name }))}
             onChange={(v) => setScope({ region, entity, siteId: v })}
           />
+          </div>
           {!sitesReady ? (
             <div>
               <Skeleton className="h-3 w-56 max-w-full" />
@@ -490,7 +484,7 @@ export default function PortalHome() {
           ) : (
             <>
             {scopedSites.length > 0 && (
-              <dl className="space-y-1 rounded-xl bg-surface-50 px-3 py-2.5 text-[12px] ring-1 ring-ink-900/5">
+              <dl className="flex flex-wrap gap-x-5 gap-y-1 rounded-xl bg-surface-50 px-3 py-2 text-[12px] ring-1 ring-ink-900/5">
                 {[
                   ['Regions', regionsOf(scopedSites)],
                   ['Entities', entitiesOf(scopedSites)],
@@ -509,30 +503,6 @@ export default function PortalHome() {
                 : 'Only the regions, entities and sites your account can see are listed. Every figure on this page follows this selection.'}
             </p>
             </>
-          )}
-          {actionsReady && open.length > 0 && (
-            <div className="mt-auto flex flex-col gap-2 border-t border-ink-100 pt-3">
-              {open.slice(0, 2).map((a) => (
-                <Link
-                  key={a.key}
-                  to="/portal/actions"
-                  className="flex items-center gap-2.5 rounded-xl bg-surface-50 px-3 py-2 ring-1 ring-ink-900/5 transition-colors hover:bg-surface-100 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-brand-400"
-                >
-                  <span
-                    className="h-6 w-1 flex-none rounded"
-                    style={{ background: NORM_BY_KEY[a.norm]?.color || '#ab987f' }}
-                  />
-                  <span className="min-w-0 flex-1 truncate text-[12.5px] font-semibold text-ink-900">
-                    {a.title}
-                  </span>
-                  {a.overdue && (
-                    <span className="flex-none rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-bold text-red-700">
-                      Overdue
-                    </span>
-                  )}
-                </Link>
-              ))}
-            </div>
           )}
         </Raised>
       </div>
@@ -638,10 +608,10 @@ export default function PortalHome() {
               Pending actions
             </p>
             <Link
-              to="/portal/actions"
+              to="/actions"
               className="rounded text-xs font-semibold text-brand-700 hover:underline focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-brand-400"
             >
-              My actions
+              All actions
             </Link>
           </div>
           <DueList
