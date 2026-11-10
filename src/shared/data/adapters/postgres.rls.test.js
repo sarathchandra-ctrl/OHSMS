@@ -848,3 +848,48 @@ describe('LOTO log and padlock claims', () => {
     await m.set('lockClaims', 'L-12', { lockNo: 'L-12', procedureId: 'pr-b', equipment: 'Pump B' })
   })
 })
+
+// Assigned work: the auditee answers their findings; a member of an
+// incident's investigation team adds to the investigation. Judged on the
+// stored record's uids, never a name and never the values being written.
+describe('employee: assigned work', () => {
+  beforeAll(async () => {
+    await seed('auditFindings', 'af1', {
+      createdByUid: 'adminA', auditor: 'Ada', auditeeUid: 'memberA', status: 'Reported',
+      taskDetails: { auditee: 'Mo' }, findings: [{ id: 'f1', text: 'No guard', response: '' }],
+    })
+    await seed('auditFindings', 'af2', { createdByUid: 'adminA', taskDetails: { auditee: 'Mo' }, findings: [] })
+    await seed('incidents', 'inv1', {
+      title: 'Fall', createdBy: 'adminA', lifecycle: 'investigation',
+      team: [{ kind: 'internal', uid: 'memberA', name: 'Mo' }, { kind: 'external', name: 'Contractor' }],
+      investigations: [],
+    })
+  })
+  const denied = { code: 'permission-denied' }
+
+  it('lets the assigned auditee answer, and nothing more', async () => {
+    const m = as('memberA')
+    await m.update('auditFindings', 'af1', {
+      findings: [{ id: 'f1', text: 'No guard', response: 'Guard fitted' }], status: 'Submitted', submissionDate: '2026-11-10',
+    })
+    await expect(m.update('auditFindings', 'af1', { auditeeUid: 'crewB' })).rejects.toMatchObject(denied)
+    await expect(m.update('auditFindings', 'af1', { taskDetails: { auditee: 'Someone' } })).rejects.toMatchObject(denied)
+    // Named as auditee by text only: not assigned by uid, so not editable.
+    await expect(m.update('auditFindings', 'af2', { status: 'Submitted' })).rejects.toMatchObject(denied)
+  })
+
+  it('cannot assign itself by writing its own uid in', async () => {
+    await expect(as('crewB').update('auditFindings', 'af2', { auditeeUid: 'crewB', status: 'Submitted' })).rejects.toMatchObject(denied)
+    await expect(
+      as('crewB').update('incidents', 'inv1', { team: [{ kind: 'internal', uid: 'crewB' }], investigations: [{ method: '5why' }] })
+    ).rejects.toMatchObject(denied)
+  })
+
+  it('lets an investigation team member add to the investigation, but not change the team or verify', async () => {
+    const m = as('memberA')
+    await m.update('incidents', 'inv1', { investigations: [{ method: '5why', whys: ['Wet floor'] }], chronology: [{ at: '09:00', what: 'Slip' }] })
+    await expect(m.update('incidents', 'inv1', { team: [] })).rejects.toMatchObject(denied)
+    await expect(m.update('incidents', 'inv1', { lifecycle: 'verified' })).rejects.toMatchObject(denied)
+    expect((await adminEngine.get(null, 'incidents', 'inv1')).investigations).toHaveLength(1)
+  })
+})

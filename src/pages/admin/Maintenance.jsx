@@ -542,7 +542,7 @@ function CreatorUids() {
   return (
     <Job
       icon={UserCheck}
-      title="Record who wrote older meetings and inspections"
+      title="Record who wrote older meetings, inspections and audits"
       result={preview && preview.map((c) => [
         `${c.label}:`,
         `  ${c.already} already record their author`,
@@ -567,9 +567,9 @@ function CreatorUids() {
       }
     >
       <p>
-        Employees can edit the records they created. Committee meetings and inspection records
-        saved before this change kept only the author&apos;s name, so until now only a manager
-        could edit them.
+        Employees can edit the records they created, and answer audit findings assigned to them.
+        Committee meetings, inspection records and audit findings saved before this change kept
+        only names, so until now only a manager could edit them.
       </p>
       <p>
         This matches each name or email to a person. Where two people share a name it is left

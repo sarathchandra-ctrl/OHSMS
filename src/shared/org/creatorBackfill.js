@@ -22,10 +22,15 @@ import { db } from '../db'
 import { openDocs } from '../crypto'
 import { COLLECTION_READ_CAP } from './orgData'
 
+// `from` reads the name a record holds; `to` is the uid field to write.
+// Audit findings name two people: the auditor who raised them (who may edit
+// them as their creator) and the auditee assigned to answer them.
 export const CREATOR_COLLECTIONS = [
   // Minutes are sealed, createdBy included, so they are opened first.
-  { name: 'consultations', label: 'Committee meetings', sealed: true },
-  { name: 'inspectionRecords', label: 'Inspection records', sealed: false },
+  { name: 'consultations', label: 'Committee meetings', sealed: true, from: (r) => r.createdBy, to: 'createdByUid' },
+  { name: 'inspectionRecords', label: 'Inspection records', sealed: false, from: (r) => r.createdBy, to: 'createdByUid' },
+  { name: 'auditFindings', label: 'Audit findings (auditor)', sealed: false, from: (r) => r.auditor, to: 'createdByUid' },
+  { name: 'auditFindings', label: 'Audit findings (auditee)', sealed: false, from: (r) => r.taskDetails?.auditee, to: 'auditeeUid' },
 ]
 
 const norm = (v) => String(v ?? '').trim().toLowerCase()
@@ -38,7 +43,7 @@ const norm = (v) => String(v ?? '').trim().toLowerCase()
  * belongs to more than one person is ambiguous; one that belongs to nobody
  * (a person since removed, or free text) is unmatched.
  */
-export function matchCreators(rows = [], users = []) {
+export function matchCreators(rows = [], users = [], { from = (r) => r?.createdBy, to = 'createdByUid' } = {}) {
   const byKey = new Map()
   for (const u of users) {
     if (!u?.uid) continue
@@ -53,14 +58,15 @@ export function matchCreators(rows = [], users = []) {
   const unmatched = []
   let already = 0
   for (const r of rows) {
-    if (r?.createdByUid) {
+    if (r?.[to]) {
       already += 1
       continue
     }
-    const key = norm(r?.createdBy)
+    const name = from(r)
+    const key = norm(name)
     const uids = key ? byKey.get(key) : null
-    if (!uids || uids.size === 0) unmatched.push(r?.createdBy || '(no name)')
-    else if (uids.size > 1) ambiguous.push(r.createdBy)
+    if (!uids || uids.size === 0) unmatched.push(name || '(no name)')
+    else if (uids.size > 1) ambiguous.push(name)
     else matched.push({ id: r.id, uid: [...uids][0] })
   }
   return { matched, ambiguous, unmatched, already }
@@ -78,13 +84,13 @@ export async function backfillCreatorUids({ dryRun = true } = {}) {
     const snap = await getDocs(query(collection(db, c.name), limit(COLLECTION_READ_CAP)))
     const raw = snap.docs.map((d) => ({ id: d.id, ...d.data() }))
     const rows = c.sealed ? await openDocs(c.name, raw) : raw
-    const result = matchCreators(rows, users)
+    const result = matchCreators(rows, users, { from: c.from, to: c.to })
     let written = 0
     if (!dryRun) {
       for (let i = 0; i < result.matched.length; i += 400) {
         const batch = writeBatch(db)
         for (const m of result.matched.slice(i, i + 400)) {
-          batch.update(doc(db, c.name, m.id), { createdByUid: m.uid })
+          batch.update(doc(db, c.name, m.id), { [c.to]: m.uid })
         }
         await batch.commit()
         written += Math.min(400, result.matched.length - i)

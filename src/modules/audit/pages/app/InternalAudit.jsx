@@ -279,7 +279,7 @@ const AuditScheduler = ({ setView, session, sites, users, locations = [], siteIn
 // ============================================================================
 // MODULE 2: AUDITOR WORKPLACE
 // ============================================================================
-const AuditorWorkplace = ({ setView, session, isGlobalOwner, plans, findings, sites = [] }) => {
+const AuditorWorkplace = ({ setView, session, isGlobalOwner, plans, findings, sites = [], users = [] }) => {
   const siteName = (id) => siteNameOf(sites, id)
   const [view, setWView] = useState('list')
   const [filters, setFilters] = useState({ date: '', auditor: '', auditee: '', id: '' })
@@ -389,9 +389,15 @@ const AuditorWorkplace = ({ setView, session, isGlobalOwner, plans, findings, si
       return { ...f, id: f.id || genId(), auditeeDueDate: addDaysISO(days) }
     })
     try {
+      // The auditor and auditee by uid as well as by name: the server lets the
+      // assigned auditee answer these findings, and it decides that from a uid
+      // (a display name is something a person can change about themselves).
+      const auditee = users.filter((u) => u.name && u.name === cleanTask.auditee)
       await createAuditFinding({
         docId: docId || '', taskDetails: cleanTask, findings: cleanFindings,
         status: 'Reported', auditDate: new Date().toISOString(), auditor: session.user, siteId: cleanTask.siteId || 'GEN',
+        createdByUid: session.uid || null,
+        auditeeUid: auditee.length === 1 ? auditee[0].id : null,
       })
       alert('Audit saved & sent to auditee.')
       setView('hub')
@@ -1202,7 +1208,7 @@ export default function InternalAudit() {
   }, [])
 
   const session = useMemo(
-    () => ({ user: profile?.name, name: profile?.name, email: profile?.email, role: profile?.role }),
+    () => ({ uid: profile?.uid, user: profile?.name, name: profile?.name, email: profile?.email, role: profile?.role }),
     [profile],
   )
   const sites = useMemo(() => rawSites.map((s) => ({ code: s.id, name: s.name })), [rawSites])

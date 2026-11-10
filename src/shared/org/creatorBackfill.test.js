@@ -48,3 +48,15 @@ describe('matchCreators', () => {
     expect(r.matched).toEqual([])
   })
 })
+
+describe('matchCreators for other fields', () => {
+  it('matches the auditee named inside an audit finding, onto auditeeUid', () => {
+    const r = matchCreators(
+      [{ id: 'af1', taskDetails: { auditee: 'Asha Rao' } }, { id: 'af2', taskDetails: { auditee: 'Asha Rao' }, auditeeUid: 'u1' }],
+      users,
+      { from: (row) => row.taskDetails?.auditee, to: 'auditeeUid' }
+    )
+    expect(r.matched).toEqual([{ id: 'af1', uid: 'u1' }])
+    expect(r.already).toBe(1)
+  })
+})

@@ -374,8 +374,33 @@ export function isActionStatusChange(prev, next) {
   )
 }
 
+// Assigned work (owner's decision, 2026-11-10): an employee may also work on
+// a record someone else created when the STORED record assigns it to them by
+// uid — never by name, which a person can change about themselves, and never
+// from the values being written (the post-state branch).
+//   • an audit finding's auditee answers it: findings, status, submission;
+//   • a member of an incident's investigation team adds to the investigation:
+//     anything but the team itself and who created the record. Approving and
+//     verifying stay gated (DECISION_STATES).
+const AUDITEE_FIELDS = ['findings', 'status', 'submissionDate', 'updatedAt']
+const INVESTIGATOR_LOCKED = ['team', 'createdBy', 'createdByUid', 'createdByName']
+
+export function assignedEdit(path, prev, next, ctx) {
+  if (!ctx.uid || !prev) return false
+  const keys = changedKeys(prev, next)
+  if (path === 'auditFindings' && prev.auditeeUid === ctx.uid) {
+    return keys.every((k) => AUDITEE_FIELDS.includes(k))
+  }
+  if (path === 'incidents') {
+    const onTeam = Array.isArray(prev.team) && prev.team.some((m) => m && m.uid === ctx.uid)
+    return onTeam && !keys.some((k) => INVESTIGATOR_LOCKED.includes(k))
+  }
+  return false
+}
+
 export function employeeMayEdit(path, id, prev, next, ctx) {
   return (
+    assignedEdit(path, prev, next, ctx) ||
     FIELD_COLLECTIONS.includes(rootOf(path)) ||
     ownsRow(prev, ctx) ||
     (Boolean(ctx.uid) && id === ctx.uid) ||
