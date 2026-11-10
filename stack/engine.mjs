@@ -52,6 +52,16 @@ const KEYS_PER_GUARD = 30
 const ROWS_PER_UPSERT = 24
 const KEYS_PER_DELETE = 45
 const ATTEMPTS = 5
+// D1 stores at most 2,000,000 bytes in one row. A larger record used to reach
+// D1, fail there, and come back as a 500 "request failed" with nothing to say
+// why; the request limit (4 MB, stack/handler.mjs) is twice the row limit, so
+// one record carrying a few inline attachments could get that far. The record
+// is refused here instead, before any statement runs, with the reason. The
+// margin leaves room for the row's path, id and rev. Counted in UTF-8 bytes,
+// not characters: D1's limit is bytes, and text in most of the world's
+// scripts is two to four bytes a character.
+export const MAX_RECORD_BYTES = 1_900_000
+const utf8 = new TextEncoder()
 
 function fail(code, message) {
   const e = new Error(message)
@@ -436,8 +446,17 @@ export function createEngine(db) {
     const deletes = []
     for (const [k, [path, id]] of touched) {
       const next = state.get(k)
-      if (next) upserts.push([path, id, next.rev, JSON.stringify(encodeTree(next.data))])
-      else if (rows.has(k)) deletes.push([path, id])
+      if (next) {
+        const data = JSON.stringify(encodeTree(next.data))
+        const bytes = utf8.encode(data).byteLength
+        if (bytes > MAX_RECORD_BYTES) {
+          throw fail(
+            'invalid-argument',
+            `sqlite: record too large at ${path}/${id} (${bytes} bytes; the limit is ${MAX_RECORD_BYTES})`
+          )
+        }
+        upserts.push([path, id, next.rev, data])
+      } else if (rows.has(k)) deletes.push([path, id])
     }
     for (const part of chunks(upserts, ROWS_PER_UPSERT)) {
       statements.push(

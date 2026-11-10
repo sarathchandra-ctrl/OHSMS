@@ -7,7 +7,8 @@
 // browser only ever sees this one hostname, so the app's fetches are
 // same-origin. There is no machine to manage.
 
-// Keep in step with API_PREFIXES in stack/app.mjs.
+// Keep in step with API_PREFIXES in stack/runtimeConfig.mjs. /scim is not
+// here on purpose: the server does not serve it (worker/index.test.js).
 export const SERVER_PREFIXES = [
   '/data',
   '/auth/',
