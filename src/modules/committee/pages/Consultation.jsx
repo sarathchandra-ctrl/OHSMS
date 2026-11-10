@@ -466,7 +466,9 @@ export default function Consultation() {
                 await updateConsultation(firebaseKey, payload);
             } else {
                 delete payload.docId;
-                await addConsultation(payload);
+                // The creator's uid, set once: stack/policy.mjs lets an employee
+                // edit a meeting they recorded, and `createdBy` holds a name.
+                await addConsultation({ ...payload, createdByUid: profile?.uid || null });
             }
             toast.success("Record saved successfully!");
             // The onSnapshot subscription refreshes the list automatically.

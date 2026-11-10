@@ -172,6 +172,8 @@ export async function addRecord(record, actor) {
     ...record,
     completedAt: record.completedAt || new Date().toISOString(),
     createdAt: serverTimestamp(),
+    // stack/policy.mjs lets an employee edit a record they submitted.
+    createdByUid: actor?.uid || null,
   })
   await logAudit(actor, 'inspection.submit', {
     target: 'record',

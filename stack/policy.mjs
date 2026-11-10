@@ -103,9 +103,98 @@ const MEMBER_WITHDRAWABLE = ['trainingRequests']
 
 // Fields that name the person a row belongs to. Compared against the session
 // uid, so a field holding a display name can never match.
-const OWNER_FIELDS = ['createdBy', 'employeeUid']
+const OWNER_FIELDS = ['createdBy', 'createdByUid', 'employeeUid']
 const ownsRow = (prev, ctx) =>
   Boolean(ctx.uid) && OWNER_FIELDS.some((f) => typeof prev?.[f] === 'string' && prev[f] === ctx.uid)
+
+// ── What an employee may edit ───────────────────────────────────────────────
+// An employee creates, views and closes. Editing is limited to (owner's
+// decision, 2026-11-10):
+//   • rows they created (ownsRow) or that are theirs by id (alertReads/{uid});
+//   • the equipment registers, where a routine check IS an edit to a unit
+//     somebody else registered;
+//   • reference counters (meta), which only ever move forward;
+//   • a close: a status moving into a closed state, with only closing detail
+//     beside it — so "close" cannot carry a rewrite of the record with it;
+//   • the status of actions held in a record's list (an incident's CAPA, a
+//     meeting's actions) — what the Action Tracker writes when an assignee
+//     moves their action along. The text, owner and due date stay as they are.
+// Without this, any employee could rewrite or blank out anyone's record with
+// one `set` — a delete in all but name.
+const FIELD_COLLECTIONS = [
+  'extinguishers',
+  'aeds',
+  'fas',
+  'firstAid',
+  'stretchers',
+  'signages',
+  'cctvCameras',
+  'cctvDvrs',
+  'cctvMeraki',
+  'qr',
+  'defectLocks',
+  'meta',
+  // Carrying out isolation and permit work: technicians apply and remove
+  // locks on permits others raised. Approving stays gated (DECISION_STATES).
+  'lotoPermits',
+  'locks',
+  'lotoEvents',
+  'lotoGroupNumbers',
+  'permits',
+  'permitQr',
+]
+const CLOSE_STATES = ['closed', 'Closed', 'resolved', 'completed', 'done']
+const STATUS_FIELD = /^(status|lifecycle|approvalStatus)$/
+const CLOSE_DETAIL = /^(clos|review|resol|complet|stagesDone$|updated|remarks$)/i
+const ACTION_ITEM_FIELD = /^(status|clos|resol|complet|updated|remarks$)/i
+
+const isObject = (v) => Boolean(v) && typeof v === 'object' && !Array.isArray(v)
+/** Top-level keys whose value differs between two documents. */
+function changedKeys(a, b) {
+  const x = isObject(a) ? a : {}
+  const y = isObject(b) ? b : {}
+  return [...new Set([...Object.keys(x), ...Object.keys(y)])].filter(
+    (k) => JSON.stringify(x[k] ?? null) !== JSON.stringify(y[k] ?? null)
+  )
+}
+
+/** A status moves into a closed state, and nothing changes but closing detail. */
+export function isClosing(prev, next) {
+  const keys = changedKeys(prev, next)
+  const closes = keys.some(
+    (k) =>
+      STATUS_FIELD.test(k) && CLOSE_STATES.includes(str(next?.[k])) && !CLOSE_STATES.includes(str(prev?.[k]))
+  )
+  return closes && keys.every((k) => STATUS_FIELD.test(k) || CLOSE_DETAIL.test(k))
+}
+
+/** Only the status (and closing detail) of items in a list changes; none added or removed. */
+export function isActionStatusChange(prev, next) {
+  const keys = changedKeys(prev, next)
+  return (
+    keys.length > 0 &&
+    keys.every((k) => {
+      const a = prev?.[k]
+      const b = next?.[k]
+      return (
+        Array.isArray(a) &&
+        Array.isArray(b) &&
+        a.length === b.length &&
+        a.every((item, i) => changedKeys(item, b[i]).every((f) => ACTION_ITEM_FIELD.test(f)))
+      )
+    })
+  )
+}
+
+export function employeeMayEdit(path, id, prev, next, ctx) {
+  return (
+    FIELD_COLLECTIONS.includes(rootOf(path)) ||
+    ownsRow(prev, ctx) ||
+    (Boolean(ctx.uid) && id === ctx.uid) ||
+    isClosing(prev, next) ||
+    isActionStatusChange(prev, next)
+  )
+}
 
 function restrictWrite(op, path, id, ctx, { next, prev } = {}) {
   if (!passwordOk(ctx) && !ownUser(ctx, path, id)) return 'password'
@@ -115,6 +204,15 @@ function restrictWrite(op, path, id, ctx, { next, prev } = {}) {
   if ((op === 'update' || op === 'delete') && isAuditor(ctx)) return 'auditor'
   if ((op === 'update' || op === 'delete') && collectionOf(path) === 'auditLogs') return 'audit-log'
   if (MANAGER_ONLY_COLLECTIONS.includes(path) && !isManager(ctx)) return 'manager-only'
+  if (
+    op === 'update' &&
+    isWriter(ctx) &&
+    !isManager(ctx) &&
+    !specialPath(path) &&
+    !employeeMayEdit(path, id, prev, next, ctx)
+  ) {
+    return 'employee-edit'
+  }
   // Deleting is irreversible and the records are the evidence. Every delete
   // used to be open to any employee, for any record in any module — someone
   // else's incident, an approved permit, a site, the reference counters.
@@ -126,7 +224,6 @@ function restrictWrite(op, path, id, ctx, { next, prev } = {}) {
   ) {
     return 'manager-delete'
   }
-  void next
   return ''
 }
 
@@ -221,7 +318,7 @@ export function insertAllowed(path, id, data, ctx, lookup) {
 export function updateAllowed(path, id, prev, next, ctx) {
   if (ctx.worker) return ''
   if (!canRead(path, id, ctx)) return 'not-visible'
-  const restricted = restrictWrite('update', path, id, ctx, { next })
+  const restricted = restrictWrite('update', path, id, ctx, { next, prev })
   if (restricted) return restricted
   // update_writer
   if (isWriter(ctx) && !specialPath(path)) return ''

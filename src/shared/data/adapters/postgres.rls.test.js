@@ -337,3 +337,76 @@ describe('employee: create, view and close only', () => {
     expect(await adminEngine.get(null, 'incidents', 'i-del')).toBeNull()
   })
 })
+
+// Editing, for an employee: their own rows, the equipment registers, a close,
+// and the status of an action in a list. Not anyone else's record.
+describe('employee: edits', () => {
+  beforeAll(async () => {
+    await seed('incidents', 'e-theirs', {
+      title: 'Fall',
+      lifecycle: 'open',
+      createdBy: 'adminA',
+      capa: [
+        { id: 'a1', description: 'Fix rail', status: 'open', owner: 'Mo' },
+        { id: 'a2', description: 'Train crew', status: 'open', owner: 'Ada' },
+      ],
+    })
+    await seed('incidents', 'e-mine', { title: 'Mine', createdBy: 'memberA' })
+    await seed('incidents', 'e-named', { title: 'Named', createdBy: 'Mo' })
+    await seed('extinguishers', 'x1', { status: 'ok', siteId: 's-1' })
+  })
+  const denied = { code: 'permission-denied' }
+
+  it('refuses rewriting or blanking a record someone else created', async () => {
+    const m = as('memberA')
+    await expect(m.update('incidents', 'e-theirs', { title: 'Nothing happened' })).rejects.toMatchObject(denied)
+    await expect(m.set('incidents', 'e-theirs', {}, { merge: false })).rejects.toMatchObject(denied)
+    // A name in createdBy is not ownership.
+    await expect(m.update('incidents', 'e-named', { title: 'x' })).rejects.toMatchObject(denied)
+    expect((await adminEngine.get(null, 'incidents', 'e-theirs')).title).toBe('Fall')
+  })
+
+  it('lets an employee edit their own record and the equipment registers', async () => {
+    const m = as('memberA')
+    await m.update('incidents', 'e-mine', { title: 'Mine, corrected' })
+    await m.update('extinguishers', 'x1', { status: 'refilling' })
+    await m.set('alertReads', 'memberA', { seen: 3 })
+    expect((await adminEngine.get(null, 'extinguishers', 'x1')).status).toBe('refilling')
+  })
+
+  it('moves an action along, and nothing else about it', async () => {
+    const m = as('memberA')
+    const capa = (await adminEngine.get(null, 'incidents', 'e-theirs')).capa
+    await m.update('incidents', 'e-theirs', {
+      capa: capa.map((a) => (a.id === 'a1' ? { ...a, status: 'closed', closedAt: '2026-11-10' } : a)),
+    })
+    await expect(
+      m.update('incidents', 'e-theirs', {
+        capa: capa.map((a) => (a.id === 'a2' ? { ...a, description: 'Nothing to do' } : a)),
+      })
+    ).rejects.toMatchObject(denied)
+    await expect(m.update('incidents', 'e-theirs', { capa: [capa[0]] })).rejects.toMatchObject(denied)
+  })
+
+  it('closes a record, but a close cannot carry a rewrite with it', async () => {
+    const m = as('memberA')
+    await expect(
+      m.update('incidents', 'e-theirs', { lifecycle: 'closed', title: 'Nothing happened' })
+    ).rejects.toMatchObject(denied)
+    await m.update('incidents', 'e-theirs', {
+      lifecycle: 'closed',
+      closedAt: '2026-11-10',
+      closedBy: 'Mo',
+      stagesDone: { horizontal: true },
+    })
+    const row = await adminEngine.get(null, 'incidents', 'e-theirs')
+    expect(row).toMatchObject({ lifecycle: 'closed', title: 'Fall' })
+    // Re-opening is an edit, not a close.
+    await expect(m.update('incidents', 'e-theirs', { lifecycle: 'open' })).rejects.toMatchObject(denied)
+  })
+
+  it('leaves a manager free to edit', async () => {
+    await as('managerA').update('incidents', 'e-theirs', { title: 'Fall from height' })
+    expect((await adminEngine.get(null, 'incidents', 'e-theirs')).title).toBe('Fall from height')
+  })
+})
