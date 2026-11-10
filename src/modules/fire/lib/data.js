@@ -1626,6 +1626,9 @@ export async function addMockDrill(data, actor) {
     ...rest,
     photoCount: savedPhotos,
     loggedBy: actor?.name || '',
+    // Who to tell about it and its actions (stack/lib/notify.js). loggedBy is
+    // a sealed name the server cannot read.
+    createdByUid: actor?.uid || '',
     createdAt: null, // placeholder; replaced by serverTimestamp below
   }))
   payload.createdAt = serverTimestamp()

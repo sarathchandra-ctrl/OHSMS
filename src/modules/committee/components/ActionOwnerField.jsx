@@ -17,12 +17,17 @@ export default function ActionOwnerField({
   name = 'action-owner',
 }) {
   const kind = actionOwnerKind(value)
-  const people = users
-    .map((u) => u.name || u.email)
-    .filter(Boolean)
+  const people = users.map((u) => u.name || u.email).filter(Boolean)
+  // The name is what the meeting shows (and is sealed); the uid is who the
+  // server tells about the action (stack/lib/notify.js).
+  const uidOf = (label) => {
+    const u = users.find((x) => (x.name || x.email) === label)
+    return u?.id || u?.uid || ''
+  }
   const personValue = kind === OWNER_PERSON ? value.owner || '' : ''
   const departmentValue = kind === OWNER_DEPARTMENT ? value.department || '' : ''
-  const personOptions = personValue && !people.includes(personValue) ? [personValue, ...people] : people
+  const personOptions =
+    personValue && !people.includes(personValue) ? [personValue, ...people] : people
   const departmentOptions =
     departmentValue && !departments.includes(departmentValue)
       ? [departmentValue, ...departments]
@@ -32,8 +37,8 @@ export default function ActionOwnerField({
     if (disabled || nextKind === kind) return
     onChange(
       nextKind === OWNER_DEPARTMENT
-        ? { ownerKind: OWNER_DEPARTMENT, department: '', owner: '' }
-        : { ownerKind: OWNER_PERSON, owner: '', department: '' },
+        ? { ownerKind: OWNER_DEPARTMENT, department: '', owner: '', ownerUid: '' }
+        : { ownerKind: OWNER_PERSON, owner: '', department: '', ownerUid: '' }
     )
   }
 
@@ -69,7 +74,12 @@ export default function ActionOwnerField({
             value={departmentValue}
             disabled={disabled}
             onChange={(e) =>
-              onChange({ ownerKind: OWNER_DEPARTMENT, department: e.target.value, owner: '' })
+              onChange({
+                ownerKind: OWNER_DEPARTMENT,
+                department: e.target.value,
+                owner: '',
+                ownerUid: '',
+              })
             }
             className="w-full bg-surface border border-surface-200 rounded-lg p-2 text-xs font-bold text-blue-600 outline-hidden focus:border-blue-500 transition-colors"
           >
@@ -88,7 +98,12 @@ export default function ActionOwnerField({
             maxLength={120}
             placeholder="Department name"
             onChange={(e) =>
-              onChange({ ownerKind: OWNER_DEPARTMENT, department: e.target.value, owner: '' })
+              onChange({
+                ownerKind: OWNER_DEPARTMENT,
+                department: e.target.value,
+                owner: '',
+                ownerUid: '',
+              })
             }
             className="w-full bg-surface border border-surface-200 rounded-lg p-2 text-xs font-bold text-blue-600 outline-hidden focus:border-blue-500 transition-colors"
           />
@@ -98,7 +113,14 @@ export default function ActionOwnerField({
           aria-label="Person"
           value={personValue}
           disabled={disabled}
-          onChange={(e) => onChange({ ownerKind: OWNER_PERSON, owner: e.target.value, department: '' })}
+          onChange={(e) =>
+            onChange({
+              ownerKind: OWNER_PERSON,
+              owner: e.target.value,
+              department: '',
+              ownerUid: uidOf(e.target.value),
+            })
+          }
           className="w-full bg-surface border border-surface-200 rounded-lg p-2 text-xs font-bold text-blue-600 outline-hidden focus:border-blue-500 transition-colors"
         >
           <option value="">Select person…</option>

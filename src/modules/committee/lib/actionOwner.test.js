@@ -21,6 +21,7 @@ describe('committee action owner', () => {
     expect(actionOwnerRecord(legacy)).toEqual({
       ownerKind: OWNER_PERSON,
       owner: 'Ada',
+      ownerUid: '',
       department: '',
     })
   })
@@ -31,7 +32,12 @@ describe('committee action owner', () => {
       department: ' Housekeeping ',
       owner: 'Ada',
     })
-    expect(row).toEqual({ ownerKind: OWNER_DEPARTMENT, department: 'Housekeeping', owner: '' })
+    expect(row).toEqual({
+      ownerKind: OWNER_DEPARTMENT,
+      department: 'Housekeeping',
+      owner: '',
+      ownerUid: '',
+    })
     expect(actionOwnerDisplay(row)).toBe('Department · Housekeeping')
     expect(actionAssignedTo(row, { name: 'Housekeeping' })).toBe(false)
   })

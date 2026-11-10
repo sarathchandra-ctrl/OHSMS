@@ -238,7 +238,7 @@ export async function sweepLoto(engine, { nowMs = Date.now() } = {}) {
 
 const cacheId = (key) => `om_${String(key || '').replace(/[^0-9A-Za-z._-]/g, '_')}`
 
-function weatherCacheStore(engine) {
+export function weatherCacheStore(engine) {
   return {
     get: (key) => engine.get(WORKER, 'weatherCache', cacheId(key)),
     async set(key, slot, obs) {

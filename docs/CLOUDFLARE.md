@@ -101,16 +101,18 @@ invocation under the Worker's logs.
 **Notifications.** A save that needs someone's attention puts an item in
 their bell (top of every page; all of them at `/notifications`, each opening
 the record it is about) and, with mail set up, mails them, right after it is
-answered (`stack/notify.mjs`, rules in
-`stack/lib/notify.js`): a new incident to the site's managers and the
-organization's notification email, a corrective action to its owner, a new
-permit to its approvers, audit findings between auditee and auditor, and
-training to the person assigned it. Each kind can be switched off under
-Admin → Organization settings → Notifications; all are on until then. A mail
-carries a reference, a site, a date and a link, never a narrative or anything
-medical; illness reports are not mailed. People opt out of the daily summary
-under Account security. **Send today's summaries now**, on the same card,
-is for checking a new set-up; each person still gets at most one a day.
+answered. Others come from the clock: every 6 hours (inside the 5-minute
+cron, once per slot) the RCA still due on an incident and weather risk at a
+site; daily at 08:00 IST extinguisher refill and pressure test, AED battery
+and yearly risk-assessment review notices; on the 1st the equipment uptime
+report by entity. The rules, and who receives each, are `stack/lib/notify.js`
+and `stack/lib/notifySchedule.js`; each kind has its own switch under Admin →
+Organization settings → Notifications, all on until turned off. A
+notification carries a reference, a site, a date and a link, never a
+narrative or anything medical; illness reports are not notified. People opt
+out of the daily summary under Account security. **Send today's summaries
+now**, on the same card, is for checking a new set-up; each person still gets
+at most one a day.
 
 **Backups.** D1 keeps 30 days of point-in-time history (Time Travel):
 `npx wrangler d1 time-travel restore ohsms --timestamp <time>`. For a copy

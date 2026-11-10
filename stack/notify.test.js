@@ -5,7 +5,7 @@ import { createOwnStackHandler } from './handler.mjs'
 import { signSession } from './session.mjs'
 import { nodeRequest, nodeResponse } from '../worker/bridge.js'
 import { digestFor, eventMessages, managersOf, notifySettings, sitesOf } from './lib/notify.js'
-import { MAX_EVENT_MAILS, digestDay, notifyChanges, sendDigests } from './notify.mjs'
+import { MAX_EVENT_MAILS, digestDay, notifyChanges, runDailyNotices, runSixHourly, sendDigests } from './notify.mjs'
 
 const origin = 'https://ehs.example.com'
 const SECRET = 's'.repeat(40)
@@ -96,11 +96,9 @@ describe('event mail', () => {
     expect(eventMessages([{ path: 'incidents', id: 'i1', before: after, after }], ctx())).toEqual([])
   })
 
-  it('sends a new permit to its named approvers, else the site’s managers', () => {
-    const named = eventMessages([{ path: 'permits', id: 'p1', before: null, after: { permitNo: 'PTW-1', siteId: 's1', assignedEngineer: 'south' } }], ctx())
-    expect(recipients(named)).toEqual(['south@example.com'])
-    const unnamed = eventMessages([{ path: 'permits', id: 'p2', before: null, after: { permitNo: 'PTW-2', siteId: 's2' } }], ctx())
-    expect(recipients(unnamed)).toEqual(['admin@example.com', 'south@example.com'])
+  it('sends a new permit to the people on it and the site’s managers', () => {
+    const msgs = eventMessages([{ path: 'permits', id: 'p1', before: null, after: { permitNo: 'PTW-1', siteId: 's2', createdBy: 'worker', assignedEngineer: 'south' } }], ctx({ actorUid: 'admin' }))
+    expect(recipients(msgs)).toEqual(['south@example.com', 'worker@example.com'])
   })
 
   it('follows an audit finding between auditee and auditor', () => {
@@ -313,5 +311,31 @@ describe('the bell', () => {
     })
     // The notification email is mailed, never belled: it has no inbox.
     expect(await engine.list(null, 'inbox/north/items', {})).toEqual([])
+  })
+})
+
+describe('on the clock', () => {
+  it('RCA reminders run once per 6-hour slot, and stop when the RCA is done', async () => {
+    const { db, engine, seed } = await setup()
+    await seed('incidents', 'i1', { refNo: 'IRA-1', siteId: 's1', createdBy: 'worker', lifecycle: 'investigation_team' })
+    const t = Date.parse('2026-11-10T01:00:00Z') // 06:30 IST, slot 06
+    expect((await runSixHourly(engine, db, { origin, now: t })).rca.belled).toBe(3)
+    expect(await runSixHourly(engine, db, { origin, now: t + 3600_000 })).toMatchObject({ skipped: 'slot-done' })
+    expect((await runSixHourly(engine, db, { origin, now: t + 6 * 3600_000 })).rca.belled).toBe(3)
+    await seed('incidents', 'i1', { refNo: 'IRA-1', siteId: 's1', createdBy: 'worker', stagesDone: { investigation: true } })
+    expect((await runSixHourly(engine, db, { origin, now: t + 12 * 3600_000 })).rca.belled).toBe(0)
+    expect(await engine.list(null, 'inbox/worker/items', {})).toHaveLength(2)
+  })
+
+  it('equipment due is told once per unit and date; uptime once a month, on the 1st', async () => {
+    const { db, engine, seed } = await setup()
+    await seed('extinguishers', 'e1', { extId: 'EXT-1', siteId: 's1', entity: 'Alpha Ltd', dateOfNextRefill: '2026-12-03', physicalDefects: [] })
+    const first = Date.parse('2026-12-01T02:30:00Z')
+    const run1 = await runDailyNotices(engine, db, { origin, now: first })
+    expect(run1.equipmentDue.belled).toBeGreaterThan(0)
+    expect(run1.uptime.belled).toBeGreaterThan(0)
+    const run2 = await runDailyNotices(engine, db, { origin, now: first + 24 * 3600_000 })
+    expect(run2.equipmentDue.belled).toBe(0)
+    expect(run2.uptime).toBeUndefined()
   })
 })

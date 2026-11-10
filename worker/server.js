@@ -26,8 +26,7 @@ import { bootstrapOrganization } from '../stack/passwords.mjs'
 import { createR2FileStore } from './files.js'
 import { nodeRequest, nodeResponse } from './bridge.js'
 import { resendMailer } from './mail.js'
-import { jobForCron, runFrequent, runNightly } from '../stack/schedule.mjs'
-import { sendDigests } from '../stack/notify.mjs'
+import { jobForCron, runDaily, runFrequent, runNightly } from '../stack/schedule.mjs'
 
 const initializations = new WeakMap()
 
@@ -82,13 +81,11 @@ export async function runScheduledOnCloudflare(cron, env) {
   const db = env.DB
   await initialize(db, env)
   const engine = createEngine(db)
-  if (job === 'frequent') return runFrequent(engine)
   const origin = String(env.PUBLIC_ORIGIN).replace(/\/$/, '')
-  if (job === 'digest') {
-    // No mailer configured: nothing to send, and that is not a failure.
-    const mail = resendMailer({ apiKey: env.RESEND_API_KEY, from: env.MAIL_FROM })
-    return sendDigests(engine, db, { mail, origin })
-  }
+  // No mailer configured: the bell still fills; nothing is mailed.
+  const notify = { mail: resendMailer({ apiKey: env.RESEND_API_KEY, from: env.MAIL_FROM }), origin }
+  if (job === 'frequent') return runFrequent(engine, { notify })
+  if (job === 'digest') return runDaily(engine, { notify })
   const blobStore = env.FILES
     ? createR2FileStore({ bucket: env.FILES, key: blobKeyFrom(env.SESSION_SECRET), origin })
     : null

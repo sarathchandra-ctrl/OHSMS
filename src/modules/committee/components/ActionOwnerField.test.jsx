@@ -11,6 +11,13 @@ const users = [
 ]
 
 describe('ActionOwnerField', () => {
+  it('records who the person is, so the server can tell them of the action', () => {
+    const onChange = vi.fn()
+    render(<ActionOwnerField users={users} value={{ ownerKind: 'person', owner: '' }} onChange={onChange} />)
+    fireEvent.change(screen.getByRole('combobox', { name: 'Person' }), { target: { value: 'Bea' } })
+    expect(onChange).toHaveBeenCalledWith({ ownerKind: 'person', owner: 'Bea', department: '', ownerUid: '2' })
+  })
+
   it('offers the org departments, and only that side', () => {
     const onChange = vi.fn()
     render(
@@ -26,7 +33,12 @@ describe('ActionOwnerField', () => {
     expect(screen.queryByRole('combobox', { name: 'Department' })).toBeNull()
 
     fireEvent.click(screen.getByRole('radio', { name: 'Department' }))
-    expect(onChange).toHaveBeenCalledWith({ ownerKind: 'department', department: '', owner: '' })
+    expect(onChange).toHaveBeenCalledWith({
+      ownerKind: 'department',
+      department: '',
+      owner: '',
+      ownerUid: '',
+    })
   })
 
   it('uses a text field when the org has no department list', () => {
@@ -47,6 +59,7 @@ describe('ActionOwnerField', () => {
       ownerKind: 'department',
       department: 'Yard',
       owner: '',
+      ownerUid: '',
     })
     expect(screen.queryByRole('combobox', { name: 'Person' })).toBeNull()
   })

@@ -10,9 +10,12 @@
 //                     the Recycle Bin purge (runRetention), closed LOTO
 //                     permits a year on (purgeClosedLotoPermits), and stale
 //                     public permit pages withdrawn (withdrawStaleMirrors)
+//   every 6 hours     (inside the 5-minute run, once per slot) RCA due and
+//                     weather risk notifications
 //   daily, 08:00 IST (02:30 UTC)
-//                     each person's summary email (stack/notify.mjs), when
-//                     mail is configured
+//                     each person's summary email (when mail is configured),
+//                     equipment due and yearly review notices, and on the
+//                     1st the monthly uptime report (stack/notify.mjs)
 //
 // They run from the cron triggers in wrangler.jsonc (worker/index.js
 // `scheduled`).
@@ -22,13 +25,37 @@
 // looks exactly like one with nothing to do.
 
 import { purgeClosedLotoPermits, runRetention, sweepLoto, withdrawStaleMirrors } from './workers.mjs'
+import { runDailyNotices, runSixHourly, sendDigests } from './notify.mjs'
 
 export const FREQUENT_CRON = '*/5 * * * *'
 export const NIGHTLY_CRON = '15 22 * * *'
 export const DIGEST_CRON = '30 2 * * *'
 
-export async function runFrequent(engine, { now = Date.now() } = {}) {
-  return { lotoSweep: await sweepLoto(engine, { nowMs: now }) }
+export async function runFrequent(engine, { now = Date.now(), notify = null } = {}) {
+  const out = { lotoSweep: await sweepLoto(engine, { nowMs: now }) }
+  // The six-hourly notifications ride this cron rather than a cron of their
+  // own (Cloudflare's free plan allows five triggers per account). The slot
+  // claim in runSixHourly makes it once per 6-hour IST slot.
+  if (notify) {
+    try {
+      out.sixHourly = await runSixHourly(engine, engine.db, { ...notify, now })
+    } catch (err) {
+      out.sixHourly = { error: err?.message || String(err) }
+    }
+  }
+  return out
+}
+
+/** 08:00 IST: each person's summary email, and the daily and monthly notices. */
+export async function runDaily(engine, { now = Date.now(), notify = {} } = {}) {
+  const out = {}
+  try {
+    out.notices = await runDailyNotices(engine, engine.db, { ...notify, now })
+  } catch (err) {
+    out.notices = { error: err?.message || String(err) }
+  }
+  out.digest = notify.mail ? await sendDigests(engine, engine.db, { ...notify, now }) : { skipped: 'no-mail' }
+  return out
 }
 
 export async function runNightly(engine, { blobStore = null, now = Date.now() } = {}) {

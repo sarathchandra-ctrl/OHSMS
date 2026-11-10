@@ -36,11 +36,14 @@ export function actionOwnerRecord(row = {}) {
       ownerKind: OWNER_DEPARTMENT,
       department: typeof row.department === 'string' ? row.department.trim() : '',
       owner: '',
+      ownerUid: '',
     }
   }
   return {
     ownerKind: OWNER_PERSON,
     owner: typeof row.owner === 'string' ? row.owner.trim() : '',
+    // Who the server notifies (the name above is sealed and cannot be read there).
+    ownerUid: typeof row.ownerUid === 'string' ? row.ownerUid : '',
     department: '',
   }
 }

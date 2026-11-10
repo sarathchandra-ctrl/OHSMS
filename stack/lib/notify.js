@@ -18,10 +18,29 @@
 // One switch each in Admin → Organization settings, grouped by `module`.
 // Every switch starts on: an organization that never opened the page gets all
 // of it, and turning one off is a saved `false`.
+//
+// "Managers" is always the managers who look after the record's site, with
+// every administrator: a manager at another site cannot open the record the
+// notification links to, and telling them of it would be another site's
+// business in their inbox. Organization-level records (a baseline risk
+// assessment) go to every manager.
 export const NOTIFY_KINDS = [
-  { key: 'incident', module: 'Incidents', label: 'New incidents', hint: 'To managers of the site, and the notification email' },
-  { key: 'action', module: 'Incidents', label: 'Corrective actions assigned', hint: 'To the person the action is assigned to' },
-  { key: 'permit', module: 'Permit to Work', label: 'Permits awaiting approval', hint: 'To the named approvers, or the site’s managers' },
+  { key: 'incident', module: 'Incidents', label: 'New incidents', hint: 'To the site’s managers, administrators, the person who reported it, and the notification email' },
+  { key: 'action', module: 'Incidents', label: 'Incident actions', hint: 'Each new action: to the person it is assigned to, the site’s managers and administrators' },
+  { key: 'rca', module: 'Incidents', label: 'RCA due', hint: 'Every 6 hours until the investigation (RCA) is done: to the reporter, the site’s managers and administrators' },
+  { key: 'hiraBaseline', module: 'Risk Assessment', label: 'Baseline risk assessments', hint: 'Each new baseline and each change: to every manager and administrator' },
+  { key: 'hiraSite', module: 'Risk Assessment', label: 'Site risk assessments', hint: 'Each new assessment and each change: to the site’s managers, administrators and its author' },
+  { key: 'hiraReview', module: 'Risk Assessment', label: 'Annual review due', hint: 'Once a year from the assessment date: to managers and administrators' },
+  { key: 'defect', module: 'Emergency Equipment', label: 'Defects reported', hint: 'Extinguisher, AED and FAS defects: to the site’s managers, administrators and employees' },
+  { key: 'equipmentDue', module: 'Emergency Equipment', label: 'Refill, HPT and AED battery due', hint: 'Extinguisher refill or pressure test within 7 days, AED battery expiring within 30: to the site’s managers, administrators and employees' },
+  { key: 'uptime', module: 'Emergency Equipment', label: 'Monthly uptime', hint: 'On the 1st: extinguisher, AED, FAS and signage uptime by entity, to managers and administrators' },
+  { key: 'drill', module: 'Mock Drills', label: 'New mock drills', hint: 'To the person who logged it, the site’s managers and administrators' },
+  { key: 'drillAction', module: 'Mock Drills', label: 'Mock drill actions', hint: 'Each new action: to its assignees, the site’s managers and administrators' },
+  { key: 'meeting', module: 'HSE Committee', label: 'New committee meetings', hint: 'To the person who recorded it, the site’s managers and administrators' },
+  { key: 'meetingAction', module: 'HSE Committee', label: 'Committee meeting actions', hint: 'Each new action: to the person responsible, the site’s managers and administrators' },
+  { key: 'weather', module: 'Weather', label: 'Weather risk', hint: 'Every 6 hours, when a site is at “take precautions” or worse: to its managers and administrators' },
+  { key: 'permit', module: 'Permit to Work', label: 'New permits', hint: 'To the site’s managers, administrators and the people on the permit' },
+  { key: 'permitStatus', module: 'Permit to Work', label: 'Permit status changes', hint: 'Approved, rejected, closure or extension asked for or decided: same people' },
   { key: 'audit', module: 'Internal Audit', label: 'Audit findings', hint: 'Sent to the auditee, submitted, returned and closed' },
   { key: 'training', module: 'Training', label: 'Training assigned', hint: 'To the person it is assigned to' },
   { key: 'digest', module: 'Daily summary', label: 'Daily summary email', hint: 'Each morning at 08:00: what is due or overdue, for each person. People can opt out under Security.' },
@@ -33,7 +52,7 @@ export function notifySettings(org) {
   return Object.fromEntries(NOTIFY_KINDS.map((k) => [k.key, saved[k.key] !== false]))
 }
 
-const str = (v) => (v === undefined || v === null ? '' : String(v))
+export const str = (v) => (v === undefined || v === null ? '' : String(v))
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 const validEmail = (v) => EMAIL.test(str(v).trim())
 
@@ -71,7 +90,7 @@ export function sitesOf(user, sites = []) {
   return ids
 }
 
-const isManagerRole = (u) => u?.role === 'admin' || u?.role === 'manager'
+export const isManagerRole = (u) => u?.role === 'admin' || u?.role === 'manager'
 
 /** Managers and admins who look after a site ('' = organization level: admins). */
 export function managersOf(siteId, users = [], sites = []) {
@@ -83,7 +102,20 @@ export function managersOf(siteId, users = [], sites = []) {
   )
 }
 
-const siteName = (siteId, sites, fallback = '') =>
+/** Every manager and administrator who can use the app today. */
+export function allManagers(users = []) {
+  return users.filter((u) => reachable(u) && isManagerRole(u))
+}
+
+/** People who work at or look after a site, whatever their role. */
+export function sitePeople(siteId, users = [], sites = []) {
+  if (!siteId) return []
+  return users.filter(
+    (u) => reachable(u) && u.role !== 'admin' && u.role !== 'auditor' && sitesOf(u, sites).has(String(siteId))
+  )
+}
+
+export const siteName = (siteId, sites, fallback = '') =>
   sites.find((s) => String(s.id) === String(siteId))?.name || fallback || 'your organization'
 
 /** 2026-11-12 → 12 Nov 2026, in UTC so the server's time zone does not move it. */
@@ -98,7 +130,7 @@ export function day(value) {
 // `uid` and `path` are for the in-app bell (stack/notify.mjs writes one
 // inbox item per message with a uid); `to` and `text` are for the mailbox.
 // The notification email has no uid: it is mailed and never belled.
-function message(to, kind, subject, lines, origin, path, uid = '') {
+export function message(to, kind, subject, lines, origin, path, uid = '') {
   const link = path ? `${str(origin).replace(/\/$/, '')}${path}` : ''
   const text = [...lines, '', link ? `Open it: ${link}` : '', '', 'You are getting this from your safety management system.']
     .filter((l, i, all) => !(l === '' && all[i - 1] === ''))
@@ -107,32 +139,81 @@ function message(to, kind, subject, lines, origin, path, uid = '') {
   return { to: str(to).trim(), uid, kind, subject, summary: str(lines[0]), path: path || '', text }
 }
 
-/** Everyone except the person who made the change, once each. */
-function audience(users, actorUid) {
-  const seen = new Set()
-  return users.filter((u) => {
-    if (!u || u.id === actorUid || seen.has(u.id)) return false
-    seen.add(u.id)
-    return true
-  })
+const byId = (users) => new Map(users.map((u) => [u.id, u]))
+const list = (v) => (Array.isArray(v) ? v.filter(Boolean) : [])
+
+// Which permit fields say its state moved: the stored status, either
+// approver's decision, and a closure or extension asked for or decided.
+const permitState = (p) =>
+  JSON.stringify([
+    str(p?.storedStatus),
+    str(p?.engineering?.status),
+    str(p?.operations?.status),
+    str(p?.closure?.requestedAt && 'closure'),
+    str(p?.closure?.engineering?.status),
+    str(p?.closure?.operations?.status),
+    str(p?.extension?.requestedAt && 'extension'),
+    str(p?.extension?.engineering?.status),
+    str(p?.extension?.operations?.status),
+  ])
+
+const PERMIT_STATUS_LABEL = {
+  draft: 'awaiting approval',
+  approved: 'approved',
+  in_progress: 'in progress',
+  extended: 'extended',
+  extended_in_progress: 'extended, in progress',
+  not_closed: 'past its end, not closed',
+  open_with_observations: 'open with observations',
+  closed: 'closed',
+  closed_noncompliance: 'closed for non-compliance',
 }
 
-const byId = (users) => new Map(users.map((u) => [u.id, u]))
+const ASSET_COLLECTION = { aed: 'aeds', fas: 'fas', stretcher: 'stretchers' }
+const ASSET_LABEL = { aed: 'AED', fas: 'Fire alarm', stretcher: 'Stretcher' }
+
+/** The equipment record a defect report is about: [collection, id]. */
+export function reportAsset(report) {
+  if (report?.kind === 'defect' && report.extId) return ['extinguishers', str(report.extId)]
+  if (report?.kind === 'asset_defect' && ASSET_COLLECTION[report.assetKind] && report.assetRefId) {
+    return [ASSET_COLLECTION[report.assetKind], str(report.assetRefId)]
+  }
+  return null
+}
 
 // ── Events ───────────────────────────────────────────────────────────────────
 
 /**
- * The mail a set of committed changes calls for.
+ * The notifications a set of committed changes calls for.
  * `changes` [{ path, id, before, after }] (engine.commit); `ctx` { users,
- * sites, org, origin, actorUid }. Users carry their id as `id`.
+ * sites, org, origin, actorUid, assets }. Users carry their id as `id`;
+ * `assets` maps 'collection/id' to the equipment a defect report names.
+ *
+ * The person who made the change is not told of it, except where the rule
+ * names them (the reporter of an incident, the author of an assessment, the
+ * person who logged a drill or recorded a meeting): there it is the receipt.
  */
-export function eventMessages(changes = [], { users = [], sites = [], org = {}, origin = '', actorUid = '' } = {}) {
+export function eventMessages(
+  changes = [],
+  { users = [], sites = [], org = {}, origin = '', actorUid = '', assets = {} } = {}
+) {
   const on = notifySettings(org)
   const people = byId(users)
   const out = []
-  const to = (u, kind, subject, lines, path) => {
-    if (reachable(u) && u.id !== actorUid) out.push(message(u.email, kind, subject, lines, origin, path, u.id))
+  // One message per person per change: a manager who is also the assignee
+  // hears once.
+  const tell = (recipients, kind, subject, lines, path, { receipt = [], throttle = '' } = {}) => {
+    const seen = new Set()
+    for (const u of recipients) {
+      if (!u || seen.has(u.id) || !reachable(u)) continue
+      if (u.id === actorUid && !receipt.includes(u.id)) continue
+      seen.add(u.id)
+      const m = message(u.email, kind, subject, lines.filter(Boolean), origin, path, u.id)
+      out.push(throttle ? { ...m, throttle: `${throttle}:${u.id}` } : m)
+    }
   }
+  const managers = (siteId) => managersOf(siteId, users, sites)
+  const who = (...uids) => uids.flat().filter(Boolean).map((uid) => people.get(uid))
 
   for (const { path, id, before, after } of changes) {
     if (!after || after.deletedAt) continue
@@ -140,42 +221,155 @@ export function eventMessages(changes = [], { users = [], sites = [], org = {}, 
     if (path === 'incidents') {
       const ref = str(after.refNo) || 'An incident'
       const where = siteName(after.siteId, sites, after.site)
+      const link = `/incidents/${id}`
       if (!before && on.incident) {
         const lines = [
           `${ref} was reported at ${where}.`,
           `Type: ${INCIDENT_TYPES[after.type] || 'not set'} · Severity: ${str(after.severity) || 'not set'}`,
           after.incidentDate ? `Date: ${day(after.incidentDate)}` : '',
-        ].filter(Boolean)
-        for (const u of audience(managersOf(after.siteId, users, sites), actorUid)) {
-          to(u, 'incident', `New incident ${ref} at ${where}`, lines, `/incidents/${id}`)
-        }
+        ]
+        tell([...who(after.createdBy), ...managers(after.siteId)], 'incident', `New incident ${ref} at ${where}`, lines, link, {
+          receipt: [str(after.createdBy)],
+        })
         if (validEmail(org.notificationEmail)) {
-          out.push(message(org.notificationEmail, 'incident', `New incident ${ref} at ${where}`, lines, origin, `/incidents/${id}`))
+          out.push(message(org.notificationEmail, 'incident', `New incident ${ref} at ${where}`, lines.filter(Boolean), origin, link))
         }
       }
       if (on.action) {
-        const was = new Map((before?.capa || []).filter(Boolean).map((a) => [a.id, a.ownerUid]))
-        for (const a of (after.capa || []).filter(Boolean)) {
-          if (!a.ownerUid || was.get(a.id) === a.ownerUid || a.status === 'closed') continue
-          to(
-            people.get(a.ownerUid),
-            'action',
-            `Corrective action assigned to you · ${ref}`,
-            [`A corrective action on ${ref} at ${where} is assigned to you.`, a.dueDate ? `Due: ${day(a.dueDate)}` : ''].filter(Boolean),
-            `/incidents/${id}`
-          )
+        const was = new Map(list(before?.capa).map((a) => [a.id, a]))
+        for (const a of list(after.capa)) {
+          if (a.status === 'closed') continue
+          const prev = was.get(a.id)
+          const lines = [`A corrective action on ${ref} at ${where}.`, a.dueDate ? `Due: ${day(a.dueDate)}` : '']
+          if (!prev) {
+            // A new action: its owner, and the site's managers.
+            tell([...who(a.ownerUid), ...managers(after.siteId)], 'action', `New action on ${ref}`, lines, link)
+          } else if (a.ownerUid && prev.ownerUid !== a.ownerUid) {
+            tell(who(a.ownerUid), 'action', `Corrective action assigned to you · ${ref}`, lines, link)
+          }
         }
       }
       continue
     }
 
-    if (path === 'permits' && !before && on.permit) {
+    if (path === 'assessments') {
+      const baseline = after.kind === 'baseline'
+      const key = baseline ? 'hiraBaseline' : 'hiraSite'
+      if (!on[key]) continue
+      // An edit that changed nothing anyone reads (a re-save) is not news.
+      const content = (a) => JSON.stringify([a?.name, a?.status, a?.siteId, a?.location, a?.assessmentDate, a?.members, a?.activities])
+      if (before && content(before) === content(after)) continue
+      const name = str(after.refId || after.name) || 'A risk assessment'
+      const what = baseline ? 'Baseline risk assessment' : 'Risk assessment'
+      const where = baseline ? '' : ` at ${siteName(after.siteId, sites, after.siteName)}`
+      const subject = `${what} ${before ? 'updated' : 'created'}: ${name}`
+      const recipients = baseline ? allManagers(users) : [...who(after.createdBy), ...managers(after.siteId)]
+      tell(recipients, key, subject, [`${what} ${name}${where} was ${before ? 'changed' : 'created'}.`], `/hira/assessment/${id}`, {
+        receipt: baseline ? [] : [str(after.createdBy)],
+        // An assessment is edited in many saves; one notice an hour each.
+        throttle: before ? `hira:${id}` : '',
+      })
+      continue
+    }
+
+    if (path === 'reports' && !before && on.defect) {
+      const target = reportAsset(after)
+      if (!target) continue
+      const asset = assets[`${target[0]}/${target[1]}`]
+      const siteId = asset?.siteId || ''
+      const where = siteName(siteId, sites, asset?.centerName || asset?.siteName)
+      const unit =
+        target[0] === 'extinguishers'
+          ? `Extinguisher ${str(asset?.extId || asset?.serialNo || after.extLabel)}`.trim()
+          : `${ASSET_LABEL[after.assetKind] || 'Equipment'} ${str(asset?.assetId || asset?.deviceId || after.assetLabel)}`.trim()
+      const defect = str(after.defectType || after.defect).replace(/_/g, ' ')
+      tell(
+        [...managers(siteId), ...sitePeople(siteId, users, sites)],
+        'defect',
+        `Defect reported: ${unit} at ${where}`,
+        [`${unit} at ${where} was reported${defect ? ` with: ${defect}` : ' defective'}.`, 'It waits for review in Defects.'],
+        '/equipment/defects'
+      )
+      continue
+    }
+
+    if (path === 'mockDrills') {
+      const where = siteName(after.siteId, sites, after.centerName)
+      const ref = str(after.docId) || 'A mock drill'
+      const what = str(after.eventType) || 'Mock drill'
+      if (!before && on.drill) {
+        tell([...who(after.createdByUid), ...managers(after.siteId)], 'drill', `${what} drill logged at ${where}`, [
+          `${ref}: ${what} drill at ${where}.`,
+          after.date ? `Held: ${day(after.date)}` : '',
+        ], '/mock-drills', { receipt: [str(after.createdByUid)] })
+      }
+      if (on.drillAction) {
+        const prev = list(before?.capa)
+        list(after.capa).forEach((a, i) => {
+          if (str(a.status).toLowerCase() === 'closed') return
+          const assignees = list(a.assignees).map((x) => x.uid)
+          const lines = [`An action from ${ref} (${what} drill at ${where}).`, a.due ? `Due: ${day(a.due)}` : '']
+          // Rows have no id; the tracker keys them by position, and a new
+          // one is appended. Removing a row shifts the rest, which reads as
+          // new rows only past the old length, never as a reassignment.
+          if (i >= prev.length) {
+            tell([...who(assignees), ...managers(after.siteId)], 'drillAction', `New mock drill action · ${ref}`, lines, '/mock-drills')
+          } else {
+            const had = new Set(list(prev[i]?.assignees).map((x) => x.uid))
+            tell(who(assignees.filter((u) => !had.has(u))), 'drillAction', `Mock drill action assigned to you · ${ref}`, lines, '/mock-drills')
+          }
+        })
+      }
+      continue
+    }
+
+    if (path === 'consultations') {
+      const where = siteName(after.siteId, sites)
+      const ref = str(after.docId) || 'A committee meeting'
+      const what = str(after.type) || 'Committee meeting'
+      if (!before && on.meeting) {
+        tell([...who(after.createdByUid), ...managers(after.siteId)], 'meeting', `${what} recorded at ${where}`, [
+          `${ref}: ${what} at ${where}.`,
+          after.date ? `Held: ${day(after.date)}` : '',
+        ], '/committee', { receipt: [str(after.createdByUid)] })
+      }
+      if (on.meetingAction) {
+        const prev = list(before?.actions)
+        list(after.actions).forEach((a, i) => {
+          if (str(a.status).toLowerCase() === 'closed') return
+          const lines = [`An action from ${ref} (${what} at ${where}).`, a.due ? `Due: ${day(a.due)}` : '']
+          if (i >= prev.length) {
+            tell([...who(a.ownerUid), ...managers(after.siteId)], 'meetingAction', `New committee action · ${ref}`, lines, '/committee')
+          } else if (a.ownerUid && prev[i]?.ownerUid !== a.ownerUid) {
+            tell(who(a.ownerUid), 'meetingAction', `Committee action assigned to you · ${ref}`, lines, '/committee')
+          }
+        })
+      }
+      continue
+    }
+
+    if (path === 'permits') {
       const ref = str(after.permitNo) || 'A permit'
       const where = siteName(after.siteId, sites, after.site)
-      const named = [after.assignedEngineer, after.assignedOperator].filter(Boolean).map((uid) => people.get(uid))
-      const approvers = named.filter(Boolean).length ? named : managersOf(after.siteId, users, sites)
-      for (const u of audience(approvers, actorUid)) {
-        to(u, 'permit', `Permit ${ref} awaiting approval`, [`${ref} at ${where} needs approval before work starts.`, after.validFrom ? `From: ${day(after.validFrom)}` : ''].filter(Boolean), `/permits/${id}`)
+      const involved = who(after.createdBy, after.assignedEngineer, after.assignedOperator)
+      const link = `/permits/${id}`
+      if (!before && on.permit) {
+        tell([...involved, ...managers(after.siteId)], 'permit', `Permit ${ref} awaiting approval`, [
+          `${ref}${after.typeOfWork ? ` (${str(after.typeOfWork)})` : ''} at ${where} needs approval before work starts.`,
+          after.validFrom ? `From: ${day(after.validFrom)}` : '',
+        ], link)
+      } else if (before && on.permitStatus && permitState(before) !== permitState(after)) {
+        const status = PERMIT_STATUS_LABEL[str(after.storedStatus)] || str(after.storedStatus) || 'updated'
+        const asked =
+          after.extension?.requestedAt && !before.extension?.requestedAt
+            ? 'An extension was requested.'
+            : after.closure?.requestedAt && !before.closure?.requestedAt
+              ? 'Closure was requested.'
+              : ''
+        tell([...involved, ...managers(after.siteId)], 'permitStatus', `Permit ${ref}: ${status}`, [
+          `${ref} at ${where} is now ${status}.`,
+          asked,
+        ], link)
       }
       continue
     }
@@ -184,28 +378,25 @@ export function eventMessages(changes = [], { users = [], sites = [], org = {}, 
       const ref = str(after.docId) || 'An audit'
       const from = str(before?.status)
       const now = str(after.status)
-      const auditee = people.get(after.auditeeUid)
-      const auditor = people.get(after.createdByUid)
+      const [auditee] = who(after.auditeeUid)
+      const [auditor] = who(after.createdByUid)
       if (!before && after.auditeeUid) {
-        to(auditee, 'audit', `Audit findings for you to answer · ${ref}`, [`${ref} has findings for you to answer in the Auditee Workplace.`], '/audit?view=auditee')
+        tell([auditee], 'audit', `Audit findings for you to answer · ${ref}`, [`${ref} has findings for you to answer in the Auditee Workplace.`], '/audit?view=auditee')
       } else if (from === 'Reported' && now === 'Submitted for Verification') {
-        to(auditor, 'audit', `Audit response submitted for verification · ${ref}`, [`The auditee answered ${ref}. It is waiting for your verification.`], '/audit?view=auditor')
+        tell([auditor], 'audit', `Audit response submitted for verification · ${ref}`, [`The auditee answered ${ref}. It is waiting for your verification.`], '/audit?view=auditor')
       } else if (from === 'Submitted for Verification' && now === 'Reported') {
-        to(auditee, 'audit', `Audit response returned · ${ref}`, [`The auditor returned your answer to ${ref} with a note. Open it in the Auditee Workplace.`], '/audit?view=auditee')
+        tell([auditee], 'audit', `Audit response returned · ${ref}`, [`The auditor returned your answer to ${ref} with a note. Open it in the Auditee Workplace.`], '/audit?view=auditee')
       } else if (from === 'Submitted for Verification' && now === 'Closed') {
-        to(auditee, 'audit', `Audit verified and closed · ${ref}`, [`The auditor verified and closed ${ref}.`], '/audit?view=auditee')
+        tell([auditee], 'audit', `Audit verified and closed · ${ref}`, [`The auditor verified and closed ${ref}.`], '/audit?view=auditee')
       }
       continue
     }
 
     if (path === 'trainingAssignments' && !before && on.training && after.status === 'assigned') {
-      to(
-        people.get(after.employeeUid),
-        'training',
-        `Training assigned: ${str(after.courseName) || 'a course'}`,
-        [`You have been assigned ${str(after.courseName) || 'a course'}.`, after.dueDate ? `Due: ${day(after.dueDate)}` : ''].filter(Boolean),
-        '/training/my'
-      )
+      tell(who(after.employeeUid), 'training', `Training assigned: ${str(after.courseName) || 'a course'}`, [
+        `You have been assigned ${str(after.courseName) || 'a course'}.`,
+        after.dueDate ? `Due: ${day(after.dueDate)}` : '',
+      ], '/training/my')
     }
   }
   return out
