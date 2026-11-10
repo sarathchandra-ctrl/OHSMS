@@ -849,6 +849,109 @@ function approvedPermitProblem(prev, next) {
   return ''
 }
 
+// ── A rejected permit, answered and sent back ───────────────────────────────
+// A team's rejection of a permit's opening or closure used to be a dead end:
+// nothing let the raiser answer it, and any manager could have reset it. The
+// owner's process (2026-11-10): the raiser answers the rejection with a
+// counter comment and sends it back, and only the person who rejected it
+// decides again, not the whole department.
+//
+// Answering moves that team's decision rejected -> pending, which DECISION_
+// STATES reserves for managers: asking is not deciding, so it is allowed here
+// on its own terms. Every check reads `prev` and the actor, never the value
+// being written (AGENTS.md, the post-state branch):
+//   • only the permit's raiser (prev.createdBy) answers, or an Administrator
+//     for one whose raiser has left, and never the person who rejected it;
+//   • the answer is theirs, and not empty;
+//   • the rejection is carried over exactly as it was recorded;
+//   • the re-approver is the person who rejected (prev block's `by`).
+// While a decision is pinned to a re-approver, only that person decides it,
+// and nobody but an Administrator moves the pin. The Administrator may also
+// decide: someone who has left the organization would otherwise hold a
+// permit pending for ever.
+//
+// Pinning trusts the rejection's `by`, so every decision on a permit is now
+// recorded in its decider's own name. Nothing checked that before.
+export const PERMIT_DECISION_BLOCKS = [
+  ['engineering'],
+  ['operations'],
+  ['closure', 'engineering'],
+  ['closure', 'operations'],
+]
+const EXTENSION_DECISION_BLOCKS = [
+  ['extension', 'engineering'],
+  ['extension', 'operations'],
+]
+export const PERMIT_ANSWER_MAX = 2000
+const PERMIT_ANSWER_KEYS = [
+  'status', 'by', 'byName', 'at', 'note', 'reapprover', 'reapproverName', 'rejection', 'response',
+]
+
+/** Is this block's write a well-formed answer to its rejection, by this actor? '' if so. */
+function permitAnswerProblem(prev, pb, nb, ctx) {
+  const rejector = str(pb?.by)
+  if (!rejector) return 'permit-answer-rejector'
+  const raiser = Boolean(str(prev?.createdBy)) && str(prev.createdBy) === ctx.uid
+  if ((!raiser && !isAdmin(ctx)) || ctx.uid === rejector) return 'permit-answer-actor'
+  if (str(nb?.reapprover) !== rejector) return 'permit-answer-reapprover'
+  const r = nb?.rejection
+  if (!r || str(r.by) !== rejector || str(r.note) !== str(pb.note) || str(r.at) !== str(pb.at)) {
+    return 'permit-answer-rejection'
+  }
+  const a = nb?.response
+  const text = str(a?.text).trim()
+  if (!a || str(a.by) !== ctx.uid || !text || text.length > PERMIT_ANSWER_MAX) return 'permit-answer-response'
+  // Sent back undecided: no decision is recorded with the answer.
+  if (str(nb.by) || str(nb.at)) return 'permit-answer-decided'
+  // The checks after this one skip the answered block, so nothing else rides on it.
+  if (Object.keys(nb).some((k) => !PERMIT_ANSWER_KEYS.includes(k))) return 'permit-answer-field'
+  return ''
+}
+
+/** The first problem with this write to a permit's decisions, or ''. */
+export function permitDecisionProblem(prev, next, ctx) {
+  for (const keys of [...PERMIT_DECISION_BLOCKS, ...EXTENSION_DECISION_BLOCKS]) {
+    const pb = at(prev, keys)
+    const nb = at(next, keys)
+    const before = str(pb?.status)
+    const after = str(nb?.status)
+    // A decision made now is made in the decider's own name.
+    if (DECIDED.includes(after) && (before !== after || str(pb?.by) !== str(nb?.by)) && str(nb?.by) !== ctx.uid) {
+      return `permit-decision-actor:${keys.join('.')}`
+    }
+    if (!PERMIT_DECISION_BLOCKS.includes(keys)) continue
+    if (before === 'rejected' && after === 'pending') {
+      const why = permitAnswerProblem(prev, pb, nb, ctx)
+      if (why) return `${why}:${keys.join('.')}`
+    }
+    const pinned = before === 'pending' ? str(pb?.reapprover) : ''
+    if (pinned) {
+      if (after !== 'pending' && ctx.uid !== pinned && !isAdmin(ctx)) {
+        return `permit-reapprover:${keys.join('.')}`
+      }
+      if (after === 'pending' && str(nb?.reapprover) !== pinned && !isAdmin(ctx)) {
+        return `permit-reapprover-moved:${keys.join('.')}`
+      }
+    }
+  }
+  return ''
+}
+
+/**
+ * `next` with every validly answered rejection put back as it was, so the
+ * manager-decision and decided-permit checks see only what is left. Called
+ * after permitDecisionProblem has passed the write.
+ */
+export function withoutPermitAnswers(prev, next) {
+  let out = next
+  for (const keys of PERMIT_DECISION_BLOCKS) {
+    if (str(at(prev, keys)?.status) !== 'rejected' || str(at(next, keys)?.status) !== 'pending') continue
+    if (keys.length === 1) out = { ...out, [keys[0]]: prev[keys[0]] }
+    else out = { ...out, closure: { ...(out.closure || {}), [keys[1]]: prev.closure?.[keys[1]] } }
+  }
+  return out
+}
+
 // What the QR record copies from its permit. The public page works the
 // status out from these (derivePermitStatus), so they must be the permit's:
 // for every writer, managers included, since the copy is only ever written
@@ -1145,7 +1248,15 @@ export function invariantProblem(path, id, prev, next, ctx, lookup = () => undef
       if (num(prev[k]) > num(n[k])) return 'counter'
     }
   }
-  if (!ctx.worker && !isManager(ctx) && decisionChanged(path, prev, n)) return 'manager-decision'
+  // A permit's decisions: who decides, and a rejection answered and sent back.
+  // A valid answer is then taken out of what the next two checks look at.
+  let decisionsLeft = n
+  if (!ctx.worker && path === 'permits' && prev) {
+    const permitDecision = permitDecisionProblem(prev, n, ctx)
+    if (permitDecision) return permitDecision
+    decisionsLeft = withoutPermitAnswers(prev, n)
+  }
+  if (!ctx.worker && !isManager(ctx) && decisionChanged(path, prev, decisionsLeft)) return 'manager-decision'
   if (!ctx.worker && prev && path === 'auditFindings') {
     const audit = auditStatusProblem(prev, n, ctx)
     if (audit) return audit
@@ -1159,7 +1270,7 @@ export function invariantProblem(path, id, prev, next, ctx, lookup = () => undef
     }
   }
   if (!ctx.worker && !isManager(ctx) && path === 'permits' && prev) {
-    const frozen = approvedPermitProblem(prev, n)
+    const frozen = approvedPermitProblem(prev, decisionsLeft)
     if (frozen) return frozen
   }
   if (!ctx.worker && path === 'permitQr') {

@@ -40,7 +40,8 @@ export const NOTIFY_KINDS = [
   { key: 'meetingAction', module: 'HSE Committee', label: 'Committee meeting actions', hint: 'Each new action: to the person responsible, the site’s managers and administrators' },
   { key: 'weather', module: 'Weather', label: 'Weather risk', hint: 'Every 6 hours, all clear or not: each site’s weather band to its managers and administrators, sites needing precautions first' },
   { key: 'permit', module: 'Permit to Work', label: 'New permits', hint: 'To the site’s managers, administrators and the people on the permit' },
-  { key: 'permitStatus', module: 'Permit to Work', label: 'Permit status changes', hint: 'Approved, rejected, closure or extension asked for or decided: same people' },
+  { key: 'permitStatus', module: 'Permit to Work', label: 'Permit status changes', hint: 'Approved, closure or extension asked for or decided: same people' },
+  { key: 'permitRejection', module: 'Permit to Work', label: 'Rejected permits', hint: 'A rejection of the opening or closure, with its comment, to the person who raised the permit; their answer, to the person who rejected it, for re-approval' },
   { key: 'audit', module: 'Internal Audit', label: 'Audit findings', hint: 'Sent to the auditee, submitted, returned and closed' },
   { key: 'training', module: 'Training', label: 'Training assigned', hint: 'To the person it is assigned to' },
   { key: 'digest', module: 'Daily summary', label: 'Daily summary email', hint: 'Each morning at 08:00: what is due or overdue, for each person. People can opt out under Security.' },
@@ -156,6 +157,38 @@ const permitState = (p) =>
     str(p?.extension?.engineering?.status),
     str(p?.extension?.operations?.status),
   ])
+
+// A rejection, and its answer (src/modules/ptw/lib/rejection.js). These two
+// mails carry free text, which the rule above keeps out of mail, on purpose
+// and only here: the owner asked for the rejection comment to reach the
+// raiser and the answer to reach the rejector. Neither field is sealed at
+// rest (src/shared/crypto/policy.js has no permits), each goes to one person
+// who can already read it in the app, and the bell's summary, the first
+// line, stays free of it.
+const PERMIT_BLOCKS = [
+  ['permit', 'engineering'],
+  ['permit', 'operations'],
+  ['closure', 'engineering'],
+  ['closure', 'operations'],
+]
+const TEAM_LABEL = { engineering: 'Engineering', operations: 'Operations' }
+const blockOf = (p, stage, team) => (stage === 'permit' ? p?.[team] : p?.closure?.[team])
+const quoted = (v) => `"${str(v).replace(/\s+/g, ' ').trim().slice(0, 2000)}"`
+
+/** Rejections made and rejections answered by this change. */
+export function permitRejections(before, after) {
+  const out = []
+  for (const [stage, team] of PERMIT_BLOCKS) {
+    const was = blockOf(before, stage, team)
+    const now = blockOf(after, stage, team)
+    if (str(now?.status) === 'rejected' && str(was?.status) !== 'rejected') {
+      out.push({ kind: 'rejected', stage, team, block: now })
+    } else if (str(was?.status) === 'rejected' && str(now?.status) === 'pending' && str(now?.reapprover)) {
+      out.push({ kind: 'answered', stage, team, block: now })
+    }
+  }
+  return out
+}
 
 const PERMIT_STATUS_LABEL = {
   draft: 'awaiting approval',
@@ -358,7 +391,30 @@ export function eventMessages(
           `${ref}${after.typeOfWork ? ` (${str(after.typeOfWork)})` : ''} at ${where} needs approval before work starts.`,
           after.validFrom ? `From: ${day(after.validFrom)}` : '',
         ], link)
-      } else if (before && on.permitStatus && permitState(before) !== permitState(after)) {
+      }
+      const rejections = before ? permitRejections(before, after) : []
+      for (const { kind, stage, team, block } of on.permitRejection ? rejections : []) {
+        const what = `${stage === 'closure' ? 'closure' : 'opening'} (${TEAM_LABEL[team]})`
+        if (kind === 'rejected') {
+          tell(who(after.createdBy), 'permitRejection', `Permit ${ref} rejected: your answer is needed`, [
+            `${ref} at ${where}: the ${what} was rejected by ${str(block.byName) || 'an approver'}.`,
+            str(block.note).trim() ? `Their comment: ${quoted(block.note)}` : 'No comment was given.',
+            'Open the permit, answer the rejection and send it back to them for re-approval.',
+          ], link)
+        } else {
+          tell(who(block.reapprover), 'permitRejection', `Permit ${ref} sent back for your re-approval`, [
+            `${str(block.response?.byName) || 'The raiser'} answered your rejection of the ${what} of ${ref} at ${where}.`,
+            `Their answer: ${quoted(block.response?.text)}`,
+            block.rejection?.note ? `Your comment was: ${quoted(block.rejection.note)}` : '',
+            'It now waits for your decision alone.',
+          ], link)
+        }
+      }
+      // A rejection and its answer have their own mail above, to one person
+      // each. The status mail would tell the whole list the permit is
+      // "awaiting approval" again, which is the department-wide re-approval
+      // the answer replaces.
+      if (!rejections.length && before && on.permitStatus && permitState(before) !== permitState(after)) {
         const status = PERMIT_STATUS_LABEL[str(after.storedStatus)] || str(after.storedStatus) || 'updated'
         const asked =
           after.extension?.requestedAt && !before.extension?.requestedAt
