@@ -284,15 +284,28 @@ describe('permits', () => {
 })
 
 describe('weather', () => {
-  it('every 6 hours, sites at “take precautions” or worse, to their managers and administrators', () => {
-    const observations = {
-      s1: { tempC: 44, apparentTempC: 48 },
-      s2: { tempC: 24, apparentTempC: 24 },
-    }
-    const msgs = weatherMessages({ observations, users, sites, origin })
-    expect(to(msgs)).toEqual(['admin', 'north'])
-    expect(msgs[0].text).toMatch(/North Plant: /)
-    expect(msgs[0].text).not.toContain('South Plant')
+  const hot = { tempC: 44, apparentTempC: 48 }
+  const mild = { tempC: 24, apparentTempC: 24 }
+
+  it('every 6 hours, sites needing precautions first, to their managers and administrators', () => {
+    const msgs = weatherMessages({ observations: { s1: hot, s2: mild }, users, sites, origin })
+    expect(to(msgs)).toEqual(['admin', 'north', 'south'])
+    const admin = msgs.find((m) => m.to.startsWith('admin'))
+    expect(admin.subject).toBe('Weather risk at 1 site')
+    expect(admin.text.indexOf('North Plant')).toBeLessThan(admin.text.indexOf('South Plant'))
+    expect(admin.text).toContain('South Plant: No weather risk · 24°C')
+  })
+
+  it('sends the all-clear too', () => {
+    const msgs = weatherMessages({ observations: { s1: mild, s2: mild }, users, sites, origin })
+    const north = msgs.find((m) => m.to.startsWith('north'))
+    expect(north.subject).toBe('Weather: all clear at 1 site')
+    expect(north.text).toContain('North Plant: No weather risk · 24°C')
+    expect(north.text).not.toContain('South Plant')
+  })
+
+  it('leaves out a site with no reading (no coordinates)', () => {
+    expect(weatherMessages({ observations: {}, users, sites, origin })).toEqual([])
   })
 })
 

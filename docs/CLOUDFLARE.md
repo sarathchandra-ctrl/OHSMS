@@ -102,8 +102,8 @@ invocation under the Worker's logs.
 their bell (top of every page; all of them at `/notifications`, each opening
 the record it is about) and, with mail set up, mails them, right after it is
 answered. Others come from the clock: every 6 hours (inside the 5-minute
-cron, once per slot) the RCA still due on an incident and weather risk at a
-site; daily at 08:00 IST extinguisher refill and pressure test, AED battery
+cron, once per slot) the RCA still due on an incident and each site's
+weather, all clear or not; daily at 08:00 IST extinguisher refill and pressure test, AED battery
 and yearly risk-assessment review notices; on the 1st the equipment uptime
 report by entity. The rules, and who receives each, are `stack/lib/notify.js`
 and `stack/lib/notifySchedule.js`; each kind has its own switch under Admin →

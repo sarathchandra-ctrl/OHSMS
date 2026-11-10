@@ -99,30 +99,54 @@ export function rcaMessages({ incidents = [], users = [], sites = [], origin = '
 
 // ── Weather (every 6 hours) ──────────────────────────────────────────────────
 
-/** Sites at "take precautions" or worse. `observations`: siteId → obs. */
+/**
+ * Every 6 hours, each manager's and administrator's sites, all clear or not
+ * (the organization asked for the all-clear too: silence could equally mean
+ * the job had stopped). Sites at "take precautions" or worse come first and
+ * set the subject. `observations`: siteId → obs; a site with no coordinates
+ * or no reading this slot is left out.
+ */
 export function weatherMessages({ observations = {}, users = [], sites = [], origin = '' } = {}) {
-  const c = collect()
+  const rows = []
   for (const site of sites) {
     const obs = observations[site.id]
     if (!obs) continue
     const risk = assessWeather(obs)
-    if (levelOf(risk.band) < levelOf('moderate')) continue
+    const alert = levelOf(risk.band) >= levelOf('moderate')
     const hazards = risk.hazards
       .filter((h) => levelOf(h.band) >= levelOf('moderate'))
       .map((h) => h.label)
       .join(', ')
-    c.add(
-      managersOf(site.id, users, sites),
-      `${site.name || 'A site'}: ${BAND_LABEL[risk.band]}${hazards ? ` (${hazards})` : ''}`
-    )
+    const temp = Number.isFinite(obs.tempC) ? ` · ${Math.round(obs.tempC)}°C` : ''
+    const feels =
+      Number.isFinite(obs.apparentTempC) && Math.round(obs.apparentTempC) !== Math.round(obs.tempC)
+        ? `, feels ${Math.round(obs.apparentTempC)}°C`
+        : ''
+    rows.push({
+      site,
+      alert,
+      line: `${site.name || 'A site'}: ${BAND_LABEL[risk.band]}${hazards ? ` (${hazards})` : ''}${temp}${feels}`,
+    })
   }
-  return c.messages(
-    'weather',
-    (n) => `Weather risk at ${plural(n, 'site')}`,
-    () => 'Conditions now call for precautions at:',
-    origin,
-    '/weather'
-  )
+  const out = []
+  for (const u of users) {
+    if (!reachable(u) || !isManagerRole(u)) continue
+    const mine = sitesOf(u, sites)
+    const theirs = rows.filter((r) => mine.has(String(r.site.id)))
+    if (!theirs.length) continue
+    const alerts = theirs.filter((r) => r.alert)
+    const ordered = [...alerts, ...theirs.filter((r) => !r.alert)]
+    const subject = alerts.length
+      ? `Weather risk at ${plural(alerts.length, 'site')}`
+      : `Weather: all clear at ${plural(theirs.length, 'site')}`
+    const intro = alerts.length
+      ? 'Conditions now call for precautions at some of your sites:'
+      : 'No site of yours needs weather precautions right now:'
+    const lines = [intro, '', ...ordered.slice(0, 40).map((r) => `  - ${r.line}`)]
+    if (ordered.length > 40) lines.push(`  - and ${ordered.length - 40} more`)
+    out.push(message(u.email, 'weather', subject, lines, origin, '/weather', u.id))
+  }
+  return out
 }
 
 // ── Equipment due (daily) ────────────────────────────────────────────────────

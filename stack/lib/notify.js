@@ -38,7 +38,7 @@ export const NOTIFY_KINDS = [
   { key: 'drillAction', module: 'Mock Drills', label: 'Mock drill actions', hint: 'Each new action: to its assignees, the site’s managers and administrators' },
   { key: 'meeting', module: 'HSE Committee', label: 'New committee meetings', hint: 'To the person who recorded it, the site’s managers and administrators' },
   { key: 'meetingAction', module: 'HSE Committee', label: 'Committee meeting actions', hint: 'Each new action: to the person responsible, the site’s managers and administrators' },
-  { key: 'weather', module: 'Weather', label: 'Weather risk', hint: 'Every 6 hours, when a site is at “take precautions” or worse: to its managers and administrators' },
+  { key: 'weather', module: 'Weather', label: 'Weather risk', hint: 'Every 6 hours, all clear or not: each site’s weather band to its managers and administrators, sites needing precautions first' },
   { key: 'permit', module: 'Permit to Work', label: 'New permits', hint: 'To the site’s managers, administrators and the people on the permit' },
   { key: 'permitStatus', module: 'Permit to Work', label: 'Permit status changes', hint: 'Approved, rejected, closure or extension asked for or decided: same people' },
   { key: 'audit', module: 'Internal Audit', label: 'Audit findings', hint: 'Sent to the auditee, submitted, returned and closed' },
