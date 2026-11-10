@@ -10,6 +10,8 @@
 // not that they are still an approved admin.
 
 import { createHash, randomBytes, randomUUID, scryptSync, timingSafeEqual } from 'node:crypto'
+import { newTotpSecret, openSecret, otpauthUri, sealSecret, verifyTotp } from './totp.mjs'
+import { accountGated } from './lib/accountGate.js'
 
 const WORKER = { role: 'ohsms_worker', uid: '' }
 
@@ -121,7 +123,7 @@ async function liveProfile(engine, uid) {
 /** The caller, if they are an approved admin who has cleared the password gate. */
 export async function liveAdmin(engine, uid) {
   const p = await liveProfile(engine, uid)
-  if (!p || p.status !== 'approved' || p.role !== 'admin' || p.mustChangePassword === true) {
+  if (!p || p.status !== 'approved' || p.role !== 'admin' || accountGated(p)) {
     return null
   }
   return p
@@ -220,7 +222,158 @@ export async function signInWithPassword(engine, db, { email, password, ip = '' 
     return { ok: false, reason: 'disabled' }
   }
   await clearFailures(db, address, source)
+  // The password was right. With two-step login on, that earns a short-lived
+  // ticket for the code step, not a session (completeTotpSignIn).
+  if (await totpRow(db, uid)) {
+    const ticket = randomBytes(32).toString('base64url')
+    await db
+      .prepare('INSERT INTO auth_pending (key, value, expires_at) VALUES (?, ?, ?)')
+      .bind(`mfaticket:${sha256(ticket)}`, JSON.stringify({ uid, tries: 0 }), Date.now() + TICKET_TTL_S * 1000)
+      .run()
+    return { ok: true, uid, mfa: true, ticket }
+  }
   return { ok: true, uid }
+}
+
+// ── Two-step login (authenticator app, stack/totp.mjs) ──────────────────────
+// The secret lives in auth_totp, sealed, and never reaches /data. The profile
+// carries only `mfaEnabled` (written by the server, never by a client) and
+// `mfaRequired` (an admin's), which the access rules read (accountGated).
+
+const TICKET_TTL_S = 5 * 60
+const TICKET_TRIES = 5
+const ENROL_TTL_S = 10 * 60
+
+async function totpRow(db, uid) {
+  return db.prepare('SELECT secret, last_step FROM auth_totp WHERE uid = ?').bind(uid).first()
+}
+
+async function setMfaEnabled(engine, uid, on) {
+  await engine.commit(WORKER, [{ type: 'update', path: 'users', id: uid, data: { mfaEnabled: on } }])
+}
+
+/** Begin setting up two-step login: a new secret, held until a code confirms it. */
+export async function startTotpEnrollment(engine, db, { uid, master, issuer = 'OHSMS' }) {
+  const profile = await liveProfile(engine, uid)
+  // A temporary password is replaced first; two-step login is the next step.
+  if (!profile || profile.status !== 'approved' || profile.mustChangePassword === true) {
+    return { ok: false, reason: 'not-allowed' }
+  }
+  if (!master) return { ok: false, reason: 'not-configured' }
+  if (await totpRow(db, uid)) return { ok: false, reason: 'already-on' }
+  const secret = newTotpSecret()
+  await db
+    .prepare(
+      `INSERT INTO auth_pending (key, value, expires_at) VALUES (?, ?, ?)
+       ON CONFLICT (key) DO UPDATE SET value = excluded.value, expires_at = excluded.expires_at`
+    )
+    .bind(`totpenrol:${uid}`, sealSecret(secret, master), Date.now() + ENROL_TTL_S * 1000)
+    .run()
+  return { ok: true, secret, uri: otpauthUri({ issuer, account: profile.email || uid, secret }) }
+}
+
+/** Finish setting up: the first code from the app proves it holds the secret. */
+export async function confirmTotpEnrollment(engine, db, { uid, code, master, nowMs = Date.now() }) {
+  const row = await db
+    .prepare('SELECT value FROM auth_pending WHERE key = ? AND expires_at > ?')
+    .bind(`totpenrol:${uid}`, nowMs)
+    .first()
+  if (!row) return { ok: false, reason: 'expired' }
+  const secret = safeOpen(row.value, master)
+  if (!secret) return { ok: false, reason: 'expired' }
+  const step = verifyTotp(secret, code, { nowMs })
+  if (step === null) return { ok: false, reason: 'code' }
+  await db
+    .prepare('INSERT OR REPLACE INTO auth_totp (uid, secret, last_step, enabled_at) VALUES (?, ?, ?, ?)')
+    .bind(uid, sealSecret(secret, master), step, nowMs)
+    .run()
+  await db.prepare('DELETE FROM auth_pending WHERE key = ?').bind(`totpenrol:${uid}`).run()
+  await setMfaEnabled(engine, uid, true)
+  return { ok: true }
+}
+
+// A secret sealed under another master (DATA_KEY_MASTER changed) cannot be
+// opened. That is a wrong code, not a server error: an admin resets it.
+function safeOpen(sealed, master) {
+  try {
+    return master ? openSecret(sealed, master) : null
+  } catch {
+    return null
+  }
+}
+
+/** Check a code against a person's stored secret, and spend its step. */
+async function spendCode(db, uid, code, master, nowMs) {
+  const row = await totpRow(db, uid)
+  if (!row) return false
+  const secret = safeOpen(row.secret, master)
+  if (!secret) return false
+  const step = verifyTotp(secret, code, { nowMs, lastStep: Number(row.last_step) })
+  if (step === null) return false
+  // Conditional, so two requests with the same code cannot both pass.
+  const res = await db
+    .prepare('UPDATE auth_totp SET last_step = ? WHERE uid = ? AND last_step < ?')
+    .bind(step, uid, step)
+    .run()
+  return (res?.meta?.changes ?? res?.changes ?? 1) > 0
+}
+
+/**
+ * The second step of signing in. A ticket allows TICKET_TRIES codes; each
+ * wrong one also counts against the source, like a wrong password.
+ * Returns { ok, uid } or { ok: false, reason }.
+ */
+export async function completeTotpSignIn(engine, db, { ticket, code, master, ip = '', nowMs = Date.now() }) {
+  const source = String(ip || '').slice(0, 64)
+  if ((await counter(db, `pwfailip:${source}`)) >= MAX_FAILURES_PER_SOURCE) return { ok: false, reason: 'throttled' }
+  if (typeof ticket !== 'string' || ticket.length < 20) return { ok: false, reason: 'ticket' }
+  const key = `mfaticket:${sha256(ticket)}`
+  const row = await db
+    .prepare('SELECT value FROM auth_pending WHERE key = ? AND expires_at > ?')
+    .bind(key, nowMs)
+    .first()
+  if (!row) return { ok: false, reason: 'ticket' }
+  const claim = JSON.parse(row.value)
+  if (await spendCode(db, claim.uid, code, master, nowMs)) {
+    await db.prepare('DELETE FROM auth_pending WHERE key = ?').bind(key).run()
+    const profile = await liveProfile(engine, claim.uid)
+    if (!profile || !['approved', 'pending'].includes(profile.status)) return { ok: false, reason: 'disabled' }
+    return { ok: true, uid: claim.uid }
+  }
+  await bump(db, `pwfailip:${source}`, LOCK_SECONDS)
+  const tries = Number(claim.tries || 0) + 1
+  if (tries >= TICKET_TRIES) {
+    await db.prepare('DELETE FROM auth_pending WHERE key = ?').bind(key).run()
+    return { ok: false, reason: 'ticket' }
+  }
+  await db.prepare('UPDATE auth_pending SET value = ? WHERE key = ?').bind(JSON.stringify({ ...claim, tries }), key).run()
+  return { ok: false, reason: 'code' }
+}
+
+/** Turn two-step login off for yourself, with a current code. Not when an admin requires it. */
+export async function disableOwnTotp(engine, db, { uid, code, master, nowMs = Date.now() }) {
+  const profile = await liveProfile(engine, uid)
+  if (!profile) return { ok: false, reason: 'not-allowed' }
+  if (profile.mfaRequired === true) return { ok: false, reason: 'required' }
+  if (!(await spendCode(db, uid, code, master, nowMs))) return { ok: false, reason: 'code' }
+  await db.prepare('DELETE FROM auth_totp WHERE uid = ?').bind(uid).run()
+  await setMfaEnabled(engine, uid, false)
+  return { ok: true }
+}
+
+/** An admin clears someone's two-step login (a lost phone). They set it up again. */
+export async function resetMemberTotp(engine, db, { uid, targetUid }) {
+  const admin = await liveAdmin(engine, uid)
+  if (!admin) return { ok: false, reason: 'not-admin' }
+  if (!targetUid || !(await liveProfile(engine, targetUid))) return { ok: false, reason: 'no-user' }
+  await db.prepare('DELETE FROM auth_totp WHERE uid = ?').bind(targetUid).run()
+  await setMfaEnabled(engine, targetUid, false)
+  return { ok: true }
+}
+
+/** Is two-step login on for this person? */
+export async function totpStatus(db, { uid }) {
+  return { ok: true, enabled: Boolean(uid && (await totpRow(db, uid))) }
 }
 
 /** An admin adds a person, with a temporary password they must replace. */

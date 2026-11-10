@@ -519,7 +519,7 @@ export function createEngine(db) {
 
     async truncate() {
       await db.batch(
-        ['documents', 'auth_secrets', 'auth_pending'].map((t) => db.prepare(`DELETE FROM ${t}`))
+        ['documents', 'auth_secrets', 'auth_pending', 'auth_totp'].map((t) => db.prepare(`DELETE FROM ${t}`))
       )
     },
   }

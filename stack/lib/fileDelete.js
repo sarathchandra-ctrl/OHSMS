@@ -23,6 +23,7 @@
 // that cannot run in a unit test.
 // ─────────────────────────────────────────────────────────────────────────────
 
+import { accountGated } from './accountGate.js'
 /** Roles that may delete. Mirrors isManager in stack/policy.mjs. */
 export const DELETING_ROLES = ['admin', 'manager']
 
@@ -61,7 +62,7 @@ export function mayDeleteFile(profile, path) {
   // Read defensively: profiles written before this field existed have no such
   // key, and treating that as "must change" would refuse every established
   // manager. Only an explicit true refuses.
-  if (profile.mustChangePassword === true) return { ok: false, reason: 'must-change-password' }
+  if (accountGated(profile)) return { ok: false, reason: 'must-change-password' }
   if (!DELETING_ROLES.includes(profile.role)) return { ok: false, reason: 'role' }
   if (!isAppFilePath(path)) return { ok: false, reason: 'foreign-path' }
   return { ok: true }

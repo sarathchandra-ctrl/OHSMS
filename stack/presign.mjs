@@ -3,12 +3,13 @@
 // passes in from a live query. mayDeleteFile is the same predicate the
 // deleteOrgFile job uses.
 
+import { accountGated } from './lib/accountGate.js'
 import { mayDeleteFile, isAppFilePath } from './lib/fileDelete.js'
 
 const MEDICAL = '/medical-records/'
 
 function approved(profile) {
-  return Boolean(profile) && profile.status === 'approved' && profile.mustChangePassword !== true
+  return Boolean(profile) && profile.status === 'approved' && !accountGated(profile)
 }
 
 /**

@@ -5,6 +5,7 @@ import { UsersRound, Check, X, ShieldCheck, KeyRound, Search } from 'lucide-reac
 import { useAuth } from '../../shared/auth/AuthContext'
 import {
   subscribeOrgUsers, setUserStatus, setUserRole, setUserAccess, grantAccessRequest, subscribeSites,
+  logTwoStepReset,
 } from '../../shared/org/orgData'
 import { ROLES, roleLabel } from '../../shared/auth/permissions'
 import { enabledModules } from '../../shared/modules/entitlements'
@@ -18,7 +19,7 @@ import {
 } from '../../shared/ui'
 import { initials } from '../../shared/lib/format'
 import AddEmployee, { temporaryPassword } from './AddEmployee'
-import { resetMemberPassword } from '../../shared/functions'
+import { resetMemberPassword, resetMemberTotp } from '../../shared/functions'
 
 const STATUS_TONE = { approved: 'green', pending: 'amber', suspended: 'red' }
 const emptyScope = { sites: [], regions: [], entities: [] }
@@ -102,6 +103,7 @@ export default function Users() {
     const a = u.access || emptyScope
     setForm({
       name: u.name && u.name !== u.email ? u.name : '',
+      mfaRequired: u.mfaRequired === true,
       role: u.role || 'member',
       department: u.department || '',
       sites: a.sites || [],
@@ -110,6 +112,21 @@ export default function Users() {
       modules: Array.isArray(a.modules) ? a.modules : null,
     })
     setManage(u)
+  }
+
+  const resetTwoStep = async () => {
+    if (!manage) return
+    setBusy(true)
+    try {
+      await resetMemberTotp({ uid: manage.uid })
+      await logTwoStepReset(manage.uid, actor, manage.name)
+      toast.success(`Two-step login reset for ${manage.name}. They set it up again at next sign-in.`)
+      setManage({ ...manage, mfaEnabled: false })
+    } catch (err) {
+      toastCaught(err, 'Two-step login was not reset')
+    } finally {
+      setBusy(false)
+    }
   }
 
   const applyFromRequest = () => {
@@ -136,6 +153,8 @@ export default function Users() {
         manage.uid,
         {
           name: form.name,
+          // Only when it changed: an unchanged dialog writes no flag.
+          ...(form.mfaRequired !== (manage.mfaRequired === true) ? { mfaRequired: form.mfaRequired } : {}),
           department: form.department,
           access: {
             sites: form.sites,
@@ -447,6 +466,37 @@ export default function Users() {
                 </span>
               )}
             </div>
+
+            <fieldset className="space-y-2 rounded-2xl border border-ink-100 p-3">
+              <legend className="px-1 text-xs font-semibold uppercase tracking-wide text-ink-500">
+                Two-step login
+              </legend>
+              <p className="text-sm text-ink-700">
+                {manage.mfaEnabled === true
+                  ? 'On — sign-in asks for a code from their authenticator app.'
+                  : 'Off — they sign in with a password only.'}
+              </p>
+              <label htmlFor="mfa-required" className="flex items-start gap-2 text-sm text-ink-800">
+                <input
+                  id="mfa-required"
+                  type="checkbox"
+                  className="mt-0.5"
+                  checked={form.mfaRequired}
+                  onChange={(e) => setForm({ ...form, mfaRequired: e.target.checked })}
+                />
+                <span>
+                  Require two-step login
+                  <span className="block text-xs text-ink-500">
+                    Until it is set up, they can sign in only to set it up.
+                  </span>
+                </span>
+              </label>
+              {manage.mfaEnabled === true && (
+                <Button type="button" variant="ghost" onClick={resetTwoStep} loading={busy} className="!py-1.5 text-xs">
+                  Reset two-step login (lost phone)
+                </Button>
+              )}
+            </fieldset>
           </form>
         )}
       </Modal>

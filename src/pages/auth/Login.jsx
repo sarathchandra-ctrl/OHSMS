@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, useLocation, Navigate } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import { useAuth } from '../../shared/auth/AuthContext'
@@ -35,10 +35,20 @@ function DemoAccounts({ onPick }) {
 }
 
 export default function Login() {
-  const { login, isAuthed, profile } = useAuth()
+  const { login, loginWithCode, isAuthed, profile } = useAuth()
   const location = useLocation()
   const [form, setForm] = useState({ email: '', password: '' })
   const [busy, setBusy] = useState(false)
+  // Set once the password is right and two-step login is on: the server's
+  // short-lived ticket for the code step. Never stored; a reload starts over.
+  const [ticket, setTicket] = useState(null)
+  const [code, setCode] = useState('')
+  const codeRef = useRef(null)
+  // The password field the person was typing in is gone; move them to the
+  // field that replaced it rather than leaving focus on nothing.
+  useEffect(() => {
+    if (ticket) codeRef.current?.focus()
+  }, [ticket])
 
   // Where ProtectedRoute bounced us from. safeInternalPath because this is an
   // open-redirect sink followed at the moment the user has proved who they are.
@@ -52,10 +62,34 @@ export default function Login() {
     e.preventDefault()
     setBusy(true)
     try {
-      await login(form)
+      const result = await login(form)
+      if (result.status === 'code') {
+        setTicket(result.ticket)
+        setCode('')
+        return
+      }
       toast.success('Welcome back')
     } catch (err) {
       toast.error(authErrorMessage(err))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const submitCode = async (e) => {
+    e.preventDefault()
+    setBusy(true)
+    try {
+      await loginWithCode({ ticket, code: code.replace(/\s+/g, '') })
+      toast.success('Welcome back')
+    } catch (err) {
+      // A spent or expired ticket cannot take another code: back to the password.
+      if (err?.code !== 'code') {
+        setTicket(null)
+        setForm((f) => ({ ...f, password: '' }))
+      }
+      setCode('')
+      toast.error(err?.message || authErrorMessage(err))
     } finally {
       setBusy(false)
     }
@@ -93,7 +127,45 @@ export default function Login() {
       }
     >
       {/* Written out so a normal build folds it away with the demo accounts. */}
-      {import.meta.env.VITE_DEMO === '1' && <DemoAccounts onPick={(a) => setForm({ email: a.email, password: a.password })} />}
+      {import.meta.env.VITE_DEMO === '1' && !ticket && <DemoAccounts onPick={(a) => setForm({ email: a.email, password: a.password })} />}
+      {ticket ? (
+        <form onSubmit={submitCode} className="space-y-4">
+          <p className="text-sm text-ink-600">
+            Enter the 6-digit code from your authenticator app for <b>{form.email}</b>.
+          </p>
+          <Field label="Code" htmlFor="totp-code">
+            <Input
+              id="totp-code"
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              pattern="[0-9 ]{6,7}"
+              maxLength={7}
+              required
+              ref={codeRef}
+              value={code}
+              onChange={(e) => setCode(e.target.value)}
+              placeholder="123 456"
+              className="text-center text-lg tracking-[0.3em]"
+            />
+          </Field>
+          <Button type="submit" loading={busy} className="w-full">
+            Verify
+          </Button>
+          <button
+            type="button"
+            onClick={() => {
+              setTicket(null)
+              setForm((f) => ({ ...f, password: '' }))
+            }}
+            className="w-full rounded text-sm font-semibold text-brand-700 hover:underline focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-brand-400"
+          >
+            Use a different account
+          </button>
+          <p className="text-xs text-ink-500">
+            Lost your phone? An administrator can reset two-step login for you.
+          </p>
+        </form>
+      ) : (
       <form onSubmit={submit} className="space-y-4">
         <Field label="Email" htmlFor="email">
           <Input
@@ -123,6 +195,7 @@ export default function Login() {
           Sign in
         </Button>
       </form>
+      )}
     </AuthLayout>
   )
 }

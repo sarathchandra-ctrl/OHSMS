@@ -251,6 +251,16 @@ export async function setUserRole(uid, role, actor, userLabel) {
   })
 }
 
+/** Record an admin's reset of someone's two-step login (done by the server job). */
+export async function logTwoStepReset(uid, actor, userLabel) {
+  await logAudit(actor, AUDIT.USER_ROLE, {
+    target: 'user',
+    targetId: uid,
+    targetLabel: userLabel || uid,
+    summary: 'Reset two-step login',
+  })
+}
+
 // ── Sites (shared across modules) ───────────────────────────────────────────
 // Same multiplexing as users — the site registry is read by nearly every module.
 const sharedSites = createSharedSubscription((_key, emit) => {
@@ -511,13 +521,14 @@ const cleanAccess = (access = {}) => {
 }
 
 /** Admin sets a user's department + granted access scope (and clears any request). */
-export async function setUserAccess(uid, { name, department, access }, actor, userLabel) {
+export async function setUserAccess(uid, { name, mfaRequired, department, access }, actor, userLabel) {
   // An account added without a name was stored under its email, which is then
   // what the greeting, owner pickers and the audit trail show. A blank field
   // leaves the stored name alone rather than erasing it.
   const cleanedName = String(name || '').replace(/\s+/g, ' ').trim().slice(0, 120)
   await updateDoc(userRef(uid), {
     ...(cleanedName ? { name: cleanedName } : {}),
+    ...(typeof mfaRequired === 'boolean' ? { mfaRequired } : {}),
     department: department || '',
     access: cleanAccess(access),
     accessRequest: null,
@@ -526,7 +537,9 @@ export async function setUserAccess(uid, { name, department, access }, actor, us
     target: 'user',
     targetId: uid,
     targetLabel: userLabel || uid,
-    summary: `Granted site access${department ? ` · ${department}` : ''}`,
+    summary: `Granted site access${department ? ` · ${department}` : ''}${
+      typeof mfaRequired === 'boolean' ? ` · two-step login ${mfaRequired ? 'required' : 'optional'}` : ''
+    }`,
   })
 }
 

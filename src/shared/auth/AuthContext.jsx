@@ -82,24 +82,44 @@ export function AuthProvider({ children }) {
     })
   }, [approved])
 
-  /** @returns {{ status: 'signed-in', user }} — throws with the server's message on refusal. */
-  const login = async ({ email, password } = {}) => {
+  const postAuth = async (path, payload) => {
     const gateway = ownStackGateway()
     if (!gateway) throw new Error('This site cannot reach its server.')
-    const res = await fetch(`${gateway}/auth/password`, {
+    const res = await fetch(`${gateway}${path}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password }),
+      body: JSON.stringify(payload),
     })
     const body = await res.json().catch(() => ({}))
-    if (!res.ok || !body.token) {
+    if (!res.ok || !(body.token || (body.mfa && body.ticket))) {
       const err = new Error(body.message || 'Sign-in was refused.')
       err.code = body.reason || 'unauthenticated'
       throw err
     }
-    setAccessToken(body.token)
-    const uid = sessionUid(body.token)
-    const sessionUser = { uid, getIdToken: async () => body.token }
+    return body
+  }
+
+  /**
+   * @returns {{ status: 'signed-in', user } | { status: 'code', ticket }} —
+   * 'code' when two-step login is on: finish with loginWithCode. Throws with
+   * the server's message on refusal.
+   */
+  const login = async ({ email, password } = {}) => {
+    const body = await postAuth('/auth/password', { email, password })
+    if (!body.token) return { status: 'code', ticket: body.ticket }
+    return acceptToken(body.token)
+  }
+
+  /** The second step: the ticket from login and the authenticator's current code. */
+  const loginWithCode = async ({ ticket, code } = {}) => {
+    const body = await postAuth('/auth/totp', { ticket, code })
+    return acceptToken(body.token)
+  }
+
+  const acceptToken = async (token) => {
+    setAccessToken(token)
+    const uid = sessionUid(token)
+    const sessionUser = { uid, getIdToken: async () => token }
     setUser(sessionUser)
     startSession()
     await refreshProfile(uid)
@@ -141,6 +161,7 @@ export function AuthProvider({ children }) {
     orgName: org?.name || '',
     actor: { uid: user?.uid, name: profile?.name || 'Unknown' },
     login,
+    loginWithCode,
     signOut,
     refreshProfile: () => user && refreshProfile(user.uid),
   }

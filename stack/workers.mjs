@@ -22,6 +22,7 @@ import { findLegacyUrls, isLegacyFileUrl, legacyCopyPath, rewriteLegacyUrls } fr
 import { allowedUploadType } from '../stack/lib/uploadLimits.js'
 import { serverOnly as serverOnlyPath } from './policy.mjs'
 import { createHash } from 'node:crypto'
+import { accountGated } from './lib/accountGate.js'
 
 export { WEATHER_FETCH_LIMIT, WEATHER_FETCH_WINDOW_S }
 
@@ -34,7 +35,7 @@ async function liveProfile(engine, uid) {
 
 export async function stampIdentity(engine, uid) {
   const profile = await liveProfile(engine, uid)
-  if (!profile || profile.status !== 'approved' || profile.mustChangePassword === true) {
+  if (!profile || profile.status !== 'approved' || accountGated(profile)) {
     return { stamped: false }
   }
   return {
@@ -87,7 +88,7 @@ export async function isLiveAdmin(engine, uid) {
     profile &&
     profile.status === 'approved' &&
     profile.role === 'admin' &&
-    profile.mustChangePassword !== true
+    !accountGated(profile)
   )
 }
 
@@ -309,7 +310,7 @@ export async function exportSubject(engine, { uid, subjectUid, personId, encrypt
   const isManager =
     caller &&
     caller.status === 'approved' &&
-    caller.mustChangePassword !== true &&
+    !accountGated(caller) &&
     ['admin', 'manager'].includes(caller.role)
   if (!isManager) return { ok: false, reason: 'not-manager', message: 'Administrators and managers only.' }
 

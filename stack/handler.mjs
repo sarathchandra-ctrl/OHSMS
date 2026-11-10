@@ -31,6 +31,12 @@ import {
   requestPasswordReset,
   resetMemberPassword,
   signInWithPassword,
+  startTotpEnrollment,
+  confirmTotpEnrollment,
+  completeTotpSignIn,
+  disableOwnTotp,
+  resetMemberTotp,
+  totpStatus,
   bump,
 } from './passwords.mjs'
 
@@ -93,6 +99,8 @@ export function createOwnStackHandler({
   // The public address; password-reset links are built on it.
   origin = '',
   dataKeyMaster = '',
+  // The name an authenticator app lists the account under.
+  totpIssuer = 'OHSMS',
   // ({ to, subject, text }) => { sent }. null: no mail, so no reset by email.
   mail = null,
   // Stored files (stack/blobs.mjs, worker/files.js). null serves no uploads.
@@ -124,6 +132,10 @@ export function createOwnStackHandler({
       }
       if (req.method === 'POST' && url.pathname === '/auth/password') {
         await onPassword(req, res)
+        return
+      }
+      if (req.method === 'POST' && url.pathname === '/auth/totp') {
+        await onTotp(req, res)
         return
       }
       if (req.method === 'POST' && url.pathname === '/auth/forgot') {
@@ -215,6 +227,38 @@ export function createOwnStackHandler({
             ? 'This account is disabled. Ask an administrator.'
             : 'That email and password do not match.'
       send(res, result.reason === 'locked' || result.reason === 'throttled' ? 429 : 401, {
+        code: 'unauthenticated',
+        reason: result.reason,
+        message,
+      })
+      return
+    }
+    // Two-step login: the password earned a ticket for the code, not a session.
+    if (result.mfa) {
+      send(res, 200, { mfa: true, ticket: result.ticket })
+      return
+    }
+    send(res, 200, { token: signSession(sessionSecret, { sub: result.uid }) })
+  }
+
+  async function onTotp(req, res) {
+    const body = await readBody(req)
+    const result = await completeTotpSignIn(engine, db, {
+      ticket: body.ticket,
+      code: body.code,
+      master: dataKeyMaster,
+      ip: clientIp(req),
+    })
+    if (!result.ok) {
+      const message =
+        result.reason === 'throttled'
+          ? 'Too many failed sign-ins from this network. Try again in 15 minutes.'
+          : result.reason === 'code'
+            ? 'That code is not right. Use the current code from your authenticator app.'
+            : result.reason === 'disabled'
+              ? 'This account is disabled. Ask an administrator.'
+              : 'This sign-in has expired. Enter your email and password again.'
+      send(res, result.reason === 'throttled' ? 429 : 401, {
         code: 'unauthenticated',
         reason: result.reason,
         message,
@@ -318,6 +362,13 @@ export function createOwnStackHandler({
       resetMemberPassword: () =>
         resetMemberPassword(engine, db, { uid, targetUid: body.uid, password: body.password }),
       getDataKeys: () => releaseDataKeys(engine, { uid, master: dataKeyMaster }),
+      totpStatus: () => totpStatus(db, { uid }),
+      startTotpEnrollment: () =>
+        startTotpEnrollment(engine, db, { uid, master: dataKeyMaster, issuer: totpIssuer }),
+      confirmTotpEnrollment: () =>
+        confirmTotpEnrollment(engine, db, { uid, code: body.code, master: dataKeyMaster }),
+      disableOwnTotp: () => disableOwnTotp(engine, db, { uid, code: body.code, master: dataKeyMaster }),
+      resetMemberTotp: () => resetMemberTotp(engine, db, { uid, targetUid: body.uid }),
       deleteOrgFile: () => deleteOrgFile(engine, blobStore, { uid, path: body.path }),
       purgeSoftDeleted: () => runRetention(engine, { blobStore }),
       withdrawStalePermitMirrors: () => withdrawStaleMirrors(engine),

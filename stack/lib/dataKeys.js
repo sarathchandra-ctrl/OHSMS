@@ -45,6 +45,7 @@
 // rules below can be tested without a database.
 // ─────────────────────────────────────────────────────────────────────────────
 
+import { accountGated } from './accountGate.js'
 /**
  * MUST stay identical to GENERAL/MEDICAL in src/shared/crypto/policy.js and to
  * the key ids embedded in every sealed value already written. functions/ deploys
@@ -228,7 +229,7 @@ export function grantsFor(profile) {
   // handing them the keys that open it would be the one grant looser than the
   // rules — and it would survive a password reset the rules would have caught.
   const approved =
-    Boolean(profile) && profile.status === 'approved' && profile.mustChangePassword !== true
+    Boolean(profile) && profile.status === 'approved' && !accountGated(profile)
   const role = String(profile?.role || '')
   return {
     general: approved,

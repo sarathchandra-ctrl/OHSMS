@@ -40,7 +40,8 @@ Two ways, chosen by the Worker's settings in `wrangler.jsonc`:
    `SESSION_SECRET` (`openssl rand -hex 32`), `DATA_KEY_MASTER`
    (`openssl rand -base64 32`), and for the first start `ADMIN_EMAIL` and
    `ADMIN_PASSWORD` (at least 10 characters). Keep a copy somewhere safe:
-   losing `DATA_KEY_MASTER` loses encrypted fields.
+   losing `DATA_KEY_MASTER` loses encrypted fields and every person's
+   two-step login setup.
 5. **Password-reset email (optional).** Create a Resend account
    (resend.com), verify the sending domain there (it gives DNS records to
    add), create an API key, then set `MAIL_FROM` in `wrangler.jsonc` (for

@@ -146,6 +146,11 @@ native shell that also means a WebView torn down by the system (the camera
 opening, the phone locking for long) asks for the password again. `IdleGuard`
 ends a session that sits unused.
 
+Two-step login, when a person has turned it on (Account security), asks for
+the 6-digit code from their authenticator app after the password. The code
+field offers the phone's one-time-code autofill. Nothing about it depends on
+the WebView either.
+
 Password reset sends a link by email (when mail is configured) that opens the
 reset page on the deployed site.
 

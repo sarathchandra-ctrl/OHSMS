@@ -4,9 +4,9 @@ An honest assessment of what this app would meet, and what it would fail, in a
 mid-to-large enterprise procurement or security review. Written against what is
 in the repository today, not what is planned.
 
-**Short answer: the access model is ready for a security review; identity
-(MFA, single sign-on), operations evidence and compliance paperwork are not
-yet.** The app now runs as one organization per installation on its own
+**Short answer: the access model is ready for a security review, and
+two-step login is available; single sign-on, operations evidence and
+compliance paperwork are not yet.** The app now runs as one organization per installation on its own
 server — on Cloudflare (Workers, D1, R2) or self-hosted — and every read and
 write is decided by that server.
 
@@ -23,7 +23,8 @@ the buyer-facing summary. Where they disagree, `SECURITY.md` is right.
 | Isolation between organizations | One organization per installation: its own database and files (`AGENTS.md`) | **Ready** |
 | Authorization | Admin / Manager / Employee / Auditor; per-employee module permissions; site, region and entity scope; manager-only approvals, verification and deletes; LOTO permit lifecycle — all decided by the server (`stack/policy.mjs`), with hostile-payload tests | **Ready** |
 | Authentication | Email and password on the organization's own server; per-source and per-address sign-in limits; temporary passwords must be replaced | **Ready** |
-| MFA and single sign-on | Not available on the current server | **Not ready** |
+| Two-step login (MFA) | Authenticator-app codes (TOTP), set up by each person on Account security; an admin can require it per person (the server holds the account to its own profile until it is set up) and reset it for a lost phone. Secrets are sealed with `DATA_KEY_MASTER` and never reach `/data`; a code is single-use and a sign-in ticket allows five tries | **Ready** |
+| Single sign-on | Not available on the current server | **Not ready** |
 | Audit trail | Append-only, actor pinned to the caller; the LOTO activity log likewise | **Ready** |
 | Encryption at rest (application layer) | Envelope encryption of personal and health fields (`src/shared/crypto/`), master key held as a server secret; on when the build sets `VITE_ENCRYPTION=on` | **Ready** |
 | Files | Expiring download links issued per reader; upload types allow-listed; uploads cannot replace a stored file; medical files to managers only | **Ready** |
@@ -119,7 +120,7 @@ organization with tens of thousands of records will find the edge.
 
 ## Suggested order
 
-1. MFA (and single sign-on, if the buyers in view require it)
+1. Single sign-on, if the buyers in view require it
 2. Retention periods signed off by someone with legal authority
    (`docs/DATA-RIGHTS.md` §3, `stack/lib/retentionPolicy.js`)
 3. A restore drill on the deployed infrastructure, written into the runbook

@@ -3,6 +3,7 @@ import { useAuth } from './AuthContext'
 import { can } from './permissions'
 import SamLoading from '../layout/SamLoading'
 import ChangePassword from '../../pages/auth/ChangePassword'
+import TwoStepRequired from '../../pages/auth/TwoStepRequired'
 
 /**
  * Guards the authenticated app. Redirects:
@@ -23,6 +24,8 @@ export default function ProtectedRoute({ children, requireAdmin = false, require
   if (!profile) return <SamLoading label="Loading your profile…" />
   // A temporary password set by an administrator must be replaced first.
   if (profile.mustChangePassword === true) return <ChangePassword />
+  // Then two-step login, when an administrator requires it.
+  if (profile.mfaRequired === true && profile.mfaEnabled !== true) return <TwoStepRequired />
   if (!isApproved) return <Navigate to="/pending" replace />
   // Turned away from an admin-only screen — send them to their own home rather
   // than to /hub, which is no longer where anyone lands and which a plain

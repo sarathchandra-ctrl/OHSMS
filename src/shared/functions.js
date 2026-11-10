@@ -292,3 +292,37 @@ export async function migrateLegacyFiles({ dryRun = true } = {}) {
   const fn = await callable('migrateLegacyFiles', { timeout: 120000 })
   return (await fn({ dryRun })).data
 }
+
+// ── Two-step login (authenticator app) ──────────────────────────────────────
+// The secret is made, sealed and checked by the server (stack/totp.mjs). The
+// browser sees it once, while setting up, to show the QR code.
+
+/** `{ enabled }` for the signed-in person. */
+export async function totpStatus() {
+  const fn = await callable('totpStatus')
+  return (await fn()).data
+}
+
+/** Start setting up: `{ secret, uri }` for the QR code. Not on until confirmed. */
+export async function startTotpEnrollment() {
+  const fn = await callable('startTotpEnrollment')
+  return (await fn()).data
+}
+
+/** Finish setting up with the first code from the app. Refusals: 'code', 'expired'. */
+export async function confirmTotpEnrollment({ code } = {}) {
+  const fn = await callable('confirmTotpEnrollment')
+  return (await fn({ code })).data
+}
+
+/** Turn it off for yourself, with a current code. Refused ('required') when an admin requires it. */
+export async function disableOwnTotp({ code } = {}) {
+  const fn = await callable('disableOwnTotp')
+  return (await fn({ code })).data
+}
+
+/** Admin: clear someone's two-step login (a lost phone); they set it up again. */
+export async function resetMemberTotp({ uid } = {}) {
+  const fn = await callable('resetMemberTotp')
+  return (await fn({ uid })).data
+}

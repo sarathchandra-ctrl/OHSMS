@@ -15,6 +15,7 @@
 
 import { gridKey, requestPoint } from './openMeteo.js'
 import { cachedObservation } from './weatherCacheDoc.js'
+import { accountGated } from './accountGate.js'
 
 // One page of sites is the normal load. 120 provider fetches per ten minutes
 // leaves room for a first pass over a large register and refuses a loop.
@@ -78,7 +79,7 @@ export async function serveSiteWeather({
   if (!profile || profile.status !== 'approved') {
     return { error: 'permission-denied', message: 'Your account is not approved.' }
   }
-  if (profile.mustChangePassword === true) {
+  if (accountGated(profile)) {
     return { error: 'permission-denied', message: 'Change your password before using this.' }
   }
   const key = gridKey(Number(data?.lat), Number(data?.lng))

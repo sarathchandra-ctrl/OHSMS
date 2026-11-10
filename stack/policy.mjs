@@ -24,6 +24,8 @@
 
 // ── Path helpers ────────────────────────────────────────────────────────────
 
+import { accountGated } from './lib/accountGate.js'
+
 /** The collection a path names: its last segment ('permits/P1/events' -> events). */
 export const collectionOf = (path) => String(path).split('/').pop()
 /** The top-level collection ('permits/P1/events' -> permits). */
@@ -42,7 +44,9 @@ const PUBLIC_MIRRORS = ['qr', 'permitQr', 'procedureQr']
 
 // ── The caller ──────────────────────────────────────────────────────────────
 
-const mustChange = (p) => p?.mustChangePassword === true
+// A temporary password still to replace, or two-step login required and not
+// yet set up: either way the account may read its own profile and nothing else.
+const mustChange = (p) => accountGated(p)
 export const isApproved = (ctx) =>
   Boolean(ctx.profile) && ctx.profile.status === 'approved' && !mustChange(ctx.profile)
 export const isWriter = (ctx) => isApproved(ctx) && (ctx.profile.role || '') !== 'auditor'
@@ -847,6 +851,7 @@ const num = (v) => {
  *   users_keep_privilege   role, status, site, access, department change only
  *                          by an approved admin, judged on the STORED actor;
  *                          nobody but the server clears mustChangePassword
+ *                          or sets mfaEnabled (only the server has the secret)
  *   meta_counters_forward  reference counters never move backwards
  *   manager_decisions      a decision (DECISION_STATES): managers only
  * `prev` is undefined for an insert.
@@ -856,6 +861,9 @@ export function invariantProblem(path, id, prev, next, ctx) {
   if (prev && path === 'users' && !ctx.worker) {
     if (prev.mustChangePassword === true && n.mustChangePassword !== true) return 'password-flag'
     const changed = (k) => JSON.stringify(prev[k] ?? null) !== JSON.stringify(n[k] ?? null)
+    // mfaEnabled says a verified authenticator exists. A client that could set
+    // it would clear its own mfaRequired gate without ever enrolling.
+    if (changed('mfaEnabled')) return 'mfa-flag'
     const changedText = (k) => str(prev[k]) !== str(n[k])
     const privileged =
       changed('role') ||
@@ -863,9 +871,11 @@ export function invariantProblem(path, id, prev, next, ctx) {
       changedText('siteId') ||
       changed('access') ||
       changedText('department') ||
-      changedText('dept')
+      changedText('dept') ||
+      changed('mfaRequired')
     if (privileged && !isAdmin(ctx)) return 'privilege'
   }
+  if (!prev && path === 'users' && !ctx.worker && n.mfaEnabled != null) return 'mfa-flag'
   if (!ctx.worker && mirrorProblem(path, prev, n)) return 'mirror-field'
   // A LOTO log entry is written in its writer's own name.
   if (!ctx.worker && !prev && isLotoLog(path) && str(n.by) !== ctx.uid) return 'loto-log-actor'

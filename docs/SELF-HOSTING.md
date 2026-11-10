@@ -65,7 +65,8 @@ two roles its security rules use, and an ordinary account for the app
 (`init-db.sh`). Caddy obtains the HTTPS certificate, which can take a minute.
 
 **Back up `.env` somewhere safe and separate from the server.** Without
-`DATA_KEY_MASTER` encrypted fields cannot be opened; without the database
+`DATA_KEY_MASTER` encrypted fields cannot be opened and two-step login
+stops accepting codes until an admin resets it for each person; without the database
 passwords the data cannot be reached. `.env` also holds `ADMIN_PASSWORD`, the
 first administrator's one-time password.
 

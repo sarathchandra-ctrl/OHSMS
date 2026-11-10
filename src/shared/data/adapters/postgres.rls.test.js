@@ -893,3 +893,57 @@ describe('employee: assigned work', () => {
     expect((await adminEngine.get(null, 'incidents', 'inv1')).investigations).toHaveLength(1)
   })
 })
+
+describe('two-step login flags', () => {
+  beforeAll(async () => {
+    await seed('users', 'mfaGated', {
+      role: 'manager',
+      status: 'approved',
+      name: 'Gate',
+      mfaRequired: true,
+    })
+    await seed('users', 'mfaOn', { role: 'member', status: 'approved', name: 'On', mfaEnabled: true })
+  })
+
+  it('holds an account that must set up two-step login to its own profile', async () => {
+    const gated = as('mfaGated')
+    expect(await gated.get('users', 'mfaGated')).toMatchObject({ mfaRequired: true })
+    expect(await gated.get('incidents', 'i1')).toBeNull()
+    expect(await gated.get('users', 'adminA')).toBeNull()
+    await expect(gated.set('incidents', 'mfa-sneak', { title: 'no' })).rejects.toMatchObject({
+      code: 'permission-denied',
+    })
+  })
+
+  it('refuses a client that marks itself enrolled to clear the gate', async () => {
+    await expect(as('mfaGated').update('users', 'mfaGated', { mfaEnabled: true })).rejects.toThrow()
+    // Not even an admin: only the server, which holds the secret, sets it.
+    await expect(as('adminA').update('users', 'mfaGated', { mfaEnabled: true })).rejects.toThrow()
+    expect((await adminEngine.get(null, 'users', 'mfaGated')).mfaEnabled).toBeUndefined()
+  })
+
+  it('refuses a person switching the flag off on their own profile', async () => {
+    await expect(as('mfaOn').update('users', 'mfaOn', { mfaEnabled: false })).rejects.toThrow()
+    expect((await adminEngine.get(null, 'users', 'mfaOn')).mfaEnabled).toBe(true)
+  })
+
+  it('leaves requiring it to an admin', async () => {
+    await expect(as('memberA').update('users', 'memberA', { mfaRequired: true })).rejects.toThrow()
+    await expect(as('managerA').update('users', 'memberA', { mfaRequired: true })).rejects.toThrow()
+    await as('adminA').update('users', 'mfaOn', { mfaRequired: true })
+    expect((await adminEngine.get(null, 'users', 'mfaOn')).mfaRequired).toBe(true)
+    // ...and lifting it is the same privilege.
+    await expect(as('mfaOn').update('users', 'mfaOn', { mfaRequired: false })).rejects.toThrow()
+  })
+
+  it('refuses an admin creating an account already marked enrolled', async () => {
+    await expect(
+      as('adminA').set('users', 'mfaFake', {
+        role: 'member',
+        status: 'approved',
+        mustChangePassword: true,
+        mfaEnabled: true,
+      })
+    ).rejects.toThrow()
+  })
+})

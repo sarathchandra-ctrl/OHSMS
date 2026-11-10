@@ -6,8 +6,9 @@
 // which row is decided in stack/policy.mjs, before any SQL runs; SQLite has
 // no row-level security of its own.
 //
-// auth_secrets (password hashes) and auth_pending (lockout counters, reset
-// links) are reached only by stack/passwords.mjs, never through /data.
+// auth_secrets (password hashes), auth_totp (sealed two-step login secrets)
+// and auth_pending (lockout counters, reset links, sign-in tickets) are
+// reached only by stack/passwords.mjs, never through /data.
 // commit_guard exists to fail a batch on purpose (stack/engine.mjs).
 
 export const SCHEMA_STATEMENTS = [
@@ -30,6 +31,12 @@ export const SCHEMA_STATEMENTS = [
      key TEXT PRIMARY KEY,
      value TEXT NOT NULL,
      expires_at INTEGER NOT NULL
+   )`,
+  `CREATE TABLE IF NOT EXISTS auth_totp (
+     uid TEXT PRIMARY KEY,
+     secret TEXT NOT NULL,
+     last_step INTEGER NOT NULL DEFAULT -1,
+     enabled_at INTEGER NOT NULL
    )`,
   `CREATE TABLE IF NOT EXISTS commit_guard (ok INTEGER NOT NULL)`,
 ]
