@@ -519,6 +519,78 @@ export function decisionChanged(path, prev, next) {
   return ''
 }
 
+// ── LOTO permits ────────────────────────────────────────────────────────────
+// An isolation permit is the paper between a person and live energy. The
+// Firestore rules held it to its lifecycle and to who may move it; this is
+// the same table (PERMIT_TRANSITIONS in src/modules/loto/constants/permits.js
+// drives the buttons, and must agree with it):
+//
+//   requested -> approved | rejected   an Admin (the LOTO module's approvers);
+//                                      the requester only by recording that
+//                                      nobody else could (selfApproved + a
+//                                      reason), and never someone named on it
+//   requested | approved -> withdrawn  the requester or an Admin
+//   approved -> active                 someone the permit is about, or Admin
+//   active -> returned                 someone the permit is about, or Admin
+//   active -> emergency_removed        an Admin
+//
+// A closed permit (returned, rejected, withdrawn, emergency_removed) does not
+// reopen. Extending an active permit (a later windowEnd) is an Admin's, by at
+// most 24 hours at a time. A new permit starts as requested.
+export const LOTO_TRANSITIONS = {
+  requested: ['approved', 'rejected', 'withdrawn'],
+  approved: ['active', 'withdrawn'],
+  active: ['returned', 'emergency_removed'],
+  returned: [],
+  rejected: [],
+  withdrawn: [],
+  emergency_removed: [],
+}
+const LOTO_CLOSED = ['returned', 'rejected', 'withdrawn', 'emergency_removed']
+// A stored timestamp is { __ohsms: 'ts', s, ns } (src/shared/data/adapters/
+// postgresWire.js); a Firestore-shaped one carries `seconds`.
+const millis = (v) => {
+  if (v && typeof v === 'object' && v.__ohsms === 'ts') return v.s * 1000 + Math.floor((v.ns || 0) / 1e6)
+  if (v && typeof v === 'object' && typeof v.seconds === 'number') return v.seconds * 1000
+  const n = typeof v === 'number' ? v : Date.parse(v)
+  return Number.isFinite(n) ? n : NaN
+}
+
+/** Why this lotoPermits write is refused, or ''. `prev` is undefined on create. */
+export function lotoPermitProblem(prev, next, ctx) {
+  const n = next || {}
+  const uid = ctx.uid
+  if (!prev) return str(n.status) === 'requested' ? '' : 'loto-new-not-requested'
+  const from = str(prev.status)
+  const to = str(n.status)
+  const party =
+    (Boolean(uid) && prev.requestedBy === uid) ||
+    (Array.isArray(prev.personnelUids) && prev.personnelUids.includes(uid))
+  if (from !== to) {
+    if (!(LOTO_TRANSITIONS[from] || []).includes(to)) return 'loto-transition'
+    if (to === 'approved' || to === 'rejected') {
+      if (!isAdmin(ctx)) return 'loto-approver'
+      if (str(n.approval?.by) !== uid) return 'loto-approver'
+      const self = prev.requestedBy === uid
+      const named = Array.isArray(prev.personnelUids) && prev.personnelUids.includes(uid)
+      const sole = self && n.approval?.selfApproved === true && str(n.approval?.selfApprovalReason).trim()
+      if (self ? !sole : named) return 'loto-self-approval'
+    }
+    if (to === 'emergency_removed' && !isAdmin(ctx)) return 'loto-emergency'
+    if (to === 'withdrawn' && !(prev.requestedBy === uid || isAdmin(ctx))) return 'loto-withdraw'
+    if ((to === 'active' || to === 'returned') && !(party || isAdmin(ctx))) return 'loto-party'
+    return ''
+  }
+  if (LOTO_CLOSED.includes(from) && !isAdmin(ctx)) return 'loto-closed'
+  if (JSON.stringify(prev.windowEnd ?? null) !== JSON.stringify(n.windowEnd ?? null)) {
+    if (!isAdmin(ctx) || from !== 'active') return 'loto-extend'
+    const before = millis(prev.windowEnd)
+    const after = millis(n.windowEnd)
+    if (!(after > before) || after - before > 24 * 60 * 60 * 1000) return 'loto-extend'
+  }
+  return ''
+}
+
 // ── What a public mirror may carry ──────────────────────────────────────────
 // qr, permitQr and procedureQr are read by anyone holding a token, without an
 // account. Each may carry only the fields its builder writes (fire/lib/data.js
@@ -601,6 +673,10 @@ export function invariantProblem(path, id, prev, next, ctx) {
     if (privileged && !isAdmin(ctx)) return 'privilege'
   }
   if (!ctx.worker && mirrorProblem(path, prev, n)) return 'mirror-field'
+  if (!ctx.worker && path === 'lotoPermits') {
+    const loto = lotoPermitProblem(prev, n, ctx)
+    if (loto) return loto
+  }
   if (prev && ['meta', 'docSeq'].includes(collectionOf(path)) && id !== 'cryptoKeys') {
     for (const k of ['nextSeq', 'permitSeq', 'n']) {
       if (num(prev[k]) > num(n[k])) return 'counter'

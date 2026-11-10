@@ -574,3 +574,80 @@ describe('employee: shared work rows', () => {
     await expect(m.update('inspectionTemplates', 'it1', { title: 'Renamed', updatedAt: 'x' })).rejects.toMatchObject(denied)
   })
 })
+
+// LOTO isolation permits: the lifecycle, and who may move each step.
+describe('LOTO permits', () => {
+  const ts = (ms) => ({ __ohsms: 'ts', s: Math.floor(ms / 1000), ns: 0 })
+  const H = 3600 * 1000
+  const base = { requestedBy: 'memberA', personnelUids: ['memberA', 'crewB'], windowEnd: ts(Date.parse('2026-11-11T18:00:00Z')) }
+  beforeAll(async () => {
+    await seed('users', 'crewB', { role: 'member', status: 'approved' })
+    for (const [id, status] of [
+      ['lp-req', 'requested'], ['lp-req2', 'requested'], ['lp-req3', 'requested'], ['lp-req4', 'requested'],
+      ['lp-app', 'approved'], ['lp-act', 'active'], ['lp-act2', 'active'], ['lp-ret', 'returned'],
+    ]) {
+      await seed('lotoPermits', id, { ...base, status })
+    }
+  })
+  const denied = { code: 'permission-denied' }
+
+  it('lets an employee raise a permit only as requested', async () => {
+    const m = as('memberA')
+    await m.set('lotoPermits', 'lp-new', { ...base, status: 'requested' })
+    await expect(m.set('lotoPermits', 'lp-skip', { ...base, status: 'active' })).rejects.toMatchObject(denied)
+  })
+
+  it('refuses an employee approving, even their own permit', async () => {
+    await expect(
+      as('memberA').update('lotoPermits', 'lp-req', { status: 'approved', approval: { by: 'memberA', selfApproved: true, selfApprovalReason: 'night shift' } })
+    ).rejects.toMatchObject(denied)
+    await expect(
+      as('crewB').update('lotoPermits', 'lp-req', { status: 'approved', approval: { by: 'crewB' } })
+    ).rejects.toMatchObject(denied)
+  })
+
+  it('lets an Admin approve, but not in someone else\'s name or for a permit they are named on', async () => {
+    const admin = as('adminA')
+    await expect(admin.update('lotoPermits', 'lp-req', { status: 'approved', approval: { by: 'memberA' } })).rejects.toMatchObject(denied)
+    await admin.update('lotoPermits', 'lp-req', { status: 'approved', approval: { by: 'adminA' } })
+    await seed('lotoPermits', 'lp-adminnamed', { ...base, personnelUids: ['adminA'], status: 'requested' })
+    await expect(
+      admin.update('lotoPermits', 'lp-adminnamed', { status: 'approved', approval: { by: 'adminA' } })
+    ).rejects.toMatchObject(denied)
+    // The requester may approve only by recording why nobody else could.
+    await seed('lotoPermits', 'lp-adminown', { ...base, requestedBy: 'adminA', status: 'requested' })
+    await expect(
+      admin.update('lotoPermits', 'lp-adminown', { status: 'approved', approval: { by: 'adminA' } })
+    ).rejects.toMatchObject(denied)
+    await admin.update('lotoPermits', 'lp-adminown', {
+      status: 'approved',
+      approval: { by: 'adminA', selfApproved: true, selfApprovalReason: 'only approver on site tonight' },
+    })
+  })
+
+  it('holds every permit to the order of steps', async () => {
+    const m = as('memberA')
+    await expect(m.update('lotoPermits', 'lp-req2', { status: 'active' })).rejects.toMatchObject(denied)
+    await expect(m.update('lotoPermits', 'lp-ret', { status: 'active' })).rejects.toMatchObject(denied)
+    await expect(as('adminA').update('lotoPermits', 'lp-ret', { status: 'active' })).rejects.toMatchObject(denied)
+    await m.update('lotoPermits', 'lp-app', { status: 'active' })
+    await m.update('lotoPermits', 'lp-act', { status: 'returned' })
+  })
+
+  it('keeps emergency removal, extensions and other people\'s withdrawals for an Admin', async () => {
+    await expect(as('memberA').update('lotoPermits', 'lp-act2', { status: 'emergency_removed' })).rejects.toMatchObject(denied)
+    await expect(as('crewB').update('lotoPermits', 'lp-req3', { status: 'withdrawn' })).rejects.toMatchObject(denied)
+    await as('memberA').update('lotoPermits', 'lp-req3', { status: 'withdrawn' })
+    const end = Date.parse('2026-11-11T18:00:00Z')
+    await expect(as('memberA').update('lotoPermits', 'lp-act2', { windowEnd: ts(end + H) })).rejects.toMatchObject(denied)
+    await expect(as('adminA').update('lotoPermits', 'lp-act2', { windowEnd: ts(end + 30 * H) })).rejects.toMatchObject(denied)
+    await as('adminA').update('lotoPermits', 'lp-act2', { windowEnd: ts(end + 4 * H) })
+    await as('adminA').update('lotoPermits', 'lp-act2', { status: 'emergency_removed' })
+  })
+
+  it('does not let a stranger start or return a permit they are not on', async () => {
+    await seed('users', 'strangerC', { role: 'member', status: 'approved' })
+    await seed('lotoPermits', 'lp-app2', { ...base, status: 'approved' })
+    await expect(as('strangerC').update('lotoPermits', 'lp-app2', { status: 'active' })).rejects.toMatchObject(denied)
+  })
+})

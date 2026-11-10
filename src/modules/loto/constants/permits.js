@@ -52,9 +52,10 @@ export const OPEN_STATUSES = [
 export const isClosedStatus = (status) => CLOSED_STATUSES.includes(status)
 
 /**
- * The status-transition whitelist. firestore.rules carries the same table
- * (the `lotoPermitMove` helper) — this copy drives the buttons and the
- * pure validators; the rules are the one that cannot be bypassed.
+ * The status-transition whitelist. stack/policy.mjs carries the same table
+ * (LOTO_TRANSITIONS, with who may make each move) — this copy drives the
+ * buttons and the pure validators; the policy is the one that cannot be
+ * bypassed. permitTransitions.parity.test.js keeps the two identical.
  */
 export const PERMIT_TRANSITIONS = {
   [PERMIT_STATUS.REQUESTED]: [

@@ -319,8 +319,8 @@ describe('subject access export', () => {
     await commit([
       { type: 'set', path: 'trainingAssignments', id: 't1', merge: false, data: { employeeUid: sam, courseName: 'Fire' } },
       { type: 'set', path: 'trainingAssignments', id: 't2', merge: false, data: { employeeUid: 'someone-else' } },
-      { type: 'set', path: 'lotoPermits', id: 'lp1', merge: false, data: { requestedBy: sam, personnelUids: [sam] } },
-      { type: 'set', path: 'lotoPermits', id: 'lp2', merge: false, data: { requestedBy: 'x', personnelUids: ['y', sam] } },
+      { type: 'set', path: 'lotoPermits', id: 'lp1', merge: false, data: { status: 'requested', requestedBy: sam, personnelUids: [sam] } },
+      { type: 'set', path: 'lotoPermits', id: 'lp2', merge: false, data: { status: 'requested', requestedBy: 'x', personnelUids: ['y', sam] } },
       { type: 'set', path: 'injuries', id: 'inj1', merge: false, data: { personId: 'P-7', status: 'open' } },
     ])
 
