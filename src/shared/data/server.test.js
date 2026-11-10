@@ -574,3 +574,31 @@ describe('a training quiz from its QR code', () => {
     await s.stop()
   })
 })
+
+// The first sign-up over HTTP: public while nobody has an account, then
+// closed for good (stack/passwords.mjs firstSignUp).
+describe('the first sign-up', () => {
+  const owner = { orgName: 'Cult Fit', name: 'Asha', email: 'asha@cult.test', password: 'owner-pass-123' }
+
+  it('is offered on an empty installation, signs its user in, then closes', async () => {
+    const s = await start({ bootstrap: false })
+    expect((await s.rpc('', 'setupStatus')).body).toMatchObject({ open: true, needsCode: false })
+    const made = await s.rpc('', 'firstSignUp', owner)
+    expect(made.status).toBe(200)
+    const token = await s.signIn(owner.email, owner.password)
+    expect(token).toBeTruthy()
+    expect(await s.read(token, 'users', made.body.uid)).toMatchObject({ role: 'admin' })
+    expect((await s.rpc('', 'setupStatus')).body.open).toBe(false)
+    const again = await s.rpc('', 'firstSignUp', { ...owner, email: 'mallory@cult.test' })
+    expect(again.status).toBe(400)
+    expect(again.body.reason).toBe('closed')
+    await s.stop()
+  })
+
+  it('is never offered where the operator created the administrator', async () => {
+    const s = await start()
+    expect((await s.rpc('', 'setupStatus')).body.open).toBe(false)
+    expect((await s.rpc('', 'firstSignUp', owner)).body.reason).toBe('closed')
+    await s.stop()
+  })
+})

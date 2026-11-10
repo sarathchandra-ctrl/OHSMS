@@ -18,6 +18,7 @@ const PublicCertificate = lazy(() => import('./modules/training/pages/PublicCert
 import SetupNeeded from './pages/SetupNeeded'
 import Login from './pages/auth/Login'
 import ForgotPassword from './pages/auth/ForgotPassword'
+import SignUp from './pages/auth/SignUp'
 import ResetPassword from './pages/auth/ResetPassword'
 import PendingApproval from './pages/auth/PendingApproval'
 import NotFound from './pages/NotFound'
@@ -127,6 +128,8 @@ export default function App() {
       {/* Public */}
       <Route path="/login" element={<Login />} />
       <Route path="/forgot-password" element={<ForgotPassword />} />
+      {/* The first account on a new installation; closed once anyone exists. */}
+      <Route path="/signup" element={<SignUp />} />
       <Route path="/reset-password" element={<ResetPassword />} />
       {/* Scanned from a printed extinguisher label — deliberately public. */}
       <Route path="/qr/:token" element={<ErrorBoundary><Suspense fallback={<SamLoading />}><QrLanding /></Suspense></ErrorBoundary>} />

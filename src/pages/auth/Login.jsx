@@ -8,6 +8,7 @@ import { safeInternalPath } from '../../shared/safeUrl'
 import AuthLayout from './AuthLayout'
 import LoginModules from './LoginModules'
 import { publicPath } from '../../shared/publicPath'
+import { setupStatus } from '../../shared/functions'
 
 // Email and password, checked by this installation's server. People are added
 // by an administrator (Employees → Add employee); there is no self-sign-up.
@@ -15,6 +16,14 @@ export default function Login() {
   const { login, loginWithCode, isAuthed, profile } = useAuth()
   const location = useLocation()
   const [form, setForm] = useState({ email: '', password: '' })
+  // "Sign up" is shown only to the very first person on a new installation:
+  // the server says whether nobody has an account yet (firstSignUpOpen).
+  const [signUpOpen, setSignUpOpen] = useState(false)
+  useEffect(() => {
+    let live = true
+    setupStatus().then((s) => live && setSignUpOpen(Boolean(s?.open)), () => {})
+    return () => { live = false }
+  }, [])
   const [busy, setBusy] = useState(false)
   // Set once the password is right and two-step login is on: the server's
   // short-lived ticket for the code step. Never stored; a reload starts over.
@@ -103,6 +112,13 @@ export default function Login() {
         </span>
       }
     >
+      {signUpOpen && !ticket && (
+        <div className="mb-4 rounded-2xl bg-brand-50 px-4 py-3 text-sm text-ink-800 ring-1 ring-brand-200">
+          <p className="font-semibold">New here? Nobody has an account yet.</p>
+          <p className="mt-0.5 text-xs text-ink-600">The first person to sign up becomes the administrator and invites everyone else.</p>
+          <Link to="/signup" className="btn-primary mt-2 inline-flex">Sign up</Link>
+        </div>
+      )}
       {ticket ? (
         <form onSubmit={submitCode} className="space-y-4">
           <p className="text-sm text-ink-600">

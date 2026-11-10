@@ -54,12 +54,18 @@ try {
     sessionSecret: config.sessionSecret,
     dataKeyMaster: config.dataKeyMaster,
     blobDir: join(dataDir, 'files'),
-    bootstrap: {
-      orgName: 'Local OHSMS',
-      adminEmail: config.email,
-      adminPassword: config.password,
-      mustChange: false,
-    },
+    // OHSMS_LOCAL_FIRST_SIGNUP=1 starts with nobody in it, to try the first
+    // sign-up (/signup). Use a fresh OHSMS_LOCAL_DATA_DIR for it.
+    bootstrap:
+      process.env.OHSMS_LOCAL_FIRST_SIGNUP === '1'
+        ? null
+        : {
+            orgName: 'Local OHSMS',
+            adminEmail: config.email,
+            adminPassword: config.password,
+            mustChange: false,
+          },
+    setupCode: process.env.SETUP_CODE || '',
     mail: async (message) => {
       await appendFile(join(dataDir, 'mailbox.ndjson'), JSON.stringify(message) + '\n', {
         mode: 0o600,

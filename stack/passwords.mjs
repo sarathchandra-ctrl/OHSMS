@@ -634,6 +634,95 @@ export async function bootstrapOrganization(
   return { created: true, uid: id }
 }
 
+// ── The first sign-up ───────────────────────────────────────────────────────
+// A new installation with nobody in it shows "Sign up" on the sign-in page.
+// The first person to use it becomes the administrator and names the
+// organization; everyone after them is added by an administrator (Employees
+// → Add employee). It is the server that decides it is open, never the page,
+// and it closes for good the moment any account exists, including one the
+// operator created through ADMIN_EMAIL / ADMIN_PASSWORD.
+//
+// Two people pressing it at once: one statement claims the right to be first
+// (auth_pending, a key that can be inserted once), so exactly one succeeds.
+//
+// On a fresh deployment the address is public before its owner has signed
+// up, and whoever gets there first would be its administrator. SETUP_CODE,
+// when the operator sets it, closes that window: the sign-up then also asks
+// for the code.
+
+const FIRST_ADMIN_CLAIM = 'setup:first-admin'
+
+/** Is the first sign-up open: nobody in this installation yet, and no claim? */
+export async function firstSignUpOpen(db) {
+  const anyone = await db.prepare("SELECT 1 AS one FROM documents WHERE path = 'users' LIMIT 1").first()
+  if (anyone) return false
+  const claimed = await db.prepare('SELECT 1 AS one FROM auth_pending WHERE key = ?').bind(FIRST_ADMIN_CLAIM).first()
+  return !claimed
+}
+
+const sameCode = (a, b) => {
+  const x = Buffer.from(String(a || ''))
+  const y = Buffer.from(String(b || ''))
+  return x.length === y.length && timingSafeEqual(x, y)
+}
+
+export async function firstSignUp(engine, db, { orgName, name, email, password, code, setupCode = '' }) {
+  if (!(await firstSignUpOpen(db))) return { ok: false, reason: 'closed' }
+  if (setupCode && !sameCode(code, setupCode)) return { ok: false, reason: 'setup-code' }
+  const address = normalizeEmail(email)
+  if (!address) return { ok: false, reason: 'email' }
+  const person = cleanName(name)
+  if (!person) return { ok: false, reason: 'name' }
+  const org = cleanName(orgName)
+  if (!org) return { ok: false, reason: 'org' }
+  if (passwordProblem(password)) return { ok: false, reason: 'policy' }
+  // The claim: inserted once, ever. Whoever's insert lands is first.
+  const claim = await db
+    .prepare('INSERT INTO auth_pending (key, value, expires_at) VALUES (?, ?, ?) ON CONFLICT (key) DO NOTHING')
+    .bind(FIRST_ADMIN_CLAIM, address, Number.MAX_SAFE_INTEGER)
+    .run()
+  if (!Number(claim?.meta?.changes)) return { ok: false, reason: 'closed' }
+  // Checked again under the claim: an operator's bootstrap may have landed
+  // between the first look and the claim.
+  const anyone = await db.prepare("SELECT 1 AS one FROM documents WHERE path = 'users' LIMIT 1").first()
+  if (anyone) return { ok: false, reason: 'closed' }
+  const id = randomUUID()
+  try {
+    const stored = await engine.get(WORKER, 'organization', 'profile')
+    await engine.commit(WORKER, [
+      stored
+        ? { type: 'update', path: 'organization', id: 'profile', data: { name: org } }
+        : { type: 'set', path: 'organization', id: 'profile', merge: false, data: { name: org, address: '', createdBy: id } },
+      {
+        type: 'set',
+        path: 'users',
+        id,
+        merge: false,
+        data: {
+          name: person,
+          email: address,
+          role: 'admin',
+          status: 'approved',
+          // They chose this password themselves, just now.
+          mustChangePassword: false,
+          dept: '',
+          department: '',
+          access: { sites: [], regions: [], entities: [] },
+          createdBy: 'first-sign-up',
+          createdAt: { seconds: Math.floor(Date.now() / 1000), nanoseconds: 0 },
+        },
+      },
+    ])
+    await storePassword(db, { uid: id, email: address, password })
+  } catch (err) {
+    // Nothing was created: free the claim so the owner can try again.
+    await engine.commit(WORKER, [{ type: 'remove', path: 'users', id }]).catch(() => {})
+    await db.prepare('DELETE FROM auth_pending WHERE key = ?').bind(FIRST_ADMIN_CLAIM).run()
+    throw err
+  }
+  return { ok: true, uid: id, email: address }
+}
+
 // ── Reset by email ──────────────────────────────────────────────────────────
 // A one-time link, valid for 30 minutes. Only the SHA-256 of the token is
 // stored (auth_pending, which the data API cannot read), so a database dump

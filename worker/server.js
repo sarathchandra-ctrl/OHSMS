@@ -151,6 +151,8 @@ export async function serveOnCloudflare(request, env, ctx) {
       background: (promise) => ctx?.waitUntil?.(promise),
       // Set by Cloudflare at its edge; a client cannot supply it.
       clientIp: () => request.headers.get('cf-connecting-ip') || '',
+      // Optional secret: the first sign-up then also asks for it.
+      setupCode: env.SETUP_CODE || '',
     })
     const req = nodeRequest(request)
     const { res, done, toResponse } = nodeResponse()

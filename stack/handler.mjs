@@ -42,13 +42,15 @@ import {
   sessionEpochOf,
   signOutOtherSessions,
   bump,
+  firstSignUp,
+  firstSignUpOpen,
 } from './passwords.mjs'
 
 const WORKER = { role: 'ohsms_worker', uid: '' }
 // Jobs answered for someone with no account: a training quiz opened from its
 // QR code (stack/quiz.mjs). Each decides everything itself, as the server,
 // and one address may call them only so often.
-const PUBLIC_JOBS = new Set(['publicQuiz', 'submitQuiz', 'quizCertificate'])
+const PUBLIC_JOBS = new Set(['publicQuiz', 'submitQuiz', 'quizCertificate', 'setupStatus', 'firstSignUp'])
 const PUBLIC_JOB_LIMIT = 60
 const PUBLIC_JOB_WINDOW_S = 10 * 60
 const ADMIN_JOBS = new Set([
@@ -148,6 +150,9 @@ export function createOwnStackHandler({
   // Outbound requests (the weather provider). Injected so tests never touch
   // the network.
   fetchImpl = globalThis.fetch,
+  // When set, the first sign-up also asks for this code (stack/passwords.mjs
+  // firstSignUp): a fresh deployment cannot be claimed by whoever finds it.
+  setupCode = '',
 }) {
   async function handle(req, res) {
     try {
@@ -457,6 +462,17 @@ export function createOwnStackHandler({
       publicQuiz: () => publicQuiz(engine, { token: body.token }),
       submitQuiz: () => submitQuiz(engine, { token: body.token, body, mail, origin, background }),
       quizCertificate: () => quizCertificate(engine, { token: body.token }),
+      // The first sign-up: open only while nobody has an account.
+      setupStatus: async () => ({ ok: true, open: await firstSignUpOpen(db), needsCode: Boolean(setupCode) }),
+      firstSignUp: () =>
+        firstSignUp(engine, db, {
+          orgName: body.orgName,
+          name: body.name,
+          email: body.email,
+          password: body.password,
+          code: body.code,
+          setupCode,
+        }),
       resendQuizCertificate: () =>
         resendQuizCertificate(engine, { uid, responseId: body.responseId, email: body.email, mail, origin }),
     }

@@ -102,6 +102,7 @@ export async function createDedicatedApp({
   blobDir = '',
   bootstrap = null,
   fetchImpl,
+  setupCode = '',
 }) {
   await applySchema(db)
   const engine = createEngine(db)
@@ -119,6 +120,7 @@ export async function createDedicatedApp({
     dataKeyMaster,
     mail,
     fetchImpl,
+    setupCode,
   })
   const delegate = host.listeners('request')[0]
   host.removeAllListeners('request')

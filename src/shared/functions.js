@@ -286,6 +286,25 @@ export async function sendWhatsAppOrgTest(phone) {
  * means the provider asked us to wait.
  */
 /**
+ * Is the first sign-up open? Only while this installation has nobody in it
+ * (stack/passwords.mjs firstSignUpOpen). { open, needsCode }.
+ */
+export async function setupStatus() {
+  const fn = await callable('setupStatus', { timeout: 10000 })
+  return (await fn({})).data
+}
+
+/**
+ * The first sign-up: the administrator and the organization's name. Closed
+ * for good once anyone has an account; the server decides. Throws with
+ * `reason` ('closed', 'setup-code', 'email', 'name', 'org', 'policy').
+ */
+export async function firstSignUp({ orgName, name, email, password, code } = {}) {
+  const fn = await callable('firstSignUp', { timeout: 30000 })
+  return (await fn({ orgName, name, email, password, code })).data
+}
+
+/**
  * A training quiz opened from its QR code, for someone with no account: the
  * questions and options, never the answer key (stack/quiz.mjs publicQuiz).
  */
