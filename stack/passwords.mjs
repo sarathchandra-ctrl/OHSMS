@@ -105,14 +105,28 @@ async function storedHash(db, uid) {
   return row?.password_hash || null
 }
 
+// The one profile carrying this address, or null. An address on two profiles
+// signs in to neither: picking one (LIMIT 1, no order) let whoever planted a
+// copy of a colleague's address win the sign-in and the reset link.
 async function userByEmail(db, email) {
   const row = await db
     .prepare(
-      "SELECT id FROM documents WHERE path = 'users' AND lower(json_extract(data, '$.email')) = ? LIMIT 1"
+      "SELECT min(id) AS id, count(*) AS n FROM documents WHERE path = 'users' AND lower(json_extract(data, '$.email')) = ?"
     )
     .bind(email)
     .first()
-  return row?.id || null
+  return row && Number(row.n) === 1 ? row.id : null
+}
+
+/** Whether any profile carries this address at all. */
+async function emailTaken(db, email) {
+  const row = await db
+    .prepare(
+      "SELECT 1 AS hit FROM documents WHERE path = 'users' AND lower(json_extract(data, '$.email')) = ? LIMIT 1"
+    )
+    .bind(email)
+    .first()
+  return Boolean(row)
 }
 
 async function liveProfile(engine, uid) {
@@ -384,7 +398,7 @@ export async function createMember(engine, db, { uid, email, name, role, passwor
   if (!address) return { ok: false, reason: 'email' }
   if (!MEMBER_ROLES.includes(role)) return { ok: false, reason: 'role' }
   if (passwordProblem(password)) return { ok: false, reason: 'policy' }
-  if (await userByEmail(db, address)) return { ok: false, reason: 'already-member' }
+  if (await emailTaken(db, address)) return { ok: false, reason: 'already-member' }
   const id = randomUUID()
   await engine.commit(WORKER, [
     {

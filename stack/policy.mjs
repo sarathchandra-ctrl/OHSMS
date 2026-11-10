@@ -848,7 +848,8 @@ const num = (v) => {
 
 /**
  * The checks that held whatever the policy said (the Postgres triggers):
- *   users_keep_privilege   role, status, site, access, department change only
+ *   users_keep_privilege   role, status, site, access, department, email and
+ *                          mfaRequired change only
  *                          by an approved admin, judged on the STORED actor;
  *                          nobody but the server clears mustChangePassword
  *                          or sets mfaEnabled (only the server has the secret)
@@ -872,7 +873,10 @@ export function invariantProblem(path, id, prev, next, ctx) {
       changed('access') ||
       changedText('department') ||
       changedText('dept') ||
-      changed('mfaRequired')
+      changed('mfaRequired') ||
+      // The address is the sign-in name and where reset links go. Anyone who
+      // could set it on their own profile could take a colleague's.
+      changedText('email')
     if (privileged && !isAdmin(ctx)) return 'privilege'
   }
   if (!prev && path === 'users' && !ctx.worker && n.mfaEnabled != null) return 'mfa-flag'

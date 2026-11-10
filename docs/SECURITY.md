@@ -528,6 +528,33 @@ public QR surface; missing `keys().hasOnly()` on public `/reports` and
 enumerable and turned the permit mirrors into a cross-tenant PII dump; and the
 first round of URL-scheme validation before binding to `href`/`src`.
 
+### S-19 · A member could take a colleague's sign-in address — HIGH
+
+The self-update on `users` pinned role, status, site, access and department,
+but not `email`, which is the sign-in name and where reset links go. Sign-in
+and password reset looked the address up with `LIMIT 1` and no order, and
+nothing made it unique. So a member could write an admin's address onto their
+own profile, and whichever row SQLite returned first owned it:
+- when the planted row came first, the admin's correct password failed and
+  every attempt counted against the address;
+- the attacker signed in under it with their own password, and a reset link
+  for it went to the attacker's account;
+- an address claimed in advance made `createMember` refuse the real person.
+A sole admin had no recovery short of editing the database.
+
+**Fixed** in two places, each enough alone:
+- `email` is admin-only (`invariantProblem`, `users_keep_privilege`);
+- an address carried by more than one profile signs in to neither and gets no
+  reset link (`userByEmail` in `stack/passwords.mjs`). Picking a row is what
+  made the copy a takeover; refusing turns it into a visible lockout an admin
+  can see and correct. Adding someone still refuses any address already on a
+  profile (`emailTaken`).
+
+Tests: `postgres.rls.test.js` "the sign-in address" (a member and a manager
+refused, an admin allowed) and `passwords.limits.test.js` "an address on two
+profiles" (planted sorted after the real row, so a first-row lookup would
+pass).
+
 ---
 
 ## Testing

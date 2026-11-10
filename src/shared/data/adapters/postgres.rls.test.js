@@ -947,3 +947,25 @@ describe('two-step login flags', () => {
     ).rejects.toThrow()
   })
 })
+
+describe('the sign-in address', () => {
+  beforeAll(async () => {
+    await seed('users', 'emailOwner', { role: 'member', status: 'approved', name: 'Em', email: 'em@example.test' })
+  })
+
+  it("refuses a member taking a colleague's address, or changing their own", async () => {
+    await expect(
+      as('memberA').update('users', 'memberA', { email: 'ada@example.test' })
+    ).rejects.toThrow()
+    await expect(
+      as('emailOwner').update('users', 'emailOwner', { email: 'EM@example.test ' })
+    ).rejects.toThrow()
+    await expect(as('managerA').update('users', 'emailOwner', { email: 'mia@example.test' })).rejects.toThrow()
+    expect((await adminEngine.get(null, 'users', 'emailOwner')).email).toBe('em@example.test')
+  })
+
+  it('leaves correcting an address to an admin', async () => {
+    await as('adminA').update('users', 'emailOwner', { email: 'emma@example.test' })
+    expect((await adminEngine.get(null, 'users', 'emailOwner')).email).toBe('emma@example.test')
+  })
+})
