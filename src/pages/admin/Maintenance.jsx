@@ -1,11 +1,12 @@
 import { useState } from 'react'
 import toast from 'react-hot-toast'
-import { Play, Check, Bug, QrCode, Lock } from 'lucide-react'
+import { Play, Check, Bug, QrCode, Lock, UserCheck } from 'lucide-react'
 import { Card, Button } from '../../shared/ui'
 import { reportError } from '../../shared/monitoring'
 import { backfillProcedureMirrors } from '../../modules/loto/services/procedures'
 import { backfillLockClaims } from '../../modules/loto/services/lockClaims'
 import { backfillAll } from '../../shared/crypto/backfill'
+import { backfillCreatorUids } from '../../shared/org/creatorBackfill'
 
 /**
  * Maintenance jobs an administrator runs from the browser. Each is idempotent
@@ -17,6 +18,7 @@ export default function Maintenance() {
       <SealHistory />
       <ProcedureMirrors />
       <LockClaims />
+      <CreatorUids />
       <ErrorReporting />
     </div>
   )
@@ -348,6 +350,81 @@ function SealHistory() {
 }
 
 /** Shared shell: title, why it matters, a result panel, and the action. */
+/**
+ * Record who wrote older committee meetings and inspection records.
+ *
+ * An employee may edit a record they created, and the server decides that
+ * from a uid. These two kept only a name, so everything saved before the uid
+ * existed is editable by managers alone. See src/shared/org/creatorBackfill.js.
+ */
+function CreatorUids() {
+  const [busy, setBusy] = useState('')
+  const [preview, setPreview] = useState(null)
+  const [done, setDone] = useState(false)
+
+  const run = async (dryRun) => {
+    setBusy(dryRun ? 'dry' : 'write')
+    try {
+      const r = await backfillCreatorUids({ dryRun })
+      setPreview(r)
+      const total = r.reduce((n, c) => n + (dryRun ? c.matched.length : c.written), 0)
+      if (!dryRun) {
+        setDone(true)
+        toast.success(`Recorded the author of ${total} record${total === 1 ? '' : 's'}`)
+      } else if (total === 0) {
+        toast.success('Nothing to do — every record that can be matched already has its author')
+      }
+    } catch (err) {
+      reportError(err, { where: 'backfillCreatorUids' })
+      toast.error(err?.message || 'Failed')
+    } finally {
+      setBusy('')
+    }
+  }
+
+  const toWrite = preview ? preview.reduce((n, c) => n + c.matched.length, 0) : 0
+  const list = (names) => [...new Set(names)].slice(0, 8).join(', ')
+
+  return (
+    <Job
+      icon={UserCheck}
+      title="Record who wrote older meetings and inspections"
+      result={preview && preview.map((c) => [
+        `${c.label}:`,
+        `  ${c.already} already record their author`,
+        `  ${c.matched.length} can be matched to one person${done ? ` (${c.written} written)` : ''}`,
+        c.ambiguous.length ? `  ${c.ambiguous.length} name more than one person: ${list(c.ambiguous)}` : '',
+        c.unmatched.length ? `  ${c.unmatched.length} match nobody: ${list(c.unmatched)}` : '',
+      ].filter(Boolean).join('\n')).join('\n')}
+      actions={
+        <>
+          <Button variant="ghost" icon={Play} loading={busy === 'dry'} disabled={Boolean(busy)} onClick={() => run(true)}>
+            Check first
+          </Button>
+          <Button
+            icon={done ? Check : undefined}
+            loading={busy === 'write'}
+            disabled={Boolean(busy) || !preview || toWrite === 0 || done}
+            onClick={() => run(false)}
+          >
+            {done ? 'Recorded' : 'Record authors'}
+          </Button>
+        </>
+      }
+    >
+      <p>
+        Employees can edit the records they created. Committee meetings and inspection records
+        saved before this change kept only the author&apos;s name, so until now only a manager
+        could edit them.
+      </p>
+      <p>
+        This matches each name or email to a person. Where two people share a name it is left
+        alone rather than guessed; a manager can still edit those.
+      </p>
+    </Job>
+  )
+}
+
 function Job({ icon: Icon, title, children, result, actions }) {
   return (
     // Labelled as a region so each job is its own landmark: several of these
