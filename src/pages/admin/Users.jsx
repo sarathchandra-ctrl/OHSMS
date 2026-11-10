@@ -101,6 +101,7 @@ export default function Users() {
   const openManage = (u) => {
     const a = u.access || emptyScope
     setForm({
+      name: u.name && u.name !== u.email ? u.name : '',
       role: u.role || 'member',
       department: u.department || '',
       sites: a.sites || [],
@@ -134,6 +135,7 @@ export default function Users() {
       await setUserAccess(
         manage.uid,
         {
+          name: form.name,
           department: form.department,
           access: {
             sites: form.sites,
@@ -146,7 +148,7 @@ export default function Users() {
         },
         actor, manage.name
       )
-      toast.success(`Access updated for ${manage.name}`)
+      toast.success(`Access updated for ${form.name.trim() || manage.name}`)
       setManage(null)
     } catch (err) {
       toastCaught(err, 'Failed')
@@ -294,7 +296,7 @@ export default function Users() {
                         {reqPending && (
                           <Button variant="soft" icon={ShieldCheck} onClick={() => grantRequest(u)} className="!py-1.5 text-xs">Grant</Button>
                         )}
-                        <Button variant="ghost" icon={KeyRound} onClick={() => openManage(u)} className="!py-1.5 text-xs">Access</Button>
+                        <Button variant="ghost" icon={KeyRound} onClick={() => openManage(u)} className="!py-1.5 text-xs">Edit</Button>
                         {!isSelf && (
                           <Button variant="ghost" onClick={() => resetPassword(u)} className="!py-1.5 text-xs">Reset password</Button>
                         )}
@@ -335,7 +337,7 @@ export default function Users() {
         open={!!manage}
         onClose={() => setManage(null)}
         size="lg"
-        title={manage ? `Access — ${manage.name}` : ''}
+        title={manage ? `Edit — ${manage.name}` : ''}
         footer={
           <>
             <Button variant="ghost" type="button" onClick={() => setManage(null)}>Cancel</Button>
@@ -356,6 +358,17 @@ export default function Users() {
                 </button>
               </div>
             )}
+
+            <Field label="Full name" htmlFor="emp-full-name" hint={manage.email}>
+              <input
+                id="emp-full-name"
+                className="input"
+                value={form.name}
+                maxLength={120}
+                placeholder="As it should appear on records"
+                onChange={(e) => setForm({ ...form, name: e.target.value })}
+              />
+            </Field>
 
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <Field label="Department" htmlFor="dept">

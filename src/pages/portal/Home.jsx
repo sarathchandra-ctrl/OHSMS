@@ -346,7 +346,10 @@ export default function PortalHome() {
   }))
   const bars = stats.equipmentBySite.slice(0, 8)
 
-  const firstName = (profile?.name || '').split(' ')[0] || 'there'
+  // A name that is really an address (an account added without one) would
+  // greet the person by their email; an admin sets the name in Employees.
+  const storedName = String(profile?.name || '').trim()
+  const firstName = (!storedName.includes('@') && storedName.split(' ')[0]) || 'there'
   const scopeLabel = !sitesReady
     ? 'your sites'
     : pickedSite !== 'all'
