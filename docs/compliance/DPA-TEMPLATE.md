@@ -74,10 +74,11 @@ Counsel to complete against GDPR Art. 28 / DPDP 2023 corresponding duties:
 
 ## 7. International transfers
 
-Firebase / Google Cloud and Sentry (when a DSN is configured) process data
-outside the Controller's country. `[Counsel: SCC / DPDP cross-border
-mechanism.]` Do not name a live GCP region in this public file; the private
-runbook has it.
+On a Cloudflare deployment, Cloudflare, Resend (password-reset email, when
+configured) and Sentry (when a DSN is configured) may process data outside
+the Controller's country; `docs/compliance/SUBPROCESSORS.md` is the list.
+`[Counsel: SCC / DPDP cross-border mechanism.]` Do not name a live region or
+account in this public file; the private runbook has it.
 
 ## 8. Breach notification
 

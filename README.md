@@ -165,5 +165,5 @@ Cloudflare credentials are not required. See [local development](docs/LOCAL-DEVE
   set low, asserts that screens totalling a capped collection actually render
   the "these figures are incomplete" notice (portal home is the exception: it
   must not).
-- **End-to-end** — `e2e/` under Playwright. The older specs were written
-  against the Firebase emulators and need a seeded server to run.
+- **End-to-end** — `e2e/` under Playwright, against a seeded local server
+  (`docs/LOCAL-DEVELOPMENT.md`).

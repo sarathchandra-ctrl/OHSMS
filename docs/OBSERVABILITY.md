@@ -8,7 +8,7 @@ cannot drift from the two mechanisms that actually exist.
 ## Errors (the app is up and throwing)
 
 **Sentry**, when the hosting build was given `VITE_SENTRY_DSN`. Wired in
-`src/shared/monitoring.js`. CSP allows the ingest hosts in `firebase.json`.
+`src/shared/monitoring.js`. CSP allows the ingest hosts in `public/_headers`.
 Public QR/permit/LOTO paths are sanitised so a scan token does not leave the
 origin.
 
@@ -31,10 +31,9 @@ Alert path: whatever the Sentry project is configured to send (email / Slack
   staging job is skipped — this public tree does not guess a staging
   hostname.
 
-`public/health.json` is a static file copied into the hosting `dist`. Firebase
-Hosting serves existing files ahead of the SPA rewrite, so a down Functions
-tier or a down Firestore still leaves this check green if Hosting itself is
-up. That is the point: it is an **uptime** check for the URL a user types,
+`public/health.json` is a static file copied into `dist` and served as a
+static asset ahead of the app, so a failing server or database still leaves
+this check green if the site itself is up. That is the point: it is an **uptime** check for the URL a user types,
 not a deep probe of every backend. Sentry covers the "hosting is up and the
 app is crashing" half.
 
@@ -45,8 +44,9 @@ enabled on this repository (GitHub → Settings → Notifications → Actions).
 There is no new paid SaaS. Watch the `Uptime` workflow on the Actions tab;
 pin it if this is the first time anyone will look.
 
-A red uptime check is "Hosting did not serve `/health.json` in time", not
-"Firestore is empty" and not "Sentry is down".
+A red uptime check is "the site did not serve `/health.json` in time", not
+"the database is empty" and not "Sentry is down". The deploy workflow checks
+the server's own `/health` (database, file storage, deployed commit).
 
 ## What is still not here
 

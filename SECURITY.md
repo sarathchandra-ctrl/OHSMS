@@ -16,11 +16,11 @@ by name if you would like to be.
 
 ## Scope
 
-In scope: this application's source, the Firestore and Cloud Storage security
-rules, the Cloud Functions tier, and the deployed site at `suite.weehs.org`.
+In scope: this application's source, its server and access rules
+(`stack/`, `worker/`), and the deployed site at `suite.weehs.org`.
 
-Out of scope: Google Cloud and Firebase platform infrastructure (report those to
-Google), denial of service, volumetric or automated scanning, social
+Out of scope: Cloudflare platform infrastructure (report those to
+Cloudflare), denial of service, volumetric or automated scanning, social
 engineering, and findings from a scanner with no demonstrated impact.
 
 ## Please do not
