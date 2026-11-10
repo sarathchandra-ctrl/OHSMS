@@ -1,8 +1,12 @@
 # Proposal: move LOTO's collections under `/organizations/{orgId}`
 
-**Status: proposed, not scheduled.** This is a data migration on live isolation
-records. It needs its own change and its own maintenance window; nothing here
-has been done.
+**Status: superseded — no longer needed.** This was written for the Firebase
+deployment, where many organizations shared one database and LOTO's root
+collections were the exception to path-based isolation. The app now runs one
+organization per installation on its own server (`AGENTS.md`), so there is no
+tenant to isolate and every collection, LOTO's included, is decided by
+`stack/policy.mjs`. Kept as a record of the reasoning; nothing below needs
+doing.
 
 ## The problem
 

@@ -7,22 +7,31 @@ is still open. Kept beside the code so a finding cannot quietly become folklore.
 alarming the mechanism sounds. A cross-tenant data leak and a missing size cap
 are not the same thing even when both are "a rules bug".
 
-**The one structural fact behind most of this.** There is no application server.
-The browser talks to Firestore directly, so `firestore.rules` is the only
+**The one structural fact behind most of this.** Every read and write goes to
+the organization's own server, where `stack/engine.mjs` asks
+`stack/policy.mjs` before touching the database. That policy is the only
 enforcement that cannot be bypassed. Anything enforced in React — `can()`, a
 hidden button, a disabled field — is a usability feature, not a control. Every
 entry below marked *"enforced only in React"* means exactly that: the same
 action succeeds from the browser console.
 
+The older entries were found and fixed when the app ran on Firebase, where
+`firestore.rules` and `storage.rules` played that part; they are written up as
+they were. When the app moved to its own server, each of those protections was
+re-checked against `stack/policy.mjs`, and the ones that had not come across
+were restored with tests.
+
 Two failure patterns account for most of the list, and both are worth
 recognising on sight:
 
-1. **The permissive union.** Firestore rules OR together. A narrow rule that
-   refuses something is worthless if a broader `match` grants it. Found three
-   times here.
-2. **The post-state branch.** `request.resource.data` on an update is the state
-   *after* the write. A rule that authorises against it lets the writer supply
-   the value that authorises them. Found three times here.
+1. **The permissive union.** Allows OR together. A narrow rule that refuses
+   something is worthless if a broader one grants it. Found three times here.
+   In `stack/policy.mjs`, restrictions live in `restrictWrite`, which every
+   write passes in addition to an allow.
+2. **The post-state branch.** On an update, the new value (`next`) is what the
+   writer sent. A rule that authorises against it lets the writer supply the
+   value that authorises them. Found three times here. Decisions about
+   privilege read the stored profile and `prev`.
 
 ---
 
@@ -140,6 +149,17 @@ a path, and url-only rows are listed for a person. Against a live project
 `--apply` also needs `CONFIRM_REVOKE=yes`. The operator runbook is
 `docs/LEGACY-DOWNLOAD-URLS.md`. Running it against production is an operator
 decision, not a deploy step.
+
+**Superseded on the current server (2026-11-10).** After the move off
+Firebase, the server's own download links had again been minted without an
+expiry and stored on records. Links now carry an expiry and are refused after
+it (one to two hours, rounded to the hour so a file keeps one link within the
+hour), links minted before that are refused outright, and records are sent
+out with freshly signed links for the reader who has just passed the access
+rules for them (`stack/blobSign.mjs`, `stack/lib/fileLinks.js`; tests in
+`worker/server.test.js` and `src/shared/data/server.test.js`). Files still on
+Firebase Storage are copied here and their links replaced by Admin →
+Maintenance → "Move old files off Firebase Storage".
 
 ### S-25 · Uploaded files are not scanned for malware — MEDIUM, mitigated and accepted
 
@@ -512,25 +532,17 @@ first round of URL-scheme validation before binding to `href`/`src`.
 
 ## Testing
 
-`npm run test:rules` — **448 tests across 12 files** against the emulator. Needs
-a JDK; the Firestore emulator is a JVM process.
+The access rules are tested through the real engine on an in-memory SQLite
+(`src/shared/data/adapters/postgres.rls.test.js`), and the server end to end
+(`src/shared/data/server.test.js`, `worker/server.test.js`); all run in
+`npm test`. Run the suite for the current count: a count in prose goes stale.
 
-A count in prose goes stale, and this one had: it read 149 for long enough to be
-quoted as a fact in two other documents. Run the suite for the real number.
-
-Two files matter most. `tests/hardening.rules.test.js` covers the write-boundary
-fixes, and `tests/documents.rules.test.js` covers site scoping. Both **list as
-well as get**, which is the specific thing the older tests did not do.
-
-The lesson is worth stating plainly, because it is why several of these survived
-a green suite for so long: *a rules test that only sends well-behaved payloads
-tests the app, not the rule.* Send the payload an attacker would — the one that
-sets `orgId` to itself, that claims a role, that asks for the whole collection.
-
-One trap that has now bitten twice: a long-running emulator serves the rules it
-started with. `npm run emulators:rules` reloads them. The unit tests never see
-this because `initializeTestEnvironment` uploads the file per run — so a green
-suite is not evidence that the emulator you are clicking around in agrees.
+Those tests **list as well as get**, and the lesson is worth stating plainly,
+because it is why several findings survived a green suite for so long: *an
+access test that only sends well-behaved payloads tests the app, not the
+rule.* Send the payload an attacker would — the one that claims a role, that
+approves its own permit, that asks for the whole collection, that writes a
+field the screen never sends.
 
 ### S-18 · `xlsx` prototype pollution — CLOSED (residual risk accepted, narrowed)
 

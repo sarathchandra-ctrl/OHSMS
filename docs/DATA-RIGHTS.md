@@ -26,7 +26,7 @@ can be found by a query:
 | | How | Completeness |
 |---|---|---|
 | **Joined** | A structural key names them: `personId` on an injury, `employeeUid` on a training record, `actorUid` in the audit log, the uid on their own profile. | **Complete.** Indexed, exact, every record found. |
-| **Mentioned** | Their *name* is free text inside an object in an array: `affectedPersonnel[].name`, `attendees[].name`, `commanders[]`, `capa[].owner`. | **Cannot be queried at all.** Firestore has no substring or nested-object search. |
+| **Mentioned** | Their *name* is free text inside an object in an array: `affectedPersonnel[].name`, `attendees[].name`, `commanders[]`, `capa[].owner`. | **Not searched.** A name inside free text is not a key, and with encryption on it is ciphertext (§2). |
 
 The export returns these separately and never merges them. That is deliberate:
 a response that silently omitted the committee minutes naming someone is a

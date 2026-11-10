@@ -1,7 +1,7 @@
 # OHS MS — Occupational Health & Safety Management System
 
 One organization's OHS platform: seventeen health-&-safety domains in one app
-with a single sign-on, one dashboard and one audit trail — installed on **the
+with one sign-in, one dashboard and one audit trail — installed on **the
 organization's own Cloudflare account** — the app, its server and its
 Cloudflare D1 (SQLite) database.
 
@@ -83,11 +83,14 @@ Cross-cutting:
   table addressed by collection path (`incidents`, `permits/<id>/events`, …).
   Access is enforced in `stack/policy.mjs`, checked by `stack/engine.mjs`
   before every read and write. Only the server's own jobs skip the rules.
-- **Roles** — `admin`, `manager`, `member`, `auditor`
-  (`src/shared/auth/permissions.js`) plus site scoping. An administrator adds
+- **Roles** — `admin`, `manager`, `member` (shown as Employee), `auditor`
+  (`src/shared/auth/permissions.js`). Employees create, view and close; managers
+  also approve, verify and delete. Per-employee module permissions and site /
+  region / entity scope are enforced by the server. An administrator adds
   people with a temporary password and can reset passwords.
-- **Files** — stored on the server's disk (`/blob`), reached through signed
-  URLs the server issues after re-reading the caller's live profile.
+- **Files** — stored in Cloudflare R2 or on the server's disk (`/blob`),
+  reached through signed links that expire within two hours, issued to a
+  reader the server has just let read the record.
 - **Application-layer encryption** (`src/shared/crypto/`) — envelope
   encryption over the fields named in `policy.js`, keys wrapped by the
   server's `DATA_KEY_MASTER`. Gated by `VITE_ENCRYPTION`.

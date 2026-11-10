@@ -5,7 +5,7 @@ install the hosted site, and the iOS project wraps the same
 `npm run build` output.
 
 Nothing in the native project is a secret. Provisioning
-profiles and App Check debug tokens stay off git. `.gitignore` refuses the
+profiles stay off git. `.gitignore` refuses the
 usual filenames; it cannot refuse one that was renamed.
 
 ## Two ways it runs
@@ -18,11 +18,13 @@ otherwise this is the phone home. That home is two labelled groups: Technical
 Admin is omitted when this role cannot open any of those. The service
 worker caches the app shell — HTML, the hashed
 scripts and styles, the icons — so a page that has loaded once can paint in a
-dead spot. It does not cache Firebase Auth, Firestore, Storage or App Check.
-Those requests leave this origin, and the worker's decision function
-(`shellCacheDecision` in `src/shared/mobile/shellCache.js`) passes them
-through. Firebase's own offline cache stays off unless `VITE_OFFLINE_CACHE`
-is set, which this change does not set.
+dead spot. It never stores the server's answers: records (`/data`), jobs
+(`/rpc/…`), sign-in (`/auth/…`), upload links (`/presign`), stored files
+(`/blob`) and `/health` are passed straight through by the worker's decision
+function (`shellCacheDecision` in `src/shared/mobile/shellCache.js`), as is
+any request to another host. A stored record or photo would otherwise be
+handed to the next person on a shared phone, and a file would outlive its
+expiring download link.
 
 The worker is registered in a production **browser** only. It is not
 registered inside the Capacitor shell. The shell's origin is
@@ -30,9 +32,9 @@ registered inside the Capacitor shell. The shell's origin is
 a worker there would keep serving the previous shell after an update. The
 hosted worker is `/sw.js`, at the root because a worker's scope is the
 directory it is served from — a file under `/assets/` would not control the
-app. Hosting's year-long cache on `*.js` does not apply to it: `firebase.json`
-sets `/sw.js` to `no-cache`, after that rule, so a deploy can replace the
-worker. The HTML that registers it is also `no-cache`.
+app. Only the content-hashed files under `/assets/` are cached for a year
+(`public/_headers`); `/sw.js` and the HTML that registers it are `no-cache`,
+so a deploy replaces the worker.
 
 **Store apps.** `capacitor.config.json` sets `appId` to `org.weehs.ohsms`,
 `appName` to `WEEHS OHSMS`, and `webDir` to `dist`. iOS stays on
@@ -44,38 +46,35 @@ host for reload-while-developing. A store build that used it would ship an
 empty shell that only works when that host is up, and would skip the review
 binary entirely. Do not add it for a release.
 
-## What a hosting deploy has to include
+## What a deploy has to include
 
 The phone site does not exist until hosting serves this build. The files that
 matter, beyond the usual `dist/`:
 
 - `manifest.webmanifest` and `public/icons/` (copied into `dist` by Vite).
 - `/sw.js`, the shell worker built from `src/shared/mobile/sw.js`.
-- The `firebase.json` header changes in this change:
-  - `Permissions-Policy` is `camera=(self)`. It was `camera=()`, which
-    forbids `getUserMedia` for every origin including our own, so the PWA
-    scanner could not open a camera no matter what the page asked for.
-    Microphone stays off.
+- The headers in `public/_headers`:
+  - `Permissions-Policy` is `camera=(self)`. `camera=()` forbids
+    `getUserMedia` for every origin including our own, so the PWA scanner
+    could not open a camera no matter what the page asked for. Microphone
+    stays off.
   - `/manifest.webmanifest` is served as `application/manifest+json` and is
     not given the year-long immutable cache. A stale manifest is how an
     installed icon keeps the old start URL.
-  - `/sw.js` is `no-cache`. It is a `.js` file, so without this later rule
-    the immutable `*.js` header would pin the worker for a year and a
-    deploy would not replace the shell.
+  - `/sw.js` is `no-cache` (only `/assets/*` is immutable), so a deploy
+    replaces the shell.
 - `public/badges/` and `public/store.json`. The login page shows the
   official App Store badge only when those URLs are set.
   `store.json` is `no-cache`, and the shell worker does not cache it.
 
-Deploy hosting from a checkout of this commit after `npm run build`, and
-deploy the Firestore rules in the same release. The rules gained
-`organizations/{orgId}/alertReads/{uid}` — the phone's per-user "already
-opened" cursor. Without that deploy, marking an alert read is refused and
-every row stays unread. Functions are unchanged. Until hosting lands,
-suite.weehs.org is still the previous site: no manifest, no scanner, and
-the camera policy still blocks the page.
+The site, the server and its access rules deploy together
+(`docs/CLOUDFLARE.md`, or `docs/SELF-HOSTING.md`), so there is no separate
+rules release to remember. The phone's per-user "already opened" cursor is
+`alertReads/{uid}`, which each person may write for themselves
+(`stack/policy.mjs`).
 
-The boot splash is in `index.html`, so the same hosting deploy is what a
-phone browser and an installed PWA show on start. The Capacitor splash is
+The boot splash is in `index.html`, so the same deploy is what a phone
+browser and an installed PWA show on start. The Capacitor splash is
 not part of hosting. It ships inside the store binary (`@capacitor/splash-screen`,
 `launchAutoHide: false`, background `#f6e3bb`, the existing `splash` drawable).
 A binary built before this commit still shows the old launch screen and
@@ -119,10 +118,11 @@ on a desktop is the phone home, centred, with the field bar centred under it.
 
 The Alerts tab reads collections the product already has: defect reports,
 incidents, committee meetings and mock drills, scoped to the sites the
-signed-in person can see. Weather is not one of those collections. The
-digest is a mail, and the screen reads current conditions the same way the
-weather page does. A weather row is a site at Medium or worse, and its id
-includes the digest's six-hour slot, so the next window is unread again.
+signed-in person can see. Weather is not one of those collections: the
+screen reads current conditions the same way the weather page does (the
+server's `fetchSiteWeather` job). A weather row is a site at Medium or worse,
+and its id includes the six-hour weather slot, so the next window is unread
+again.
 
 Web push (FCM) is not part of this. Nothing buzzes when the app is closed.
 The badge is the unread count while it is open. It pulses. The home icons
@@ -134,42 +134,20 @@ the OS asks for reduced motion. The loops are transform and opacity only.
 
 ## Signing in, inside the WebView
 
-Email and password (`signInWithEmailAndPassword`) does not consult the
-authorised-domain list. It works in the iOS shell with no
-console change.
+Sign-in is email and password, checked by this installation's server
+(`stack/passwords.mjs`). It does not depend on the page's origin, so it works
+in the iOS shell (`capacitor://localhost`) with no configuration. There is no
+single sign-on.
 
-The browser keeps using session persistence, so a shared workstation signs
-out when the window closes. The native shells use local persistence. The
-failure that motivated that split: opening the camera or locking the phone
-tears the WebView down, session persistence treats that as the window
-closing, and the person standing at a cylinder is back on the login screen.
-`IdleGuard` still ends a session that sits unused.
+The session token is kept in `sessionStorage`
+(`src/shared/auth/ownStackSession.js`), in the browser and the native shell
+alike, so a shared workstation signs out when the window closes. In the
+native shell that also means a WebView torn down by the system (the camera
+opening, the phone locking for long) asks for the password again. `IdleGuard`
+ends a session that sits unused.
 
-**iOS.** The origin is `capacitor://localhost`. Authorised domains are web
-origins Firebase can put on an `https` allow-list, and this one cannot be
-added. A redirect would leave the person on a page the WebView cannot come
-back from. The app does not attempt it: when the popup is blocked it throws
-`auth/native-sso-unsupported` and the login screen says to use email and
-password. That is a platform limit, not a missing toggle.
-
-Password reset keeps using the hosted auth handler. It does not depend on
-the WebView's origin.
-
-## App Check
-
-reCAPTCHA v3 tokens are minted for hostnames listed on the site key. The
-day the site moved to suite.weehs.org, tokens failed until that host was
-added; `https://localhost` and `capacitor://localhost` fail the same way
-until they are listed, and the `capacitor://` origin cannot be listed.
-Enforcement is off (see the comment in `src/shared/firebase.js`). Leave it
-off until you have decided what a native shell should present. Turning it
-on first locks the store apps out of Firestore while the website keeps
-working, which is a hard outage to diagnose from a field report.
-
-Do not put `VITE_APPCHECK_DEBUG_TOKEN` in a store build. A debug token in
-the binary is an attestation bypass for anyone who unpacks the app. A debug
-token for a single developer machine belongs in that machine's untracked
-env file.
+Password reset sends a link by email (when mail is configured) that opens the
+reset page on the deployed site.
 
 ## Scanning a label
 
@@ -183,10 +161,10 @@ that climbs out of the route is not followed — the scan screen says the
 code was not opened. The route it does produce is always an in-app path.
 A scan cannot become a navigation to someone else's host.
 
-The signed-in page is `/field/asset/<token>`. It reads the world-readable
-`qr/{token}` mirror and then offers only what `can()` already allows on
-the registers: inspect and raise for a member, close for a manager, nothing
-for an auditor. A mirror whose `orgId` is another organisation, or is
+The signed-in page is `/field/asset/<token>`. It reads the `qr/{token}`
+mirror (readable by token, never listed) and then offers only what `can()`
+already allows on the registers: inspect, raise and close for an employee,
+nothing for an auditor. A mirror whose `orgId` is another organisation, or is
 missing, gets an explanation and no write button. The mirror being readable
 is not permission to write the asset.
 

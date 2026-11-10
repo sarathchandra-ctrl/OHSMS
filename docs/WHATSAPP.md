@@ -1,5 +1,11 @@
 # WhatsApp site lookup
 
+**Status: switched off.** The server half of this feature (the webhook, the
+linking jobs and the sender) ran on the old Cloud Functions tier and has not
+been carried over to the current server, so its screens are hidden
+(`SERVER_FEATURES.whatsapp` in `src/shared/serverFeatures.js`). This page
+describes the design as built, for when it is ported.
+
 A linked, approved app user sends a site code or name to the organisation's
 WhatsApp Business number and gets **one message** back with that site's safety
 summary. Provider: Meta WhatsApp Cloud API, directly (no BSP). Operational

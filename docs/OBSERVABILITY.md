@@ -50,7 +50,7 @@ the server's own `/health` (database, file storage, deployed commit).
 
 ## What is still not here
 
-Metrics, SLOs, on-call rotations, Cloud Monitoring dashboards. The Recycle
-Bin sweep already fails its Cloud Functions invocation when it had errors
-(`stack/lib/retention.js` `summarizeFailures`); that alert lives in the
-private production runbook (§2a), not in this file.
+Metrics, SLOs, on-call rotations, dashboards. The Recycle Bin sweep
+(`purgeSoftDeleted`, `stack/lib/retention.js` `summarizeFailures`) reports
+its failures to whoever runs it; the current server has no scheduler, so it
+runs when an admin calls it.
