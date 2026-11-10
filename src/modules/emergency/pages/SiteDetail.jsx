@@ -357,7 +357,7 @@ export default function SiteDetail() {
           </div>
           <div className="doc-meta">
             <div>{[site.entity, site.region].filter(Boolean).join(' · ') || '—'}</div>
-            <div className="mt-1">Printed {new Date().toLocaleDateString()}</div>
+            <div className="mt-1">Printed {formatDate(new Date())}</div>
           </div>
         </div>
 

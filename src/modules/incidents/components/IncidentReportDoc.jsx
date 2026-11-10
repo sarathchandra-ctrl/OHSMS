@@ -7,6 +7,7 @@ import {
   ACTION_STATUS_BY_KEY, bodyPartLabel,
 } from '../lib/constants'
 import { safeSrc } from '../../../shared/safeUrl'
+import { formatDate } from '../../../shared/lib/format'
 
 const fmt = (v) => v || '—'
 const personLine = (p) =>
@@ -69,7 +70,7 @@ const IncidentReportDoc = forwardRef(function IncidentReportDoc({ incident, phot
         </div>
         <div className="doc-meta">
           <div><b>{incident.refNo}</b></div>
-          <div className="mt-1">Generated {new Date().toLocaleDateString()}</div>
+          <div className="mt-1">Generated {formatDate(new Date())}</div>
         </div>
       </div>
 

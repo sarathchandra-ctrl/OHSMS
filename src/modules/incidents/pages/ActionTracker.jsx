@@ -10,6 +10,7 @@ import { useIncidents } from '../context/IncidentContext'
 import { can } from '../lib/permissions'
 import { setActionStatus, isActionOverdue } from '../lib/actions'
 import { ACTION_STATUS, ACTION_STATUS_BY_KEY } from '../lib/constants'
+import { formatDate } from '../../../shared/lib/format'
 
 export default function ActionTracker() {
   const { allActions } = useIncidents()
@@ -97,7 +98,7 @@ export default function ActionTracker() {
                   <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-ink-500">
                     <Link to={srcPath} className="inline-flex items-center gap-1 font-semibold text-brand-600 hover:underline">{a.sourceRef} <ExternalLink size={11} /></Link>
                     {a.ownerName && <span className="inline-flex items-center gap-1"><User size={11} /> {a.ownerName}</span>}
-                    {a.dueDate && <span className={overdue ? 'font-bold text-red-600' : ''}>Due {a.dueDate}{overdue ? ' · overdue' : ''}</span>}
+                    {a.dueDate && <span className={overdue ? 'font-bold text-red-600' : ''}>Due {formatDate(a.dueDate)}{overdue ? ' · overdue' : ''}</span>}
                     {a.kind && <span className="capitalize">{a.kind}</span>}
                   </div>
                 </div>

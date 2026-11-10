@@ -5,6 +5,7 @@ import { useAuth } from '../../shared/auth/AuthContext'
 import { logAudit } from '../../shared/org/orgData'
 import { whatsAppLinkStatus, startWhatsAppLink, unlinkWhatsApp } from '../../shared/functions'
 import { Button, Badge } from '../../shared/ui'
+import { formatDate } from '../../shared/lib/format'
 
 /**
  * Settings → Security → WhatsApp site lookup.
@@ -145,7 +146,7 @@ export default function WhatsAppLink() {
             {status.linkedAt && (
               <span className="text-xs text-ink-500">
                 {' '}
-                · since {new Date(status.linkedAt).toLocaleDateString()}
+                · since {formatDate(status.linkedAt)}
               </span>
             )}
           </span>

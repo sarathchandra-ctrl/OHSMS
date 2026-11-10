@@ -2,6 +2,7 @@
 // One component, so the mailbox does not grow a second layout. The mail
 // body does not copy action rows; this sheet is what the recipient sees.
 import { actionOwnerDisplay } from '../lib/actionOwner'
+import { formatDate } from '../../../shared/lib/format'
 
 export default function MeetingMinutesDoc({ meeting, siteLabel = '—' }) {
   if (!meeting) return null
@@ -23,7 +24,7 @@ export default function MeetingMinutesDoc({ meeting, siteLabel = '—' }) {
           <div>
             <b>Ref {m.docId || m.id}</b>
           </div>
-          <div className="mt-1">Printed {new Date().toLocaleDateString()}</div>
+          <div className="mt-1">Printed {formatDate(new Date())}</div>
         </div>
       </div>
 

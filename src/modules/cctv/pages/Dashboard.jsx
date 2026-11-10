@@ -20,7 +20,7 @@ export default function Dashboard() {
   if (error) {
     return (
       <>
-        <PageHeader title="CCTV Health" />
+        <PageHeader title="CCTV Health" icon={Cctv} />
         <EmptyState
           icon={TriangleAlert}
           title="Could not load the CCTV estate"
@@ -33,7 +33,7 @@ export default function Dashboard() {
   if (loading) {
     return (
       <>
-        <PageHeader title="CCTV Health" />
+        <PageHeader title="CCTV Health" icon={Cctv} />
         <SkeletonTable rows={6} />
       </>
     )
@@ -43,7 +43,7 @@ export default function Dashboard() {
   if (empty) {
     return (
       <>
-        <PageHeader title="CCTV Health" />
+        <PageHeader title="CCTV Health" icon={Cctv} />
         <EmptyState
           icon={Cctv}
           title="No CCTV equipment yet"
@@ -60,6 +60,7 @@ export default function Dashboard() {
     <>
       <PageHeader
         title="CCTV Health"
+        icon={Cctv}
         subtitle={`${cs.total} cameras · ${ds.total} DVR · ${ms.total} Meraki`}
         actions={
           <Button variant="ghost" icon={Download} onClick={() => downloadHealth(estate, { orgName })}>

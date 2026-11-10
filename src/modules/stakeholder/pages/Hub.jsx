@@ -50,7 +50,7 @@ export default function Hub() {
   if (error) {
     return (
       <>
-        <PageHeader title="Stakeholder Issues" />
+        <PageHeader title="Stakeholder Issues" icon={Scale} />
         <EmptyState
           icon={Scale}
           title="Could not load"
@@ -63,7 +63,7 @@ export default function Hub() {
   if (loading)
     return (
       <>
-        <PageHeader title="Stakeholder Issues" />
+        <PageHeader title="Stakeholder Issues" icon={Scale} />
         <SkeletonTable rows={4} />
       </>
     )
@@ -94,6 +94,7 @@ export default function Hub() {
     <>
       <PageHeader
         title="Stakeholder Issues"
+        icon={Scale}
         subtitle={`${escalations.length} escalations · ${legalIssues.length} legal issues`}
       />
 

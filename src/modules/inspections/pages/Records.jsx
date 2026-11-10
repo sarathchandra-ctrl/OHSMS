@@ -12,6 +12,7 @@ import DocIdTag from '../../../shared/docId/DocIdTag'
 import { useAuth } from '../context/AuthContext'
 import { useData } from '../context/DataContext'
 import { deleteRecord } from '../lib/data'
+import { formatDate } from '../../../shared/lib/format'
 
 function RecordDetail({ record, onClose }) {
   const findings = Object.values(record.responses || {}).filter(
@@ -126,7 +127,7 @@ export default function Records() {
                   <td className="px-4 py-3 font-semibold text-ink-800">{r.templateTitle}<DocIdTag id={r.docId} className="mt-0.5 block" /></td>
                   <td className="px-4 py-3 text-ink-500">{r.siteName || r.location || '—'}</td>
                   <td className="px-4 py-3 text-ink-500">{r.inspector}</td>
-                  <td className="px-4 py-3 text-ink-500">{new Date(r.completedAt).toLocaleDateString()}</td>
+                  <td className="px-4 py-3 text-ink-500">{formatDate(r.completedAt)}</td>
                   <td className="px-4 py-3"><span className={`font-bold ${r.passFailResult === 'PASS' ? 'text-emerald-600' : 'text-red-600'}`}>{r.score}% {r.passFailResult}</span></td>
                   <td className="px-4 py-3 text-right" onClick={(e) => e.stopPropagation()}>
                     {isAdmin && (

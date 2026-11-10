@@ -1,8 +1,10 @@
 import React, { useState, useEffect, useMemo } from 'react'
+import { FileSearch } from 'lucide-react'
+import { PageHeader } from '../../../../shared/ui'
 import toast from 'react-hot-toast'
 import {
   AlertCircle, AlertTriangle, ArrowLeft, Calendar, CalendarDays, Check, CheckCheck, CheckCircle2,
-  ChevronLeft, ChevronRight, ClipboardCheck, ClipboardList, Download, FileDown, FileSignature,
+  ChevronLeft, ChevronRight, ClipboardList, Download, FileDown, FileSignature,
   FileText, Hourglass, Inbox, Info, Layers, List, ListChecks, Pencil, PieChart, Play, Plus, Printer,
   Reply, RotateCcw, Save, Search, Send, Target, Trash2, User, UserPen, UserRound, X,
 } from 'lucide-react'
@@ -24,6 +26,7 @@ import {
 import { sameCentreId } from '../../../../shared/org/centreId'
 import { MAX_UPLOAD_BYTES, formatSize } from '../../../../shared/storage'
 import { uploadAuditEvidence } from '../../lib/attachments'
+import { formatDate } from '../../../../shared/lib/format'
 
 /*
  * Internal Audit module — adapted from the original OHSMS portal's Audit.jsx
@@ -1188,7 +1191,7 @@ function PrintPlan({ plan, rows, siteName }) {
         </div>
         <div className="doc-meta">
           <div><b>Ref {plan.docId || 'DRAFT'}</b></div>
-          <div className="mt-1">Printed {new Date().toLocaleDateString()}</div>
+          <div className="mt-1">Printed {formatDate(new Date())}</div>
         </div>
       </div>
       <div className="doc-panel mb-8">
@@ -1287,10 +1290,7 @@ export default function InternalAudit() {
   // Landing hub — six module tiles.
   return (
     <div className="animate-fade-in">
-      <div className="mb-8">
-        <h1 className="text-2xl font-extrabold tracking-tight text-ink-800"><ClipboardCheck size={20} className="inline mr-2 text-brand-500" /> Internal Audit Hub</h1>
-        <p className="mt-1 text-sm text-ink-500">ISO 45001 audit lifecycle — plan, execute, correct, verify and report.</p>
-      </div>
+      <PageHeader title="Internal Audit" subtitle="ISO 45001 audit lifecycle — plan, execute, correct, verify and report." icon={FileSearch} />
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {TILES.map(([key, title, Icon, color, chipBg, desc], i) => (
           <button

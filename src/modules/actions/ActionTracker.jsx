@@ -10,8 +10,9 @@ import { usePagination } from '../../shared/ui/usePagination'
 import { SOURCES, NORM_STATUS, NORM_BY_KEY, subscribeActions, updateActionStatus, isOverdue, todayISO } from './lib/sources'
 import IncompleteNotice from '../../shared/ui/IncompleteNotice'
 import { readableOnTint } from '../../shared/lib/contrast'
+import { formatDate } from '../../shared/lib/format'
 
-const fmtDue = (due) => (due ? due : '—')
+const fmtDue = (due) => (due ? formatDate(due) : '—')
 
 export default function ActionTracker() {
   const { isApproved, readOnly } = useAuth()

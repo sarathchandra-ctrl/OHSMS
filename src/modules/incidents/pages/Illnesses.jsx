@@ -9,11 +9,12 @@ import { useAuth } from '../context/AuthContext'
 import { useIncidents } from '../context/IncidentContext'
 import { LIFECYCLE_BY_KEY } from '../lib/constants'
 import { deleteIllness } from '../lib/illnesses'
+import { formatDate } from '../../../shared/lib/format'
 
 function fmtDate(v) {
   if (!v) return '—'
   const d = v.seconds ? new Date(v.seconds * 1000) : new Date(v)
-  return Number.isNaN(d.getTime()) ? '—' : d.toLocaleDateString()
+  return Number.isNaN(d.getTime()) ? '—' : formatDate(d)
 }
 
 export default function Illnesses() {

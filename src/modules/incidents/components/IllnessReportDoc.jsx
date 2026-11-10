@@ -1,6 +1,7 @@
 import { forwardRef } from 'react'
 import { ACTION_STATUS_BY_KEY, bodyPartLabel } from '../lib/constants'
 import { BodyMapStatic } from './BodyMap'
+import { formatDate } from '../../../shared/lib/format'
 
 const fmt = (v) => (v == null || v === '' ? '—' : v)
 const personLine = (p) =>
@@ -33,7 +34,7 @@ const IllnessReportDoc = forwardRef(function IllnessReportDoc({ illness, org }, 
         </div>
         <div className="doc-meta">
           <div><b>{illness.refNo}</b></div>
-          <div className="mt-1">Generated {new Date().toLocaleDateString()}</div>
+          <div className="mt-1">Generated {formatDate(new Date())}</div>
         </div>
       </div>
 

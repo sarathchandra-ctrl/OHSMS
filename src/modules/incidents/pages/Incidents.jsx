@@ -14,11 +14,12 @@ import {
 import { deleteIncident } from '../lib/incidents'
 import { logAudit } from '../../../shared/org/orgData'
 import { AUDIT } from '../../../shared/audit/audit'
+import { formatDate } from '../../../shared/lib/format'
 
 function fmtDate(ts) {
   if (!ts) return '—'
   const d = ts.seconds ? new Date(ts.seconds * 1000) : new Date(ts)
-  return Number.isNaN(d.getTime()) ? '—' : d.toLocaleDateString()
+  return Number.isNaN(d.getTime()) ? '—' : formatDate(d)
 }
 
 export default function Incidents() {

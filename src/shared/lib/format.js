@@ -5,6 +5,10 @@ export function toDate(value) {
   if (!value) return null
   if (typeof value?.toDate === 'function') return value.toDate() // Firestore Timestamp
   if (value instanceof Date) return value
+  // A bare YYYY-MM-DD (incident dates, due dates) is a calendar day. new
+  // Date() reads it as UTC midnight, which is the previous day west of UTC.
+  const day = typeof value === 'string' && value.match(/^(\d{4})-(\d{2})-(\d{2})$/)
+  if (day) return new Date(Number(day[1]), Number(day[2]) - 1, Number(day[3]))
   const d = new Date(value)
   return isValid(d) ? d : null
 }

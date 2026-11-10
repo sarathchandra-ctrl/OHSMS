@@ -1,18 +1,14 @@
-import { Routes, Route, Navigate, Outlet } from 'react-router-dom'
+import { Routes, Route, Navigate, Outlet, useLocation } from 'react-router-dom'
 import {
   Home as HomeIcon,
   ListChecks,
   ClipboardList,
   PlayCircle,
-  HardHat,
-  Lock,
   FileSignature,
-  Clock,
-  Boxes,
   Search,
   ScrollText,
-  Upload,
   BookOpen,
+  Settings2,
 } from 'lucide-react'
 import { TutorialProvider } from './context/TutorialContext'
 import Home from './pages/Home'
@@ -32,28 +28,34 @@ import GroupNumbers from './pages/admin/GroupNumbers'
 import Trace from './pages/admin/Trace'
 import Activity from './pages/permits/Activity'
 import ImportData from './pages/admin/ImportData'
+import Setup from './pages/admin/Setup'
+import { SETUP_PAGES } from './pages/admin/setupPages'
 import Learn from './pages/Learn'
 import ModuleTabs from '../../shared/layout/ModuleTabs'
 import WriteGate from '../../shared/auth/WriteGate'
 
-const TABS = [
-  { to: '/loto', label: 'Home', icon: HomeIcon, end: true },
-  { to: '/loto/inventory', label: 'Procedures', icon: ListChecks },
-  { to: '/loto/register', label: 'Register', icon: ClipboardList },
-  { to: '/loto/operations', label: 'Operations', icon: PlayCircle },
-  { to: '/loto/permits', label: 'Permits', icon: FileSignature },
-  { to: '/loto/technicians', label: 'Technicians', icon: HardHat },
-  { to: '/loto/locks', label: 'Locks', icon: Lock },
-  { to: '/loto/shifts', label: 'Shifts', icon: Clock },
-  { to: '/loto/groups', label: 'Group numbers', icon: Boxes },
-  { to: '/loto/trace', label: 'Trace', icon: Search },
-  { to: '/loto/activity', label: 'Activity', icon: ScrollText },
-  { to: '/loto/import', label: 'Import', icon: Upload, write: true },
-  { to: '/loto/learn', label: 'Learn', icon: BookOpen },
-]
+// Daily isolation work, then one Set-up tab for the registers it draws on:
+// thirteen tabs ran off the screen.
+const SETUP_PATHS = SETUP_PAGES.map((p) => p.to)
+
+function tabsFor(pathname) {
+  const inSetup = pathname === '/loto/setup' || SETUP_PATHS.some((p) => pathname.startsWith(p))
+  return [
+    { to: '/loto', label: 'Home', icon: HomeIcon, end: true },
+    { to: '/loto/inventory', label: 'Procedures', icon: ListChecks },
+    { to: '/loto/register', label: 'Register', icon: ClipboardList },
+    { to: '/loto/operations', label: 'Operations', icon: PlayCircle },
+    { to: '/loto/permits', label: 'Permits', icon: FileSignature },
+    { to: '/loto/trace', label: 'Trace', icon: Search },
+    { to: '/loto/activity', label: 'Activity', icon: ScrollText },
+    { to: '/loto/learn', label: 'Learn', icon: BookOpen },
+    { to: '/loto/setup', label: 'Set-up', icon: Settings2, active: inSetup },
+  ]
+}
 
 function ModuleNav() {
-  return <ModuleTabs label="Lockout / Tagout sections" tabs={TABS} />
+  const { pathname } = useLocation()
+  return <ModuleTabs label="Lockout / Tagout sections" tabs={tabsFor(pathname)} />
 }
 
 function ListLayout() {
@@ -76,6 +78,7 @@ export default function LotoModule() {
           <Route path="register" element={<Register />} />
           <Route path="operations" element={<Operations />} />
           <Route path="permits" element={<Permits />} />
+          <Route path="setup" element={<Setup />} />
           <Route path="technicians" element={<Technicians />} />
           <Route path="locks" element={<LockInventory />} />
           <Route path="shifts" element={<ShiftTimes />} />
