@@ -159,6 +159,18 @@ export const RECORD_CLASSES = [
     counselMustSign: 'Whether resolved requests may be deleted, and after how long.',
   },
   {
+    // Training quiz attempts taken from a QR code (stack/quiz.mjs): typed
+    // employee ID, name and centre, the answers and the score. Nothing deletes
+    // them on a clock; a manager may remove one.
+    path: 'quizResponses',
+    class: ERASABLE,
+    proposedPeriod: NEEDS_LEGAL_SIGN_OFF,
+    proposedPeriodNote: 'A quiz attempt and its score; a passing certificate can be reissued from it.',
+    livePurge: false,
+    recycleBin: false,
+    counselMustSign: 'How long quiz attempts and their scores may be kept, and whether a pass should be kept as long as a training record.',
+  },
+  {
     path: 'erpContacts',
     class: ERASABLE,
     proposedPeriod: NEEDS_LEGAL_SIGN_OFF,

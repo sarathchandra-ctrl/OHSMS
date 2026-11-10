@@ -7,6 +7,8 @@ import {
   UsersRound,
   ClipboardList,
   CalendarClock,
+  ClipboardCheck,
+  ListChecks,
 } from 'lucide-react'
 import { useAuth } from '../../shared/auth/AuthContext'
 import { TrainingProvider } from './context/TrainingContext'
@@ -17,6 +19,9 @@ import Records from './pages/Records'
 import EmployeeStatus from './pages/EmployeeStatus'
 import AdminWorkspace from './pages/AdminWorkspace'
 import Sessions from './pages/Sessions'
+import Quizzes from './pages/Quizzes'
+import QuizResults from './pages/QuizResults'
+import QuizResponses from './pages/QuizResponses'
 import ModuleTabs from '../../shared/layout/ModuleTabs'
 
 const TABS = [
@@ -26,6 +31,9 @@ const TABS = [
   { to: '/training/sessions', label: 'Sessions', icon: CalendarClock },
   { to: '/training/records', label: 'Records', icon: GraduationCap },
   { to: '/training/employees', label: 'Employee Status', icon: UsersRound },
+  // Taken by anyone from a QR code (/quiz/:token); written and read by managers.
+  { to: '/training/quiz', label: 'Quiz', icon: ClipboardCheck, managerOnly: true },
+  { to: '/training/quiz-results', label: 'Quiz Results', icon: ListChecks, managerOnly: true },
   { to: '/training/admin', label: 'Admin Workspace', icon: ClipboardList, managerOnly: true },
 ]
 
@@ -59,6 +67,9 @@ export default function TrainingModule() {
           <Route path="records" element={<Records />} />
           <Route path="employees" element={<EmployeeStatus />} />
           <Route path="admin" element={<AdminWorkspace />} />
+          <Route path="quiz" element={<Quizzes />} />
+          <Route path="quiz/:id" element={<QuizResponses />} />
+          <Route path="quiz-results" element={<QuizResults />} />
           <Route path="matrix" element={<Navigate to="/training/employees" replace />} />
         </Route>
         <Route path="*" element={<Navigate to="/training" replace />} />

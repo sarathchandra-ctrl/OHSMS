@@ -11,6 +11,7 @@ import { verifySession, signSession } from './session.mjs'
 import { refreshFileLinks } from './lib/fileLinks.js'
 import { decidePresign } from './presign.mjs'
 import { notifyChanges, sendDigests } from './notify.mjs'
+import { publicQuiz, submitQuiz } from './quiz.mjs'
 import {
   releaseDataKeys,
   deleteOrgFile,
@@ -44,6 +45,12 @@ import {
 } from './passwords.mjs'
 
 const WORKER = { role: 'ohsms_worker', uid: '' }
+// Jobs answered for someone with no account: a training quiz opened from its
+// QR code (stack/quiz.mjs). Each decides everything itself, as the server,
+// and one address may call them only so often.
+const PUBLIC_JOBS = new Set(['publicQuiz', 'submitQuiz'])
+const PUBLIC_JOB_LIMIT = 60
+const PUBLIC_JOB_WINDOW_S = 10 * 60
 const ADMIN_JOBS = new Set([
   'purgeSoftDeleted',
   'withdrawStalePermitMirrors',
@@ -389,7 +396,8 @@ export function createOwnStackHandler({
   async function onRpc(req, res, name) {
     const body = await readBody(req)
     const { session, ended } = await liveSession(req, sessionSecret, db)
-    if (ended) {
+    // A public job does not use the session, so an ended one does not refuse it.
+    if (ended && !PUBLIC_JOBS.has(name)) {
       send(res, 401, SESSION_ENDED)
       return
     }
@@ -446,10 +454,22 @@ export function createOwnStackHandler({
             (await bump(db, `weatherrate:${uid}`, WEATHER_FETCH_WINDOW_S)) <= WEATHER_FETCH_LIMIT,
           fetchImpl,
         }),
+      publicQuiz: () => publicQuiz(engine, { token: body.token }),
+      submitQuiz: () => submitQuiz(engine, { token: body.token, body }),
     }
     const fn = table[name]
     if (!fn) {
       send(res, 404, { code: 'not-found', message: 'no such job' })
+      return
+    }
+    if (PUBLIC_JOBS.has(name)) {
+      const ip = clientIp(req) || 'unknown'
+      if ((await bump(db, `publicjob:${ip}`, PUBLIC_JOB_WINDOW_S)) > PUBLIC_JOB_LIMIT) {
+        send(res, 429, { ok: false, code: 'resource-exhausted', message: 'Too many tries. Wait a few minutes.' })
+        return
+      }
+      const result = await fn()
+      send(res, result?.ok === false ? (result.code === 'not-found' ? 404 : 400) : 200, result)
       return
     }
     if (!uid) {

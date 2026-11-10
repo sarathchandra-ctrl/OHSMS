@@ -285,6 +285,24 @@ export async function sendWhatsAppOrgTest(phone) {
  * or `{ obs: null }` when the provider did not answer. `{ limited: true }`
  * means the provider asked us to wait.
  */
+/**
+ * A training quiz opened from its QR code, for someone with no account: the
+ * questions and options, never the answer key (stack/quiz.mjs publicQuiz).
+ */
+export async function publicQuiz(token) {
+  const fn = await callable('publicQuiz', { timeout: 15000 })
+  return (await fn({ token })).data.quiz
+}
+
+/**
+ * Submit a quiz: the taker's details and one option index per question. The
+ * server scores it and returns { score, total, percent, passed, certificateNo, … }.
+ */
+export async function submitQuiz({ token, employeeId, name, centerName, answers } = {}) {
+  const fn = await callable('submitQuiz', { timeout: 20000 })
+  return (await fn({ token, employeeId, name, centerName, answers })).data.result
+}
+
 export async function fetchSiteWeather({ lat, lng } = {}) {
   const fn = await callable('fetchSiteWeather')
   return (await fn({ lat, lng })).data
