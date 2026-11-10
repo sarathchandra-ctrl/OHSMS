@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { MapContainer, TileLayer, Marker, Tooltip, Popup, useMap } from 'react-leaflet'
-import MarkerClusterGroup from 'react-leaflet-cluster'
+import MarkerClusterGroup from '../../shared/map/MarkerClusterGroup'
 import L from 'leaflet'
 import { MapPin } from 'lucide-react'
 import { WeatherBubbleRow, WeatherRiskPanel } from '../../modules/weather/components/WeatherPanels'
