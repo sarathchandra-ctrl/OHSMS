@@ -696,6 +696,98 @@ export function decisionChanged(path, prev, next) {
   return ''
 }
 
+// ── Work permits after a decision, and their public QR record ───────────────
+// An employee carries out a permit's work, so `permits` is a field
+// collection (any employee may write it) and approving is a manager's
+// (DECISION_STATES). That left everything around the decision open:
+//   • on an approved permit an employee could push validTo out, and an
+//     expired permit read as in progress again with no extension approved;
+//     or rewrite its hazards and PPE after the approvers had signed them;
+//   • the public QR record (permitQr) carried copies of the approvals, and
+//     nothing tied them to the permit: an employee could mark an unapproved
+//     permit approved and current on the page read at the work location.
+
+// After a decision a non-manager may only move the permit along: ask for
+// closure or an extension, record an unsafe observation's closure, and keep
+// the derived status and the mailed report current. The app writes nothing
+// else to a decided permit (ptw/lib/data.js).
+const AFTER_DECISION_FIELDS = [
+  'closure', 'extension', 'closedDueToObservation', 'storedStatus', 'updatedAt',
+  'reportPdfPath', 'qrToken',
+]
+
+function approvedPermitProblem(prev, next) {
+  const decided = (keys) => DECIDED.includes(str(at(prev, keys)))
+  if (decided(['engineering', 'status']) || decided(['operations', 'status'])) {
+    const field = changedKeys(prev, next).find((k) => !AFTER_DECISION_FIELDS.includes(k))
+    if (field) return `permit-decided:${field}`
+  }
+  // An approved extension's end date became the permit's validTo; it is not
+  // an employee's to move afterwards.
+  if (
+    (decided(['extension', 'engineering', 'status']) || decided(['extension', 'operations', 'status'])) &&
+    str(at(prev, ['extension', 'newValidTo'])) !== str(at(next, ['extension', 'newValidTo']))
+  ) {
+    return 'permit-decided:extension.newValidTo'
+  }
+  return ''
+}
+
+// What the QR record copies from its permit. The public page works the
+// status out from these (derivePermitStatus), so they must be the permit's:
+// for every writer, managers included, since the copy is only ever written
+// after the permit (ptw/lib/data.js mirrorStatusFields, liveFields).
+const orPending = (permit, keys, whenAbsent = '') =>
+  at(permit, keys.slice(0, -1)) ? str(at(permit, keys)) || 'pending' : whenAbsent
+const MIRROR_FROM_PERMIT = [
+  [['engineering', 'status'], (p) => str(at(p, ['engineering', 'status'])) || 'pending'],
+  [['operations', 'status'], (p) => str(at(p, ['operations', 'status'])) || 'pending'],
+  ...['closure', 'extension'].flatMap((block) =>
+    ['engineering', 'operations'].map((who) => [
+      [block, who, 'status'],
+      (p) => (at(p, [block]) ? orPending(p, [block, who, 'status'], 'pending') : ''),
+    ])
+  ),
+  [['extension', 'newValidTo'], (p) => (at(p, ['extension']) ? str(at(p, ['extension', 'newValidTo'])) : '')],
+  [['validFrom'], (p) => str(p.validFrom)],
+  [['validTo'], (p) => str(p.validTo)],
+  [['permitNo'], (p) => str(p.permitNo)],
+  [['docId'], (p) => str(p.docId)],
+  [['site'], (p) => str(p.site)],
+  [['typeOfWork'], (p) => str(p.typeOfWork)],
+]
+// The display half: the permit's own value, or blanked once the job is over
+// (withdrawnFields in ptw/lib/publicPermit.js). Never a third thing.
+const MIRROR_DISPLAY = {
+  jobLocation: [(p) => str(p.jobLocation), ''],
+  jobDescription: [(p) => str(p.jobDescription), ''],
+  issuingDepartment: [(p) => str(p.issuingDepartment), ''],
+  issuedToName: [(p) => str(p.issuedToName), ''],
+  hazards: [(p) => p.hazards || [], []],
+  ppe: [(p) => p.ppe || [], []],
+  precautions: [(p) => p.precautions || [], []],
+  jsa: [(p) => p.jsa || [], []],
+  participantCount: [(p) => (Array.isArray(p.participants) ? p.participants.length : 0), 0],
+  fireWatcherCount: [(p) => (Array.isArray(p.fireWatchers) ? p.fireWatchers.length : 0), 0],
+  hasConfinedWatcher: [(p) => Boolean(p.confinedWatcher), false],
+}
+const same = (a, b) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null)
+
+/** The first field of a permit's QR record that disagrees with the permit, or ''. */
+export function permitMirrorProblem(token, mirror, permit) {
+  if (!permit) return 'no-permit'
+  if (str(permit.qrToken) !== str(token)) return 'token'
+  for (const [keys, expected] of MIRROR_FROM_PERMIT) {
+    if (str(at(mirror, keys)) !== expected(permit)) return keys.join('.')
+  }
+  if (!same(mirror?.closedDueToObservation, permit.closedDueToObservation)) return 'closedDueToObservation'
+  for (const [field, [live, blank]] of Object.entries(MIRROR_DISPLAY)) {
+    if (!(field in (mirror || {}))) continue
+    if (!same(mirror[field], live(permit)) && !same(mirror[field], blank)) return field
+  }
+  return ''
+}
+
 // ── LOTO permits ────────────────────────────────────────────────────────────
 // An isolation permit is the paper between a person and live energy. The
 // Firestore rules held it to its lifecycle and to who may move it; this is
@@ -888,7 +980,7 @@ const num = (v) => {
  *   manager_decisions      a decision (DECISION_STATES): managers only
  * `prev` is undefined for an insert.
  */
-export function invariantProblem(path, id, prev, next, ctx) {
+export function invariantProblem(path, id, prev, next, ctx, lookup = () => undefined) {
   const n = next || {}
   if (prev && path === 'users' && !ctx.worker) {
     if (prev.mustChangePassword === true && n.mustChangePassword !== true) return 'password-flag'
@@ -933,5 +1025,13 @@ export function invariantProblem(path, id, prev, next, ctx) {
     }
   }
   if (!ctx.worker && !isManager(ctx) && decisionChanged(path, prev, n)) return 'manager-decision'
+  if (!ctx.worker && !isManager(ctx) && path === 'permits' && prev) {
+    const frozen = approvedPermitProblem(prev, n)
+    if (frozen) return frozen
+  }
+  if (!ctx.worker && path === 'permitQr') {
+    const mirror = permitMirrorProblem(id, n, lookup('permits', str(n.permitId || prev?.permitId)))
+    if (mirror) return `mirror-permit:${mirror}`
+  }
   return ''
 }

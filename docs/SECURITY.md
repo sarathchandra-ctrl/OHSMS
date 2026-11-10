@@ -601,6 +601,33 @@ approvals, owner pickers and the Audit Log show.
 Tests: `postgres.rls.test.js` "audit entries say who and when, as the server
 knows it".
 
+### S-22 · A work permit's dates and its public QR page could be faked — MEDIUM-HIGH
+
+`permits` and `permitQr` are field collections, because employees carry out
+the work, and approving is a manager's decision (`DECISION_STATES`). Only the
+approval status fields were guarded, and only on `permits`:
+- on an approved permit an employee could set `validTo` years out, and an
+  expired permit read as in progress with no extension approved, or rewrite
+  its hazards and PPE after the approvers had signed them;
+- the public QR record carried its own copies of the approvals, tied to
+  nothing: an employee could mark an unapproved permit approved and current
+  on the page read at the work location. The same change on the permit itself
+  was refused.
+
+**Fixed** in `stack/policy.mjs`:
+- after a decision, a non-manager may change only what the app changes on a
+  decided permit (closure, extension, an unsafe stop, the derived status, the
+  mailed report, the QR token); an approved extension's end date is frozen;
+- every write of a permit's QR record must agree with the permit it names,
+  for every writer: approvals, dates, extension, unsafe stop, number, site and
+  type exactly; each display field either the permit's value or blanked. The
+  engine loads the permit (from the stored record when a merge update omits
+  `permitId`) and guards it with the rest of the batch.
+
+Tests: `postgres.rls.test.js` "work permits after a decision, and their public
+QR record", including the records the app itself writes, built with its own
+`mirrorDisplayFields`.
+
 ---
 
 ## Testing

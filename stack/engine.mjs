@@ -322,6 +322,20 @@ export function createEngine(db) {
       if (parent) want(parent[0], parent[1])
     }
     const rows = await readRows([...keys.values()])
+    // A permit's public QR record is judged against the permit it names
+    // (permitMirrorProblem). A merge update does not carry permitId, so it is
+    // read from the stored record, and the permit is loaded and guarded too.
+    const permitKeys = []
+    for (const op of ops) {
+      if (op.path !== 'permitQr') continue
+      const stored = rows.get(keyOf('permitQr', op.id))
+      const permitId = String(op.data?.permitId || (stored && parse(stored.data)?.permitId) || '')
+      if (permitId && !keys.has(keyOf('permits', permitId))) {
+        want('permits', permitId)
+        permitKeys.push(['permits', permitId])
+      }
+    }
+    if (permitKeys.length) for (const [k, row] of await readRows(permitKeys)) rows.set(k, row)
     const { ctx } = await contextFor(session, rows)
 
     for (const seen of expect) {
@@ -363,7 +377,7 @@ export function createEngine(db) {
         const data = serverStampedInsert(op.path, applyPatch(undefined, op), ctx, () => nextTimestamp())
         const why =
           insertAllowed(op.path, op.id, data, ctx, lookup) ||
-          invariantProblem(op.path, op.id, undefined, data, ctx)
+          invariantProblem(op.path, op.id, undefined, data, ctx, lookup)
         if (why)
           throw fail('permission-denied', `sqlite: create refused at ${op.path}/${op.id} (${why})`)
         state.set(k, { rev: 1, data })
@@ -382,9 +396,9 @@ export function createEngine(db) {
       const data = current ? patched : serverStampedInsert(op.path, patched, ctx, () => nextTimestamp())
       const why = current
         ? updateAllowed(op.path, op.id, current.data, data, ctx) ||
-          invariantProblem(op.path, op.id, current.data, data, ctx)
+          invariantProblem(op.path, op.id, current.data, data, ctx, lookup)
         : insertAllowed(op.path, op.id, data, ctx, lookup) ||
-          invariantProblem(op.path, op.id, undefined, data, ctx)
+          invariantProblem(op.path, op.id, undefined, data, ctx, lookup)
       if (why)
         throw fail('permission-denied', `sqlite: write refused at ${op.path}/${op.id} (${why})`)
       state.set(k, { rev: (current?.rev || 0) + 1, data })
