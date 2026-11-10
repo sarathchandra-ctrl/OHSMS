@@ -53,6 +53,30 @@ export function currentAccessToken() {
   return memory
 }
 
+export const SESSION_ENDED_EVENT = 'ohsms:session-ended'
+
+/**
+ * The server answered that this tab's session has ended: a password change
+ * elsewhere, an administrator signing the person out, or simply expiry.
+ * Drop the token and tell the app (AuthContext signs out), rather than
+ * carrying on as a stranger whose every read comes back empty.
+ */
+export function noteSessionEnded(response, body) {
+  if (response?.status !== 401 || body?.reason !== 'session-ended') return false
+  clearAccessToken()
+  try {
+    window.dispatchEvent(new Event(SESSION_ENDED_EVENT))
+  } catch {
+    // No window in the test runner; the token is gone either way.
+  }
+  return true
+}
+
+/** A job that ended the caller's other sessions hands this one a fresh token. */
+export function adoptReissuedToken(body) {
+  if (typeof body?.sessionToken === 'string' && body.sessionToken) setAccessToken(body.sessionToken)
+}
+
 export function clearAccessToken() {
   setAccessToken('')
 }

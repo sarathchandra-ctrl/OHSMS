@@ -697,6 +697,35 @@ people by no field at all, so nothing it does changed.
 Tests: `postgres.rls.test.js` "the people directory cannot be searched by
 what it hides".
 
+### S-26 · A session could not be ended — MEDIUM
+
+A session token was good for its whole eight hours whatever happened. A
+password change, a reset by email, an administrator's password reset, or
+turning two-step login on, off or resetting it for a lost phone all left
+every token already issued working. A stolen session survived the very steps
+someone takes after noticing the theft; only suspending the account ended it.
+
+**Fixed:**
+- every profile carries a `sessionEpoch` that only the server writes
+  (`invariantProblem`), and every token records the epoch it was issued
+  under (`stack/session.mjs`);
+- each authenticated request compares the two (`liveSession` in
+  `stack/handler.mjs`), and a token from an older epoch is answered 401
+  `session-ended`; the app then signs out (`noteSessionEnded`);
+- the epoch moves on a password change or reset, on two-step login turned on,
+  off or reset, on "Sign out other devices" (Account security) and on an
+  admin's "Sign out everywhere" (Employees → Edit). Where the caller's own
+  session should continue, the job hands it a fresh token.
+
+The same change made an admin's or an email reset lift the per-source sign-in
+lock: both cleared a key with no source in it and left the real lock, so the
+person stayed locked out on their own machine.
+
+Tests: `src/shared/data/server.test.js` "ending sessions" (a second session
+dies on a password change, other devices, an admin's revoke and reset; no one
+can set the epoch back) and `stack/passwords.limits.test.js` "a reset lifts
+the lock".
+
 ---
 
 ## Testing

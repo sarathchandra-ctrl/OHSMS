@@ -65,7 +65,9 @@ async function readyAdmin(s) {
     current: ADMIN.password,
     password: 'admin-own-pass-2',
   })
-  expect(changed.body).toEqual({ ok: true })
+  // The other sessions end; this one continues on a fresh token.
+  expect(changed.body).toMatchObject({ ok: true })
+  expect(changed.body.sessionToken).toMatch(/^[\w-]+\.[\w-]+\.[\w-]+$/)
   return s.signIn(ADMIN.email, 'admin-own-pass-2')
 }
 
@@ -145,7 +147,12 @@ describe('signing in', () => {
     const s = await start()
     const admin = await readyAdmin(s)
     const forged = admin.split('.').slice(0, 2).join('.') + '.not-a-signature'
-    expect(await s.read(forged, 'organization', 'profile')).toBeNull()
+    // Answered as a session that has ended, so the app signs out rather than
+    // reading on as a stranger.
+    const read = await s.post('/data', { op: 'get', path: 'organization', id: 'profile' }, forged)
+    expect(read.status).toBe(401)
+    expect(read.body).toMatchObject({ reason: 'session-ended' })
+    expect(read.body.doc).toBeUndefined()
     expect((await s.rpc(forged, 'createMember', { email: 'x@cult.test', role: 'admin', password: 'xxxxxxxxxxxx' })).status).toBe(401)
     await s.stop()
   })
@@ -451,6 +458,78 @@ describe('records leave with fresh download links', () => {
     expect(got.photo.url).toMatch(/^https:\/\/ehs\.example\.com\/blob\?op=get&path=files%2Fincident-photos%2Fa\.jpg&exp=\d+&sig=/)
     const listed = (await s.post('/data', { op: 'list', path: 'incidents' }, admin)).body.rows
     expect(listed.find((r) => r.id === 'rs1').photo.url).toBe(got.photo.url)
+    await s.stop()
+  })
+})
+
+describe('ending sessions', () => {
+  const live = async (s, token) =>
+    (await s.post('/data', { op: 'get', path: 'organization', id: 'profile' }, token)).status === 200
+
+  async function withMember(s) {
+    const admin = await readyAdmin(s)
+    await s.rpc(admin, 'createMember', { email: 'mo@cult.test', name: 'Mo', role: 'member', password: 'temporary-pass-9' })
+    const temp = await s.signIn('mo@cult.test', 'temporary-pass-9')
+    const changed = await s.rpc(temp, 'completePasswordChange', { current: 'temporary-pass-9', password: 'mo-own-pass-10' })
+    return { admin, mo: changed.body.sessionToken }
+  }
+
+  it('ends a stolen session when its owner changes the password, and keeps theirs', async () => {
+    const s = await start()
+    const { mo } = await withMember(s)
+    const stolen = await s.signIn('mo@cult.test', 'mo-own-pass-10')
+    expect(await live(s, stolen)).toBe(true)
+    const changed = await s.rpc(mo, 'completePasswordChange', { current: 'mo-own-pass-10', password: 'mo-newer-pass-11' })
+    expect(changed.body).toMatchObject({ ok: true })
+    expect(await live(s, stolen)).toBe(false)
+    expect(await live(s, mo)).toBe(false)
+    expect(await live(s, changed.body.sessionToken)).toBe(true)
+    await s.stop()
+  })
+
+  it('lets a person sign out their other devices, and an admin sign a person out everywhere', async () => {
+    const s = await start()
+    const { admin, mo } = await withMember(s)
+    const laptop = await s.signIn('mo@cult.test', 'mo-own-pass-10')
+    const out = await s.rpc(mo, 'signOutOtherSessions')
+    expect(await live(s, laptop)).toBe(false)
+    const here = out.body.sessionToken
+    expect(await live(s, here)).toBe(true)
+
+    const sub = JSON.parse(Buffer.from(here.split('.')[1], 'base64url')).sub
+    // Only an admin may end someone else's sessions.
+    expect((await s.rpc(here, 'revokeMemberSessions', { uid: sub })).status).toBe(403)
+    expect((await s.rpc(admin, 'revokeMemberSessions', { uid: sub })).body).toEqual({ ok: true })
+    expect(await live(s, here)).toBe(false)
+    expect(await live(s, admin)).toBe(true)
+    await s.stop()
+  })
+
+  it('ends the sessions of a person whose password an admin resets', async () => {
+    const s = await start()
+    const { admin, mo } = await withMember(s)
+    const sub = JSON.parse(Buffer.from(mo.split('.')[1], 'base64url')).sub
+    await s.rpc(admin, 'resetMemberPassword', { uid: sub, password: 'reset-pass-12' })
+    expect(await live(s, mo)).toBe(false)
+    await s.stop()
+  })
+
+  it('refuses anyone turning their own session counter back', async () => {
+    const s = await start()
+    const { admin, mo } = await withMember(s)
+    const sub = JSON.parse(Buffer.from(mo.split('.')[1], 'base64url')).sub
+    const old = await s.signIn('mo@cult.test', 'mo-own-pass-10')
+    await s.rpc(admin, 'revokeMemberSessions', { uid: sub })
+    const fresh = await s.signIn('mo@cult.test', 'mo-own-pass-10')
+    for (const [who, token] of [['self', fresh], ['admin', admin]]) {
+      const wrote = await s.post(
+        '/data',
+        { op: 'commit', ops: [{ type: 'update', path: 'users', id: sub, data: { sessionEpoch: 0 } }] },
+        token
+      )
+      expect(wrote.status, who).not.toBe(200)
+    }
+    expect(await live(s, old)).toBe(false)
     await s.stop()
   })
 })

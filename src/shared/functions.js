@@ -9,7 +9,12 @@
 // A job the server does not implement answers 404 "no such job", and the
 // screen that asked reports it as unavailable rather than failing silently.
 // ─────────────────────────────────────────────────────────────────────────────
-import { currentAccessToken, ownStackGateway } from './auth/ownStackSession'
+import {
+  adoptReissuedToken,
+  currentAccessToken,
+  noteSessionEnded,
+  ownStackGateway,
+} from './auth/ownStackSession'
 
 /**
  * A server job, with an optional client-side deadline.
@@ -29,6 +34,7 @@ async function callable(name, { timeout } = {}) {
       })
       const body = await res.json().catch(() => ({}))
       if (!res.ok) {
+        noteSessionEnded(res, body)
         const err = new Error(body.message || 'The request was refused.')
         err.code = body.code || 'unknown'
         // The dedicated host answers a refused job with { ok: false, reason }.
@@ -36,6 +42,7 @@ async function callable(name, { timeout } = {}) {
         if (typeof body.reason === 'string') err.reason = body.reason
         throw err
       }
+      adoptReissuedToken(body)
       return { data: body }
     }
 }
@@ -324,5 +331,19 @@ export async function disableOwnTotp({ code } = {}) {
 /** Admin: clear someone's two-step login (a lost phone); they set it up again. */
 export async function resetMemberTotp({ uid } = {}) {
   const fn = await callable('resetMemberTotp')
+  return (await fn({ uid })).data
+}
+
+// ── Sessions ────────────────────────────────────────────────────────────────
+
+/** Sign out every other device; this one continues (on a fresh token). */
+export async function signOutOtherSessions() {
+  const fn = await callable('signOutOtherSessions')
+  return (await fn()).data
+}
+
+/** Admin: end every session a person holds (a lost laptop, a leaver). */
+export async function revokeMemberSessions({ uid } = {}) {
+  const fn = await callable('revokeMemberSessions')
   return (await fn({ uid })).data
 }

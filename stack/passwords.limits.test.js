@@ -7,6 +7,7 @@ import {
   RESETS_PER_SOURCE_HOUR,
   bootstrapOrganization,
   createMember,
+  resetMemberPassword,
   requestPasswordReset,
   signInWithPassword,
 } from './passwords.mjs'
@@ -133,5 +134,22 @@ describe('an address on two profiles', () => {
         password: 'temporary-pass-1',
       })
     ).toMatchObject({ ok: false, reason: 'already-member' })
+  })
+})
+
+describe('a reset lifts the lock', () => {
+  it('lets the person back in from the machine they were locked out on', async () => {
+    const adminUid = (await signIn(ADMIN.password, '198.51.100.4')).uid
+    const bo = await createMember(engine, db, {
+      uid: adminUid,
+      email: 'bo@example.test',
+      name: 'Bo',
+      role: 'member',
+      password: 'temporary-pass-1',
+    })
+    for (let i = 0; i < MAX_FAILURES; i++) await signIn(`wrong-${i}`, '203.0.113.20', 'bo@example.test')
+    expect((await signIn('temporary-pass-1', '203.0.113.20', 'bo@example.test')).reason).toBe('locked')
+    await resetMemberPassword(engine, db, { uid: adminUid, targetUid: bo.uid, password: 'brand-new-pass-2' })
+    expect(await signIn('brand-new-pass-2', '203.0.113.20', 'bo@example.test')).toMatchObject({ ok: true })
   })
 })

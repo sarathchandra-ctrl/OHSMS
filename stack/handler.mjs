@@ -37,6 +37,9 @@ import {
   disableOwnTotp,
   resetMemberTotp,
   totpStatus,
+  revokeMemberSessions,
+  sessionEpochOf,
+  signOutOtherSessions,
   bump,
 } from './passwords.mjs'
 
@@ -86,10 +89,30 @@ async function readBody(req) {
   }
 }
 
-function sessionOf(req, secret) {
+function bearerOf(req) {
   const header = String(req.headers.authorization || '')
-  const token = header.startsWith('Bearer ') ? header.slice(7) : ''
-  return verifySession(secret, token)
+  return header.startsWith('Bearer ') ? header.slice(7) : ''
+}
+
+/**
+ * The caller's session, if it is still live: signed, unexpired, and issued
+ * under the person's current session epoch (passwords.mjs bumpSessionEpoch).
+ * `ended` is true when a token was presented and is no longer good, so the
+ * app can sign out instead of reading as a stranger.
+ */
+async function liveSession(req, secret, db) {
+  const token = bearerOf(req)
+  if (!token) return { session: null, ended: false }
+  const session = verifySession(secret, token)
+  if (!session) return { session: null, ended: true }
+  if (session.ep !== (await sessionEpochOf(db, session.sub))) return { session: null, ended: true }
+  return { session, ended: false }
+}
+
+const SESSION_ENDED = {
+  code: 'unauthenticated',
+  reason: 'session-ended',
+  message: 'Your session has ended. Sign in again.',
 }
 
 export function createOwnStackHandler({
@@ -174,7 +197,11 @@ export function createOwnStackHandler({
 
   async function onData(req, res) {
     const body = await readBody(req)
-    const session = sessionOf(req, sessionSecret)
+    const { session, ended } = await liveSession(req, sessionSecret, db)
+    if (ended) {
+      send(res, 401, SESSION_ENDED)
+      return
+    }
     const roleSession = { role: 'ohsms_browser', uid: session?.sub || '' }
     // Every record goes out with fresh download links (stack/lib/fileLinks.js):
     // the reader has just passed the access rules for the record. Each link
@@ -248,7 +275,7 @@ export function createOwnStackHandler({
       send(res, 200, { mfa: true, ticket: result.ticket })
       return
     }
-    send(res, 200, { token: signSession(sessionSecret, { sub: result.uid }) })
+    send(res, 200, { token: signSession(sessionSecret, { sub: result.uid, ep: await sessionEpochOf(db, result.uid) }) })
   }
 
   async function onTotp(req, res) {
@@ -277,7 +304,7 @@ export function createOwnStackHandler({
       })
       return
     }
-    send(res, 200, { token: signSession(sessionSecret, { sub: result.uid }) })
+    send(res, 200, { token: signSession(sessionSecret, { sub: result.uid, ep: await sessionEpochOf(db, result.uid) }) })
   }
 
   async function onForgot(req, res) {
@@ -320,7 +347,11 @@ export function createOwnStackHandler({
 
   async function onPresign(req, res) {
     const body = await readBody(req)
-    const session = sessionOf(req, sessionSecret)
+    const { session, ended } = await liveSession(req, sessionSecret, db)
+    if (ended) {
+      send(res, 401, SESSION_ENDED)
+      return
+    }
     if (!session) {
       send(res, 401, { code: 'unauthenticated', message: 'sign in first' })
       return
@@ -352,7 +383,11 @@ export function createOwnStackHandler({
 
   async function onRpc(req, res, name) {
     const body = await readBody(req)
-    const session = sessionOf(req, sessionSecret)
+    const { session, ended } = await liveSession(req, sessionSecret, db)
+    if (ended) {
+      send(res, 401, SESSION_ENDED)
+      return
+    }
     const uid = session?.sub || ''
     const table = {
       stampIdentity: () => stampIdentity(engine, uid),
@@ -381,6 +416,8 @@ export function createOwnStackHandler({
         confirmTotpEnrollment(engine, db, { uid, code: body.code, master: dataKeyMaster }),
       disableOwnTotp: () => disableOwnTotp(engine, db, { uid, code: body.code, master: dataKeyMaster }),
       resetMemberTotp: () => resetMemberTotp(engine, db, { uid, targetUid: body.uid }),
+      signOutOtherSessions: () => signOutOtherSessions(engine, { uid }),
+      revokeMemberSessions: () => revokeMemberSessions(engine, { uid, targetUid: body.uid }),
       deleteOrgFile: () => deleteOrgFile(engine, blobStore, { uid, path: body.path }),
       purgeSoftDeleted: () => runRetention(engine, { blobStore }),
       withdrawStalePermitMirrors: () => withdrawStaleMirrors(engine),
@@ -419,6 +456,15 @@ export function createOwnStackHandler({
       return
     }
     const result = await fn()
+    // A job that ended the caller's other sessions also ended this one's
+    // token; the caller continues on a fresh one, as signed in as before.
+    if (result?.reissue) {
+      const rest = { ...result }
+      delete rest.reissue
+      const ep = await sessionEpochOf(db, uid)
+      send(res, 200, { ...rest, sessionToken: signSession(sessionSecret, { sub: uid, authTime: session.authTime, ep }) })
+      return
+    }
     send(res, result?.ok === false ? 403 : 200, result)
   }
 

@@ -1002,6 +1002,10 @@ export function invariantProblem(path, id, prev, next, ctx, lookup = () => undef
     // mfaEnabled says a verified authenticator exists. A client that could set
     // it would clear its own mfaRequired gate without ever enrolling.
     if (changed('mfaEnabled')) return 'mfa-flag'
+    // The epoch every session token is checked against (handler.mjs
+    // liveSession). Set back by a client, it would revive tokens a password
+    // change or an admin had ended.
+    if (changed('sessionEpoch')) return 'session-epoch'
     const changedText = (k) => str(prev[k]) !== str(n[k])
     const privileged =
       changed('role') ||
@@ -1020,6 +1024,7 @@ export function invariantProblem(path, id, prev, next, ctx, lookup = () => undef
     if (privileged && !isAdmin(ctx)) return 'privilege'
   }
   if (!prev && path === 'users' && !ctx.worker && n.mfaEnabled != null) return 'mfa-flag'
+  if (!prev && path === 'users' && !ctx.worker && n.sessionEpoch != null) return 'session-epoch'
   if (!ctx.worker && mirrorProblem(path, prev, n)) return 'mirror-field'
   // A LOTO log entry is written in its writer's own name.
   if (!ctx.worker && !prev && isLotoLog(path) && str(n.by) !== ctx.uid) return 'loto-log-actor'

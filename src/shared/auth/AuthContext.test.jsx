@@ -20,6 +20,7 @@ vi.mock('./ownStackSession', () => ({
   clearAccessToken: vi.fn(),
   setAccessToken: vi.fn(),
   ownStackGateway: () => 'https://ehs.example.com',
+  SESSION_ENDED_EVENT: 'ohsms:session-ended',
 }))
 vi.mock('../org/orgData', () => ({
   getUserProfile: async () => state.profile,

@@ -14,7 +14,7 @@
 // the path. This installation's server is the default endpoint (/presign,
 // stack/server.mjs), and it stores files on its own disk.
 // ─────────────────────────────────────────────────────────────────────────────
-import { currentAccessToken, ownStackGateway } from '../../auth/ownStackSession'
+import { currentAccessToken, noteSessionEnded, ownStackGateway } from '../../auth/ownStackSession'
 import { runtimeEnv } from '../../runtimeConfig'
 
 // Defaults to this installation's own server (files in R2 on Cloudflare; on
@@ -36,7 +36,10 @@ async function presign(body) {
     },
     body: JSON.stringify(body),
   })
-  if (!res.ok) throw new Error(`presign failed: ${res.status}`)
+  if (!res.ok) {
+    noteSessionEnded(res, await res.clone().json().catch(() => ({})))
+    throw new Error(`presign failed: ${res.status}`)
+  }
   return res.json()
 }
 

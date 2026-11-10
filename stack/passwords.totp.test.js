@@ -49,7 +49,7 @@ async function enrol(uid, nowMs = T0) {
     master: MASTER,
     nowMs,
   })
-  expect(done).toEqual({ ok: true })
+  expect(done).toEqual({ ok: true, reissue: true })
   return started.secret
 }
 
@@ -375,7 +375,7 @@ describe('turning it off', () => {
         master: MASTER,
         nowMs: later,
       })
-    ).toEqual({ ok: true })
+    ).toEqual({ ok: true, reissue: true })
     expect((await profile(adminUid)).mfaEnabled).toBe(false)
     expect(
       await signInWithPassword(engine, db, { ...ADMIN, ip: '198.51.100.1' })

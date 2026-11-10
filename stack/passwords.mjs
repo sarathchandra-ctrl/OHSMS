@@ -129,6 +129,29 @@ async function emailTaken(db, email) {
   return Boolean(row)
 }
 
+/**
+ * End every session this person holds: tokens carry the epoch they were
+ * issued under, and a request with an older one is signed out
+ * (handler.mjs liveSession). The caller's own session, when it should
+ * survive, gets a fresh token (`reissue`, handler.mjs onRpc).
+ */
+export async function bumpSessionEpoch(engine, uid) {
+  if (!uid) return
+  await engine.commit(WORKER, [
+    { type: 'update', path: 'users', id: uid, data: { sessionEpoch: { __ohsms: 'increment', n: 1 } } },
+  ])
+}
+
+/** The epoch a new token for this person is issued under. */
+export async function sessionEpochOf(db, uid) {
+  if (!uid) return 0
+  const row = await db
+    .prepare("SELECT json_extract(data, '$.sessionEpoch') AS ep FROM documents WHERE path = 'users' AND id = ?")
+    .bind(uid)
+    .first()
+  return Number.isInteger(row?.ep) ? row.ep : 0
+}
+
 async function liveProfile(engine, uid) {
   if (!uid) return null
   return engine.get(WORKER, 'users', uid)
@@ -209,6 +232,17 @@ async function clearFailures(db, email, ip) {
   await db
     .prepare('DELETE FROM auth_pending WHERE key IN (?, ?)')
     .bind(pairKey(email, ip), `pwfail:${email}`)
+    .run()
+}
+
+// After a new password is set, every lock on the address goes, from every
+// source. The admin reset and the reset link called clearFailures with no
+// source, which deleted `pwfail:<email>:undefined` and left the real
+// per-source lock in place: the person stayed locked out on their own machine.
+async function clearAllFailures(db, email) {
+  await db
+    .prepare("DELETE FROM auth_pending WHERE key = ? OR (key >= ? AND key < ?)")
+    .bind(`pwfail:${email}`, `pwfail:${email}:`, `pwfail:${email};`)
     .run()
 }
 
@@ -309,7 +343,10 @@ export async function confirmTotpEnrollment(engine, db, { uid, code, master, now
     .run()
   await dropKeys(db, `totpenrol:${uid}`, `totpenroltry:${uid}`)
   await setMfaEnabled(engine, uid, true)
-  return { ok: true }
+  // Turning it on is often a reaction to a password that may be known:
+  // sessions opened with the password alone end here.
+  await bumpSessionEpoch(engine, uid)
+  return { ok: true, reissue: true }
 }
 
 // A secret sealed under another master (DATA_KEY_MASTER changed) cannot be
@@ -422,7 +459,8 @@ export async function disableOwnTotp(engine, db, { uid, code, master, nowMs = Da
   await dropKeys(db, failKey)
   await db.prepare('DELETE FROM auth_totp WHERE uid = ?').bind(uid).run()
   await setMfaEnabled(engine, uid, false)
-  return { ok: true }
+  await bumpSessionEpoch(engine, uid)
+  return { ok: true, reissue: true }
 }
 
 /** An admin clears someone's two-step login (a lost phone). They set it up again. */
@@ -432,12 +470,31 @@ export async function resetMemberTotp(engine, db, { uid, targetUid }) {
   if (!targetUid || !(await liveProfile(engine, targetUid))) return { ok: false, reason: 'no-user' }
   await db.prepare('DELETE FROM auth_totp WHERE uid = ?').bind(targetUid).run()
   await setMfaEnabled(engine, targetUid, false)
+  // A lost phone may be a stolen one, with a session open on it.
+  await bumpSessionEpoch(engine, targetUid)
   return { ok: true }
 }
 
 /** Is two-step login on for this person? */
 export async function totpStatus(db, { uid }) {
   return { ok: true, enabled: Boolean(uid && (await totpRow(db, uid))) }
+}
+
+/** Sign out every other device: this session continues on a fresh token. */
+export async function signOutOtherSessions(engine, { uid }) {
+  const profile = await liveProfile(engine, uid)
+  if (!profile) return { ok: false, reason: 'not-allowed' }
+  await bumpSessionEpoch(engine, uid)
+  return { ok: true, reissue: true }
+}
+
+/** An admin ends every session a person holds (a lost laptop, a leaver). */
+export async function revokeMemberSessions(engine, { uid, targetUid }) {
+  const admin = await liveAdmin(engine, uid)
+  if (!admin) return { ok: false, reason: 'not-admin' }
+  if (!targetUid || !(await liveProfile(engine, targetUid))) return { ok: false, reason: 'no-user' }
+  await bumpSessionEpoch(engine, targetUid)
+  return { ok: true }
 }
 
 /** An admin adds a person, with a temporary password they must replace. */
@@ -485,7 +542,8 @@ export async function resetMemberPassword(engine, db, { uid, targetUid, password
   await engine.commit(WORKER, [
     { type: 'update', path: 'users', id: targetUid, data: { mustChangePassword: true } },
   ])
-  await clearFailures(db, normalizeEmail(target.email))
+  await clearAllFailures(db, normalizeEmail(target.email))
+  await bumpSessionEpoch(engine, targetUid)
   return { ok: true }
 }
 
@@ -514,7 +572,10 @@ export async function changeOwnPassword(
       { type: 'update', path: 'users', id: uid, data: { mustChangePassword: false } },
     ])
   }
-  return { ok: true }
+  // Whoever else holds a session on the old password loses it; this one
+  // continues on a fresh token.
+  await bumpSessionEpoch(engine, uid)
+  return { ok: true, reissue: true }
 }
 
 /**
@@ -656,6 +717,8 @@ export async function completePasswordReset(engine, db, { token, password }) {
       { type: 'update', path: 'users', id: claim.uid, data: { mustChangePassword: false } },
     ])
   }
-  await clearFailures(db, normalizeEmail(profile.email || claim.email))
+  await clearAllFailures(db, normalizeEmail(profile.email || claim.email))
+  // Whoever was in the account before the reset is not after it.
+  await bumpSessionEpoch(engine, claim.uid)
   return { ok: true }
 }
