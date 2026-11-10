@@ -88,5 +88,18 @@ export function scoreQuiz(quiz = {}, answers = []) {
   return { score, total, percent, passed: total > 0 && percent >= QUIZ_PASS_PERCENT }
 }
 
+/**
+ * Each question as it was asked, the option chosen, and whether it was right.
+ * Stored with the response, so editing the quiz later never changes what a
+ * past response shows a manager.
+ */
+export function answerDetail(quiz = {}, answers = []) {
+  return (quiz.questions || []).map((q, i) => ({
+    question: clean(q?.text, QUIZ_TEXT_MAX.question),
+    chosen: clean((q?.options || [])[answers[i]], QUIZ_TEXT_MAX.option),
+    correct: answers[i] === q?.answer,
+  }))
+}
+
 /** The certificate number for a passing response: stable, and traceable to it. */
 export const certificateNo = (responseId) => `CFSMS-QZ-${str(responseId).slice(0, 8).toUpperCase()}`

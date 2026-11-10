@@ -49,6 +49,9 @@ describe('submitting', () => {
     expect(JSON.stringify(r)).not.toMatch(/correct|answers/)
     const [stored] = await engine.list(null, 'quizResponses', {})
     expect(stored).toMatchObject({ quizId: 'qz1', employeeId: 'E-17', centerName: 'Koramangala', score: 4, passed: true })
+    // What each person answered, as asked, for the manager's results page.
+    expect(stored.answerDetail[0]).toEqual({ question: 'Extinguisher for electrical fire?', chosen: 'CO2', correct: true })
+    expect(stored.answerDetail[4]).toEqual({ question: 'Blocked exit?', chosen: 'Ignore', correct: false })
   })
 
   it('ignores any score, pass or certificate the browser sends', async () => {

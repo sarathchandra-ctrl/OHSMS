@@ -21,6 +21,7 @@ import AdminWorkspace from './pages/AdminWorkspace'
 import Sessions from './pages/Sessions'
 import Quizzes from './pages/Quizzes'
 import QuizResults from './pages/QuizResults'
+import QuizResponses from './pages/QuizResponses'
 import ModuleTabs from '../../shared/layout/ModuleTabs'
 
 const TABS = [
@@ -67,6 +68,7 @@ export default function TrainingModule() {
           <Route path="employees" element={<EmployeeStatus />} />
           <Route path="admin" element={<AdminWorkspace />} />
           <Route path="quiz" element={<Quizzes />} />
+          <Route path="quiz/:id" element={<QuizResponses />} />
           <Route path="quiz-results" element={<QuizResults />} />
           <Route path="matrix" element={<Navigate to="/training/employees" replace />} />
         </Route>

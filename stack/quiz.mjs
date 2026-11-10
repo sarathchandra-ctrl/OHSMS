@@ -10,7 +10,7 @@
 // The handler limits how often one address may call them.
 
 import { randomUUID } from 'node:crypto'
-import { certificateNo, publicQuizView, readSubmission, scoreQuiz } from './lib/quiz.js'
+import { answerDetail, certificateNo, publicQuizView, readSubmission, scoreQuiz } from './lib/quiz.js'
 
 const WORKER = { role: 'ohsms_worker', uid: '' }
 const TOKEN = /^[0-9a-z]{8,64}$/
@@ -42,6 +42,8 @@ export async function submitQuiz(engine, { token, body = {}, now = Date.now() })
     quizTitle: String(quiz.title || ''),
     ...read.taker,
     answers: read.answers,
+    // For the manager's results page; never returned to the taker.
+    answerDetail: answerDetail(quiz, read.answers),
     ...result,
     certificateNo: result.passed ? certificateNo(id) : '',
     submittedAt,

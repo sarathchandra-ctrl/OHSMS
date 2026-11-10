@@ -6,10 +6,11 @@
 // earns a certificate.
 // ─────────────────────────────────────────────────────────────────────────────
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { QRCodeCanvas } from 'qrcode.react'
 import toast from 'react-hot-toast'
 import {
-  ClipboardCheck, Plus, Pencil, Trash2, Copy, Download, RefreshCw, Lock, Unlock, X,
+  ClipboardCheck, Plus, Pencil, Trash2, Copy, Download, RefreshCw, Lock, Unlock, X, ListChecks,
 } from 'lucide-react'
 import {
   PageHeader, Field, Input, Textarea, Button, IconButton, Modal, Badge, EmptyState, SkeletonTable,
@@ -156,6 +157,7 @@ export default function Quizzes() {
                     {(q.questions || []).length} questions · {c.total} response{c.total === 1 ? '' : 's'} · {c.passed} passed
                   </p>
                   <div className="mt-3 flex flex-wrap gap-2">
+                    <Button as={Link} to={`/training/quiz/${q.id}`} size="sm" icon={ListChecks}>Results</Button>
                     <Button size="sm" variant="soft" icon={Pencil} onClick={() => openEdit(q)}>Edit</Button>
                     <Button size="sm" variant="soft" icon={q.active ? Lock : Unlock}
                       onClick={() => run(() => setQuizActive(q, !q.active, actor), q.active ? 'Quiz closed' : 'Quiz reopened')}>

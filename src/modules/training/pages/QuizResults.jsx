@@ -4,13 +4,14 @@
 // fail, and for a pass the certificate. Managers only (stack/policy.mjs).
 // ─────────────────────────────────────────────────────────────────────────────
 import { useEffect, useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { Award, Download, ListChecks, Search, Trash2 } from 'lucide-react'
 import {
   PageHeader, Field, Input, Select, Button, IconButton, Badge, EmptyState, SkeletonTable, Modal,
 } from '../../../shared/ui'
 import { useAuth } from '../../../shared/auth/AuthContext'
 import { toastCaught } from '../../../shared/lib/toastCaught'
-import { formatDate } from '../../../shared/lib/format'
+import { formatDateTime } from '../../../shared/lib/format'
 import QuizCertificate from '../components/QuizCertificate'
 import {
   QUIZ_PASS_PERCENT, deleteQuizResponse, responsesCsv, subscribeQuizResponses, subscribeQuizzes,
@@ -113,8 +114,10 @@ export default function QuizResults() {
             <tbody>
               {shown.map((r) => (
                 <tr key={r.id} className="border-t border-ink-100">
-                  <td className="px-4 py-2 text-ink-600">{formatDate(r.submittedAt)}</td>
-                  <td className="px-4 py-2">{r.quizTitle}</td>
+                  <td className="whitespace-nowrap px-4 py-2 text-ink-600">{formatDateTime(r.submittedAt)}</td>
+                  <td className="px-4 py-2">
+                    <Link className="font-semibold text-brand-700 hover:underline" to={`/training/quiz/${r.quizId}`}>{r.quizTitle}</Link>
+                  </td>
                   <td className="px-4 py-2 font-mono text-xs">{r.employeeId}</td>
                   <td className="px-4 py-2 font-semibold text-ink-900">{r.name}</td>
                   <td className="px-4 py-2">{r.centerName}</td>
