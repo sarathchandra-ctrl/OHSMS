@@ -15,8 +15,16 @@
 
 export const ROLES = [
   { key: 'admin', label: 'Admin', desc: 'Full access incl. users, roles and settings.' },
-  { key: 'manager', label: 'Manager / Safety Officer', desc: 'Approve, close, delete and manage sites.' },
-  { key: 'member', label: 'Member', desc: 'Create and edit records across modules.' },
+  {
+    key: 'manager',
+    label: 'Manager / Safety Officer',
+    desc: 'Every module, for the regions, entities and sites assigned. Cannot manage employees or permissions.',
+  },
+  {
+    key: 'member',
+    label: 'Employee',
+    desc: 'The modules and sites they are given; several sites may be assigned.',
+  },
   { key: 'auditor', label: 'Auditor', desc: 'Read-only access across all modules.' },
 ]
 export const ROLE_BY_KEY = Object.fromEntries(ROLES.map((r) => [r.key, r]))

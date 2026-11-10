@@ -1,5 +1,14 @@
 import { describe, it, expect } from 'vitest'
-import { resolveAccessibleSites, regionsOf, entitiesOf, accessSummary } from './access'
+import {
+  resolveAccessibleSites,
+  regionsOf,
+  entitiesOf,
+  accessSummary,
+  grantedModuleKeys,
+  canUseModule,
+  personalModuleMap,
+  sitesInSelection,
+} from './access'
 
 const sites = [
   { id: 's1', name: 'North Plant', region: 'North', entity: 'Acme Mfg' },
@@ -71,5 +80,63 @@ describe('resolveAccessibleSites — site/region/entity scoping', () => {
     expect(accessSummary({ sites: ['s1'], regions: [], entities: [] }, sites)).toMatch(/1 site/)
     expect(accessSummary({ sites: [], regions: ['North'], entities: [] })).toMatch(/1 region/)
     expect(accessSummary({ sites: [], regions: [], entities: [] })).toBe('No access')
+  })
+})
+
+describe('module permissions', () => {
+  const map = { incidents: true, hira: true, loto: false }
+
+  it('gives admins, managers and auditors every module the organization has', () => {
+    for (const role of ['admin', 'manager', 'auditor']) {
+      const u = { role, access: { modules: ['incidents'] } }
+      expect(grantedModuleKeys(u)).toBe(null)
+      expect(personalModuleMap(map, u)).toBe(map)
+    }
+  })
+
+  it('limits an employee to the granted modules', () => {
+    const u = { role: 'member', access: { modules: ['hira'] } }
+    expect(canUseModule(u, 'hira')).toBe(true)
+    expect(canUseModule(u, 'incidents')).toBe(false)
+    expect(personalModuleMap(map, u)).toEqual({ incidents: false, hira: true, loto: false })
+  })
+
+  it('never grants a module the organization switched off', () => {
+    const u = { role: 'member', access: { modules: ['loto'] } }
+    expect(personalModuleMap(map, u).loto).toBe(false)
+  })
+
+  it('reads a missing list as every module, and an empty list as none', () => {
+    expect(personalModuleMap(map, { role: 'member', access: {} })).toBe(map)
+    expect(personalModuleMap(map, { role: 'member', access: { modules: [] } })).toEqual({
+      incidents: false,
+      hira: false,
+      loto: false,
+    })
+  })
+
+  it('treats an unknown role as an employee, not as a manager', () => {
+    expect(canUseModule({ role: 'owner', access: { modules: [] } }, 'hira')).toBe(false)
+  })
+})
+
+describe('sitesInSelection', () => {
+  const list = [
+    { id: 'a', region: 'North', entity: 'E1' },
+    { id: 'b', region: 'North', entity: 'E2' },
+    { id: 'c', region: 'South', entity: 'E1' },
+  ]
+  const ids = (sel) => sitesInSelection(list, sel).map((s) => s.id)
+
+  it('returns everything when every field is All', () => {
+    expect(ids({})).toEqual(['a', 'b', 'c'])
+    expect(ids({ region: 'all', entity: 'all', siteId: 'all' })).toEqual(['a', 'b', 'c'])
+  })
+
+  it('narrows by region, entity and site together', () => {
+    expect(ids({ region: 'North' })).toEqual(['a', 'b'])
+    expect(ids({ entity: 'E1' })).toEqual(['a', 'c'])
+    expect(ids({ region: 'North', entity: 'E1' })).toEqual(['a'])
+    expect(ids({ region: 'South', siteId: 'a' })).toEqual([])
   })
 })

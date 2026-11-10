@@ -67,3 +67,60 @@ export function accessSummary(scope, sites = []) {
   if (s.length) parts.push(`${s.length} site${s.length === 1 ? '' : 's'}${s.length <= 2 ? ` (${s.map(nameOf).join(', ')})` : ''}`)
   return parts.join(' · ')
 }
+
+// ── Module permissions ──────────────────────────────────────────────────────
+// Which modules a person may open, on top of what the organization has
+// (entitlements). Admins, managers and auditors see every module the
+// organization has; an employee (`member`) sees the ones granted in
+// `access.modules`.
+//
+// ABSENT MEANS EVERY MODULE, the same rule entitlements use and for the same
+// reason: every employee profile written before this field existed has no
+// `access.modules`, and reading that as "none" would have emptied the portal
+// for all of them the day this shipped. An admin narrows it by saving a list;
+// an empty list is a deliberate "no modules".
+//
+// `access` is a privileged field (stack/policy.mjs, users_keep_privilege), so
+// only an admin can change this list. It is not yet enforced per collection on
+// the server: like site scope, it decides what the app offers.
+const ALL_MODULE_ROLES = ['admin', 'manager', 'auditor']
+
+/** null = every module; otherwise the Set of module keys this person may open. */
+export function grantedModuleKeys(user) {
+  if (ALL_MODULE_ROLES.includes(user?.role)) return null
+  const list = user?.access?.modules
+  return Array.isArray(list) ? new Set(list) : null
+}
+
+/** May this person open module `key`? (Entitlement is checked separately.) */
+export function canUseModule(user, key) {
+  const granted = grantedModuleKeys(user)
+  return granted === null || granted.has(key)
+}
+
+/**
+ * The entitlement map narrowed to this person's module permissions, so every
+ * screen that already reads the map (portal, dashboard, field grid, route
+ * gate, alert feed) follows the permission without its own check.
+ */
+export function personalModuleMap(moduleMap, user) {
+  const granted = grantedModuleKeys(user)
+  if (granted === null) return moduleMap
+  return Object.fromEntries(
+    Object.entries(moduleMap || {}).map(([key, on]) => [key, on && granted.has(key)])
+  )
+}
+
+/**
+ * Sites matching a Region / Entity / Site selection, where '' or 'all' in a
+ * field means no restriction on it. Used by the portal's scope pickers.
+ */
+export function sitesInSelection(sites, { region = 'all', entity = 'all', siteId = 'all' } = {}) {
+  const any = (v) => !v || v === 'all'
+  return arr(sites).filter(
+    (s) =>
+      (any(region) || s.region === region) &&
+      (any(entity) || s.entity === entity) &&
+      (any(siteId) || s.id === siteId)
+  )
+}

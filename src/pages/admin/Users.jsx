@@ -7,6 +7,7 @@ import {
   subscribeOrgUsers, setUserStatus, setUserRole, setUserAccess, grantAccessRequest, subscribeSites,
 } from '../../shared/org/orgData'
 import { ROLES, roleLabel } from '../../shared/auth/permissions'
+import { enabledModules } from '../../shared/modules/entitlements'
 import {
   orgDepartments, regionsOf, entitiesOf, resolveAccessibleSites, accessSummary, hasPendingAccessRequest,
 } from '../../shared/auth/access'
@@ -21,11 +22,12 @@ const STATUS_TONE = { approved: 'green', pending: 'amber', suspended: 'red' }
 const emptyScope = { sites: [], regions: [], entities: [] }
 
 export default function Users() {
-  const { actor, user, org } = useAuth()
+  const { actor, user, org, orgModuleMap } = useAuth()
   const [users, setUsers] = useState(null)
   const [sites, setSites] = useState([])
   const [manage, setManage] = useState(null) // user being managed | null
-  const [form, setForm] = useState({ role: 'member', department: '', ...emptyScope })
+  // form.modules: null = every module (the stored field is absent), else a list.
+  const [form, setForm] = useState({ role: 'member', department: '', modules: null, ...emptyScope })
   const [busy, setBusy] = useState(false)
 
   useEffect(() => {
@@ -43,6 +45,11 @@ export default function Users() {
   const regions = useMemo(() => regionsOf(sites), [sites])
   const entities = useMemo(() => entitiesOf(sites), [sites])
   const siteOptions = useMemo(() => sites.map((s) => ({ value: s.id, label: s.name })), [sites])
+  // Only the modules this organization has can be granted.
+  const moduleOptions = useMemo(
+    () => enabledModules(orgModuleMap).map((m) => ({ value: m.key, label: m.label })),
+    [orgModuleMap]
+  )
 
   const approve = async (u) => wrap(() => setUserStatus(u.uid, 'approved', actor, u.name), `${u.name} approved`)
   const suspend = async (u) => wrap(() => setUserStatus(u.uid, 'suspended', actor, u.name), `${u.name} suspended`)
@@ -60,7 +67,7 @@ export default function Users() {
   }
   const changeRole = async (u, role) => wrap(() => setUserRole(u.uid, role, actor, u.name), `${u.name} → ${roleLabel(role)}`)
   const grantRequest = async (u) =>
-    wrap(() => grantAccessRequest(u.uid, u.accessRequest, actor, u.name), `Access granted to ${u.name}`)
+    wrap(() => grantAccessRequest(u.uid, u.accessRequest, actor, u.name, u.access?.modules), `Access granted to ${u.name}`)
 
   async function wrap(fn, ok) {
     try { await fn(); toast.success(ok) } catch (e) { toastCaught(e, 'Failed') }
@@ -74,6 +81,7 @@ export default function Users() {
       sites: a.sites || [],
       regions: a.regions || [],
       entities: a.entities || [],
+      modules: Array.isArray(a.modules) ? a.modules : null,
     })
     setManage(u)
   }
@@ -100,7 +108,17 @@ export default function Users() {
       }
       await setUserAccess(
         manage.uid,
-        { department: form.department, access: { sites: form.sites, regions: form.regions, entities: form.entities } },
+        {
+          department: form.department,
+          access: {
+            sites: form.sites,
+            regions: form.regions,
+            entities: form.entities,
+            // Kept for every role, so a manager moved back to employee gets
+            // the list they had rather than every module.
+            ...(form.modules ? { modules: form.modules } : {}),
+          },
+        },
         actor, manage.name
       )
       toast.success(`Access updated for ${manage.name}`)
@@ -229,6 +247,11 @@ export default function Users() {
                         <span className="text-xs text-ink-600">
                           {u.role === 'admin' ? 'All sites (admin)' : accessSummary(u.access, sites)}
                         </span>
+                        {(u.role || 'member') === 'member' && Array.isArray(u.access?.modules) && (
+                          <span className="text-xs text-ink-400">
+                            {u.access.modules.length} module{u.access.modules.length === 1 ? '' : 's'}
+                          </span>
+                        )}
                         {reqPending && <Badge tone="violet">Requested: {accessSummary(u.accessRequest, sites)}</Badge>}
                       </div>
                     </td>
@@ -336,6 +359,39 @@ export default function Users() {
                 <MultiSelect options={siteOptions} value={form.sites} onChange={(s) => setForm({ ...form, sites: s })} empty="No sites yet" />
               </Field>
             </div>
+
+            {form.role === 'member' ? (
+              <fieldset className="space-y-2">
+                <legend className="label">
+                  Modules{form.modules ? ` (${form.modules.length} of ${moduleOptions.length})` : ''}
+                </legend>
+                <label className="flex items-center gap-2 text-sm text-ink-700">
+                  <input
+                    type="checkbox"
+                    checked={!form.modules}
+                    onChange={(e) =>
+                      setForm({
+                        ...form,
+                        modules: e.target.checked ? null : moduleOptions.map((o) => o.value),
+                      })
+                    }
+                  />
+                  All modules, including ones added later
+                </label>
+                {form.modules && (
+                  <MultiSelect
+                    options={moduleOptions}
+                    value={form.modules}
+                    onChange={(modules) => setForm({ ...form, modules })}
+                    empty="This organization has no modules enabled"
+                  />
+                )}
+              </fieldset>
+            ) : (
+              <p className="text-xs text-ink-500">
+                {roleLabel(form.role)} sees every module the organization has.
+              </p>
+            )}
 
             <div className="well rounded-2xl p-3 text-sm">
               <span className="font-medium text-ink-600">Resolves to </span>

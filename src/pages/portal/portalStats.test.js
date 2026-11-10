@@ -21,6 +21,12 @@ describe('scopeIds', () => {
   it('is empty when the id is not one the viewer can see', () => {
     expect(scopeIds(SITES, 'sX').size).toBe(0)
   })
+
+  // A Region / Entity pick arrives as a list of ids. It must still be limited
+  // to sites the viewer can see — a list is not a grant.
+  it('narrows to a list of ids, dropping any the viewer cannot see', () => {
+    expect([...scopeIds(SITES, ['s2', 'sX'])]).toEqual(['s2'])
+  })
 })
 
 describe('portalStats counts', () => {
@@ -143,6 +149,13 @@ describe('pendingWork', () => {
     { key: 'a3', title: 'Already done', owner: 'Ravi Kumar', due: '2026-08-01', norm: 'done', siteId: 's1', sourceLabel: 'Incident' },
     { key: 'a4', title: 'No date', owner: '', due: '', norm: 'open', siteId: 's1', sourceLabel: 'Audit' },
   ]
+
+  it('leaves out site-less work when the view is narrowed to a list of sites', () => {
+    const loose = [...actions, { key: 'a5', title: 'Nowhere', owner: '', due: '', norm: 'open', sourceLabel: 'Audit' }]
+    expect(pendingWork({ sites: SITES, actions: loose, users, today: TODAY }).actions.map((a) => a.key)).toContain('a5')
+    const narrowed = pendingWork({ sites: SITES, siteId: ['s1', 's2'], actions: loose, users, today: TODAY })
+    expect(narrowed.actions.map((a) => a.key)).not.toContain('a5')
+  })
 
   it('excludes finished work', () => {
     const r = pendingWork({ sites: SITES, actions, users, today: TODAY })

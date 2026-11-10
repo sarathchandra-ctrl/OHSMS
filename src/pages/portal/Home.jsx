@@ -20,6 +20,7 @@ import {
   Settings,
   BarChart3,
   Wrench,
+  Network,
 } from 'lucide-react'
 import { useAuth } from '../../shared/auth/AuthContext'
 import {
@@ -30,6 +31,7 @@ import {
   collectionsAnswered,
 } from '../../shared/org/orgData'
 import { useAccessibleSitesRead } from '../../shared/org/useAccessibleSites'
+import { regionsOf, entitiesOf, sitesInSelection } from '../../shared/auth/access'
 import { subscribeActions, NORM_BY_KEY, SOURCES } from '../../modules/actions/lib/sources'
 import { subscribeAssignmentsRead } from '../../modules/training/lib/firestore'
 import { INCIDENT_TYPE_BY_KEY } from '../../modules/incidents/lib/constants'
@@ -219,7 +221,9 @@ export default function PortalHome() {
   const { sites, status: sitesStatus } = useAccessibleSitesRead()
   const { keys: widgetKeys, save: saveWidgets } = useWidgetPrefs()
 
-  const [siteId, setSiteId] = useState('all')
+  // Region / Entity / Site, each 'all' or one value. Options come only from
+  // the sites this person may see, so a pick can never widen their scope.
+  const [scope, setScope] = useState({ region: 'all', entity: 'all', siteId: 'all' })
   const [store, setStore] = useState(() => emptyCollections(COLLECTIONS))
   const [assignments, setAssignments] = useState({ rows: [], status: 'pending' })
   const [users, setUsers] = useState({ rows: [], status: 'pending' })
@@ -267,9 +271,26 @@ export default function PortalHome() {
   const equipmentReady = ['extinguishers', 'aeds', 'fas'].every((n) => readReady(colStatus[n]))
   const trainingReady = assignmentsReady && usersReady
 
-  // A filter pointing at a site the viewer lost access to would silently show
-  // zeros, so fall back to everything rather than to an empty scope.
-  const activeSite = sites.some((s) => s.id === siteId) ? siteId : 'all'
+  // A pick the viewer can no longer see (access removed, or an earlier pick
+  // changed) would silently show zeros, so each falls back to All instead.
+  // Each level's options are narrowed by the levels before it.
+  const regionOptions = useMemo(() => regionsOf(sites), [sites])
+  const region = regionOptions.includes(scope.region) ? scope.region : 'all'
+  const entityOptions = useMemo(() => entitiesOf(sitesInSelection(sites, { region })), [sites, region])
+  const entity = entityOptions.includes(scope.entity) ? scope.entity : 'all'
+  const siteOptions = useMemo(() => sitesInSelection(sites, { region, entity }), [sites, region, entity])
+  const pickedSite = siteOptions.some((s) => s.id === scope.siteId) ? scope.siteId : 'all'
+  const scopedSites = useMemo(
+    () => sitesInSelection(sites, { region, entity, siteId: pickedSite }),
+    [sites, region, entity, pickedSite]
+  )
+  const narrowed = region !== 'all' || entity !== 'all' || pickedSite !== 'all'
+  // 'all' only when nothing is picked: a narrowed view must leave out records
+  // that carry no site (see scopeIds).
+  const activeSite = useMemo(
+    () => (narrowed ? scopedSites.map((s) => s.id) : 'all'),
+    [narrowed, scopedSites]
+  )
 
   const stats = useMemo(
     () =>
@@ -329,9 +350,11 @@ export default function PortalHome() {
   const firstName = (profile?.name || '').split(' ')[0] || 'there'
   const scopeLabel = !sitesReady
     ? 'your sites'
-    : activeSite === 'all'
-      ? `${sites.length} site${sites.length === 1 ? '' : 's'} you can see`
-      : sites.find((s) => s.id === activeSite)?.name
+    : pickedSite !== 'all'
+      ? sites.find((s) => s.id === pickedSite)?.name
+      : `${scopedSites.length} site${scopedSites.length === 1 ? '' : 's'}${
+          narrowed ? ` in ${[entity, region].filter((v) => v !== 'all').join(', ')}` : ' you can see'
+        }`
 
   // Everything a widget can ask for, already scoped. Widgets read from this
   // rather than from the raw collections, so none of them can reach around the
@@ -433,28 +456,33 @@ export default function PortalHome() {
 
         <Raised className="flex flex-col gap-3 p-5">
           <SectionLabel className="tracking-[0.14em]">Viewing</SectionLabel>
-          <label className="sr-only" htmlFor="site-scope">
-            Site
-          </label>
-          <div className="relative">
-            <MapPin
-              size={15}
-              className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-400"
-            />
-            <select
-              id="site-scope"
-              value={activeSite}
-              onChange={(e) => setSiteId(e.target.value)}
-              className="input w-full appearance-none py-3 pl-10 text-[13.5px] font-semibold"
-            >
-              <option value="all">All my sites{sitesReady ? ` (${sites.length})` : ''}</option>
-              {sites.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.name}
-                </option>
-              ))}
-            </select>
-          </div>
+          <ScopeSelect
+            id="region-scope"
+            label="Region"
+            icon={MapPin}
+            value={region}
+            allLabel={`All regions${sitesReady ? ` (${regionOptions.length})` : ''}`}
+            options={regionOptions.map((r) => ({ value: r, label: r }))}
+            onChange={(v) => setScope({ region: v, entity: 'all', siteId: 'all' })}
+          />
+          <ScopeSelect
+            id="entity-scope"
+            label="Entity"
+            icon={Network}
+            value={entity}
+            allLabel={`All entities${sitesReady ? ` (${entityOptions.length})` : ''}`}
+            options={entityOptions.map((e) => ({ value: e, label: e }))}
+            onChange={(v) => setScope({ region, entity: v, siteId: 'all' })}
+          />
+          <ScopeSelect
+            id="site-scope"
+            label="Site"
+            icon={Building2}
+            value={pickedSite}
+            allLabel={`All sites${sitesReady ? ` (${siteOptions.length})` : ''}`}
+            options={siteOptions.map((s) => ({ value: s.id, label: s.name }))}
+            onChange={(v) => setScope({ region, entity, siteId: v })}
+          />
           {!sitesReady ? (
             <div>
               <Skeleton className="h-3 w-56 max-w-full" />
@@ -463,7 +491,7 @@ export default function PortalHome() {
             <p className="text-[11.5px] leading-relaxed text-ink-400">
               {sites.length === 0
                 ? 'No sites are mapped to you yet, so these figures cover nothing. Ask an admin to map your site.'
-                : 'Every figure on this page is limited to the sites your account can see.'}
+                : 'Only the regions, entities and sites your account can see are listed. Every figure on this page follows this selection.'}
             </p>
           )}
           {actionsReady && open.length > 0 && (
@@ -501,7 +529,7 @@ export default function PortalHome() {
         keys={widgetKeys}
         onSave={saveWidgets}
         data={widgetData}
-        sites={sitesReady ? sites : null}
+        sites={sitesReady ? scopedSites : null}
       />
 
       <div className="mb-6 grid gap-4 lg:grid-cols-2">
@@ -730,6 +758,37 @@ function DueList({ rows, empty, meta, loading }) {
         </li>
       ))}
     </ul>
+  )
+}
+
+/** One level of the portal's Region / Entity / Site scope. */
+function ScopeSelect({ id, label, icon: Icon, value, allLabel, options, onChange }) {
+  return (
+    <div>
+      <label className="mb-1 block text-[11px] font-semibold text-ink-500" htmlFor={id}>
+        {label}
+      </label>
+      <div className="relative">
+        <Icon
+          size={15}
+          aria-hidden="true"
+          className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-400"
+        />
+        <select
+          id={id}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          className="input w-full appearance-none py-2.5 pl-10 text-[13.5px] font-semibold"
+        >
+          <option value="all">{allLabel}</option>
+          {options.map((o) => (
+            <option key={o.value} value={o.value}>
+              {o.label}
+            </option>
+          ))}
+        </select>
+      </div>
+    </div>
   )
 }
 

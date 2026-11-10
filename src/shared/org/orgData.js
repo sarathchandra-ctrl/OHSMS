@@ -501,11 +501,20 @@ const cleanScope = (scope = {}) => ({
   entities: Array.isArray(scope.entities) ? scope.entities : [],
 })
 
+// A granted scope also carries the employee's module list. It is kept only
+// when it is a list: absent means "every module" (see grantedModuleKeys), and
+// writing [] in its place would take every module away.
+const cleanAccess = (access = {}) => {
+  const scope = cleanScope(access)
+  if (Array.isArray(access.modules)) scope.modules = [...new Set(access.modules.filter(Boolean))]
+  return scope
+}
+
 /** Admin sets a user's department + granted access scope (and clears any request). */
 export async function setUserAccess(uid, { department, access }, actor, userLabel) {
   await updateDoc(userRef(uid), {
     department: department || '',
-    access: cleanScope(access),
+    access: cleanAccess(access),
     accessRequest: null,
   })
   await logAudit(actor, AUDIT.USER_ROLE, {
@@ -542,9 +551,11 @@ export async function requestAccess(uid, { department, scope }, actor) {
 }
 
 /** Admin applies a user's pending request → grant, then clears the request. */
-export async function grantAccessRequest(uid, request, actor, userLabel) {
+// `modules` is the person's current module list. A request is about sites
+// only, so granting one must not reset which modules they may open.
+export async function grantAccessRequest(uid, request, actor, userLabel, modules) {
   await updateDoc(userRef(uid), {
-    access: cleanScope(request),
+    access: cleanAccess({ ...cleanScope(request), modules }),
     accessRequest: null,
   })
   await logAudit(actor, AUDIT.USER_ROLE, {

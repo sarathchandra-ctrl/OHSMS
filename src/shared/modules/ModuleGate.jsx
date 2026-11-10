@@ -20,7 +20,7 @@ import ModuleLoading from '../layout/ModuleLoading'
 import { AccessDenied, Button } from '../ui'
 
 export default function ModuleGate({ moduleKey, children }) {
-  const { moduleEnabled, modulesReady } = useAuth()
+  const { moduleEnabled, orgModuleEnabled, modulesReady } = useAuth()
 
   // Entitlements default to "everything on", so rendering the module while the
   // document is still in flight would flash it into view and then take it away.
@@ -29,6 +29,22 @@ export default function ModuleGate({ moduleKey, children }) {
   if (moduleEnabled(moduleKey)) return children
 
   const mod = MODULE_BY_KEY[moduleKey]
+
+  // The organization has the module; this person has not been given it.
+  // Different cause, different person to ask.
+  if (orgModuleEnabled(moduleKey)) {
+    return (
+      <AccessDenied
+        title={`You do not have access to ${mod?.title || 'this module'}`}
+        description="Your account has not been given this module. Ask your administrator to add it to your permissions."
+        action={
+          <Button as={Link} to="/portal" className="mt-2">
+            Back to home
+          </Button>
+        }
+      />
+    )
+  }
 
   return (
     <AccessDenied

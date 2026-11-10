@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, useCallback } from 'react'
+import { createContext, useContext, useEffect, useMemo, useState, useCallback } from 'react'
 import { clearKeyring } from '../crypto'
 import { clearSharedSubscriptions } from '../org/sharedSubscription'
 import { startSession, endSession } from './sessionConstants'
@@ -8,6 +8,7 @@ import {
   isModuleEnabled,
 } from '../modules/entitlements'
 import { getUserProfile, subscribeOrg } from '../org/orgData'
+import { personalModuleMap } from './access'
 import {
   clearAccessToken,
   currentAccessToken,
@@ -117,6 +118,10 @@ export function AuthProvider({ children }) {
   }
 
   const role = profile?.role || null
+  // What this person may open: the organization's modules, narrowed to the
+  // ones granted to them. Every screen reads this map, so the sidebar, portal
+  // grid and route gate all follow the grant.
+  const personalMap = useMemo(() => personalModuleMap(moduleMap, profile), [moduleMap, profile])
   const value = {
     user,
     profile,
@@ -128,9 +133,11 @@ export function AuthProvider({ children }) {
     isAdmin: role === 'admin',
     isManager: role === 'admin' || role === 'manager',
     isReadOnly: role === 'auditor',
-    moduleMap,
+    moduleMap: personalMap,
+    orgModuleMap: moduleMap,
     modulesReady,
-    moduleEnabled: (key) => isModuleEnabled(moduleMap, key),
+    moduleEnabled: (key) => isModuleEnabled(personalMap, key),
+    orgModuleEnabled: (key) => isModuleEnabled(moduleMap, key),
     orgName: org?.name || '',
     actor: { uid: user?.uid, name: profile?.name || 'Unknown' },
     login,

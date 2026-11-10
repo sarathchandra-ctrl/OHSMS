@@ -19,12 +19,15 @@ const SIGNAGE_OK = new Set(['deployed'])
 
 /**
  * Which asset site-ids are in scope.
- * `siteId` of 'all' means every site the viewer can see.
+ * `siteId` of 'all' means every site the viewer can see; a list of ids is a
+ * Region / Entity selection (still limited to sites the viewer can see).
+ * Only 'all' counts records that carry no site at all — a narrowed view
+ * must never show work that might belong somewhere else.
  */
 export function scopeIds(sites = [], siteId = 'all') {
-  return new Set(
-    siteId === 'all' ? sites.map((s) => s.id) : sites.filter((s) => s.id === siteId).map((s) => s.id)
-  )
+  if (siteId === 'all') return new Set(sites.map((s) => s.id))
+  const wanted = new Set(Array.isArray(siteId) ? siteId : [siteId])
+  return new Set(sites.filter((s) => wanted.has(s.id)).map((s) => s.id))
 }
 
 const inScope = (rec, links, ids) => {
