@@ -484,3 +484,83 @@ describe('module permission', () => {
     expect(await as('memberA').get('extinguishers', 'mx1')).toMatchObject({ status: 'ok' })
   })
 })
+
+// The public QR mirrors: readable by token, without an account — and nothing
+// more. The token is the capability; a list would hand out all of them.
+describe('public QR mirrors', () => {
+  beforeAll(async () => {
+    await seed('qr', 'tok-a', { extId: 'x1', token: 'tok-a', status: 'active' })
+    await seed('permitQr', 'ptok-a', { permitId: 'p1', token: 'ptok-a', site: 'Bay 3' })
+    await seed('procedureQr', 'proc-a', { title: 'Isolate pump', points: [] })
+    await seed('qr', 'tok-legacy', { extId: 'x2', token: 'tok-legacy', legacyNote: 'from before' })
+  })
+  const denied = { code: 'permission-denied' }
+
+  it('answers a get by token and refuses every list, signed in or not', async () => {
+    for (const uid of ['', 'memberA', 'adminA']) {
+      const who = as(uid)
+      expect(await who.get('qr', 'tok-a'), uid).toMatchObject({ status: 'active' })
+      expect(await who.list('qr'), uid).toEqual([])
+      expect(await who.list('permitQr'), uid).toEqual([])
+      expect(await who.list('procedureQr'), uid).toEqual([])
+    }
+  })
+
+  it('refuses a field the mirror builders never write', async () => {
+    const m = as('memberA')
+    await expect(m.update('qr', 'tok-a', { ownerPhone: '555-0100' })).rejects.toMatchObject(denied)
+    await expect(m.set('permitQr', 'ptok-new', { permitId: 'p2', participants: ['A Name'] })).rejects.toMatchObject(denied)
+    await expect(
+      m.update('procedureQr', 'proc-a', { points: [{ key: 'P1', lockedBy: 'A Name' }] })
+    ).rejects.toMatchObject(denied)
+    expect(await adminEngine.get(null, 'qr', 'tok-a')).not.toHaveProperty('ownerPhone')
+  })
+
+  it('accepts what the builders write, and lets an old mirror be corrected', async () => {
+    const m = as('memberA')
+    await m.update('qr', 'tok-a', { status: 'to_be_refilled', centerName: 'Depot' })
+    await m.update('procedureQr', 'proc-a', { points: [{ key: 'P1', locked: true }], pointCount: 1 })
+    // A key already on the document does not block a fix to the others.
+    await m.update('qr', 'tok-legacy', { status: 'active' })
+  })
+})
+
+// Writes every employee makes on rows somebody else created: the record-number
+// counters, LOTO lock state, and completing an assigned inspection.
+describe('employee: shared work rows', () => {
+  beforeAll(async () => {
+    await seed('docSeq', 'incident', { n: 7 })
+    await seed('procedures', 'pr1', { title: 'Pump', status: 'approved', createdBy: 'adminA', isolationPoints: [] })
+    await seed('inspectionTemplates', 'it1', {
+      title: 'Monthly',
+      createdBy: 'adminA',
+      assignments: [{ id: 'as1', assignee: 'Mo', status: 'Pending' }],
+    })
+  })
+  const denied = { code: 'permission-denied' }
+
+  it('draws the next record number, but never moves a counter back', async () => {
+    const m = as('memberA')
+    await m.set('docSeq', 'incident', { n: 8 })
+    await expect(m.set('docSeq', 'incident', { n: 3 })).rejects.toMatchObject(denied)
+  })
+
+  it('applies a lock to a procedure, but cannot approve or reject one', async () => {
+    const m = as('memberA')
+    await m.update('procedures', 'pr1', { lockSummary: { status: 'locked', lockedCount: 1 } })
+    await expect(m.update('procedures', 'pr1', { status: 'rejected' })).rejects.toMatchObject(denied)
+  })
+
+  it('completes an assigned inspection without being able to change the assignment', async () => {
+    const m = as('memberA')
+    const assignments = (await adminEngine.get(null, 'inspectionTemplates', 'it1')).assignments
+    await m.update('inspectionTemplates', 'it1', {
+      assignments: [{ ...assignments[0], status: 'Completed' }],
+      updatedAt: '2026-11-10',
+    })
+    await expect(
+      m.update('inspectionTemplates', 'it1', { assignments: [{ ...assignments[0], assignee: 'Someone else' }] })
+    ).rejects.toMatchObject(denied)
+    await expect(m.update('inspectionTemplates', 'it1', { title: 'Renamed', updatedAt: 'x' })).rejects.toMatchObject(denied)
+  })
+})

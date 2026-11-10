@@ -170,6 +170,9 @@ function scopeSql(path, ctx, params) {
   if (scope === 'none') return null
   if (scope === 'all') return ''
   if (scope === 'all-but-crypto') return " AND id != 'cryptoKeys'"
+  // Read by id only (the public QR mirrors): a get is answered, a list or a
+  // count is not.
+  if (scope === 'get-only') return null
   if (scope.ownedBy) {
     // The same two fields policy.ownedBy reads, so a list and a get agree.
     params.push(scope.ownedBy, scope.ownedBy)

@@ -154,7 +154,12 @@ export function readScope(path, ctx) {
   if (moduleBlocked(path, ctx)) return ctx.uid ? { ownedBy: ctx.uid } : 'none'
   // gate_password: a temporary password reaches nothing but the person's own profile.
   if (!passwordOk(ctx)) return path === 'users' && ctx.uid ? { onlyId: ctx.uid } : 'none'
-  if (isApproved(ctx) || PUBLIC_MIRRORS.includes(path)) {
+  // The public QR mirrors are read one at a time, by the token printed on the
+  // sticker, and never listed — by anyone. The token is the capability: it is
+  // what lets an anonymous defect report or permit observation through, so a
+  // list would hand every token to whoever asked, signed in or not.
+  if (PUBLIC_MIRRORS.includes(path)) return 'get-only'
+  if (isApproved(ctx)) {
     return collectionOf(path) === 'cryptoKeys'
       ? 'none'
       : collectionOf(path) === 'meta'
@@ -170,6 +175,7 @@ export function canRead(path, id, ctx, row) {
   const scope = readScope(path, ctx)
   if (scope === 'all') return true
   if (scope === 'all-but-crypto') return !isCryptoKey(path, id)
+  if (scope === 'get-only') return true
   if (scope === 'none') return false
   if (scope.ownedBy) return ownedBy(row, scope.ownedBy)
   return id === scope.onlyId
@@ -225,13 +231,22 @@ const FIELD_COLLECTIONS = [
   'cctvMeraki',
   'qr',
   'defectLocks',
+  // Counters every new record draws its number from (src/shared/docId,
+  // the LOTO permit sequence). Forward-only: see invariantProblem.
   'meta',
+  'docSeq',
   // Carrying out isolation and permit work: technicians apply and remove
   // locks on permits others raised. Approving stays gated (DECISION_STATES).
   'lotoPermits',
   'locks',
   'lotoEvents',
   'lotoGroupNumbers',
+  // Applying a lock writes the procedure's lock state, its public mirror and
+  // the claim on the padlock number. Approving a procedure stays gated.
+  'procedures',
+  'procedurePhotos',
+  'procedureQr',
+  'lockClaims',
   'permits',
   'permitQr',
 ]
@@ -260,12 +275,19 @@ export function isClosing(prev, next) {
   return closes && keys.every((k) => STATUS_FIELD.test(k) || CLOSE_DETAIL.test(k))
 }
 
-/** Only the status (and closing detail) of items in a list changes; none added or removed. */
+const STAMP_FIELD = /^updated/i
+
+/**
+ * Only the status (and closing detail) of items in a list changes; none added
+ * or removed. An `updatedAt`-style stamp may change beside it — completing an
+ * assigned inspection writes one.
+ */
 export function isActionStatusChange(prev, next) {
   const keys = changedKeys(prev, next)
+  const lists = keys.filter((k) => !STAMP_FIELD.test(k))
   return (
-    keys.length > 0 &&
-    keys.every((k) => {
+    lists.length > 0 &&
+    lists.every((k) => {
       const a = prev?.[k]
       const b = next?.[k]
       return (
@@ -495,6 +517,58 @@ export function decisionChanged(path, prev, next) {
   return ''
 }
 
+// ── What a public mirror may carry ──────────────────────────────────────────
+// qr, permitQr and procedureQr are read by anyone holding a token, without an
+// account. Each may carry only the fields its builder writes (fire/lib/data.js
+// mirror builders, ptw/lib/publicPermit.js, loto/utils/publicProcedure.js), so
+// a writer cannot publish anything else — a name, a phone number, a note — to
+// strangers. On an update, keys already on the document are tolerated so an
+// old mirror can still be corrected; new ones are not. (S-27: the LOTO
+// procedure mirror exists precisely to show isolation state without names.)
+export const MIRROR_FIELDS = {
+  qr: [
+    'orgId', 'orgName', 'token', 'status', 'updatedAt', 'centerName', 'region', 'entity',
+    'location', 'extId', 'serialNo', 'type', 'capacity', 'physicalDefects', 'deletedAt',
+    'dateOfDeployment', 'dateOfNextRefill', 'dateOfNextHPT', 'assetKind', 'assetRefId', 'label',
+    'brand', 'model', 'batteryExpiry', 'padExpiry', 'lastInspection', 'nextInspection',
+    'deviceType', 'zone', 'lastService', 'nextService', 'amcVendor', 'stretcherType',
+  ],
+  permitQr: [
+    'orgId', 'orgName', 'permitId', 'token', 'permitNo', 'docId', 'site', 'typeOfWork',
+    'jobLocation', 'jobDescription', 'issuingDepartment', 'issuedToName', 'hazards', 'ppe',
+    'precautions', 'jsa', 'participantCount', 'fireWatcherCount', 'hasConfinedWatcher',
+    'withdrawn', 'storedStatus', 'engineering', 'operations', 'closure', 'extension',
+    'closedDueToObservation', 'validFrom', 'validTo', 'updatedAt',
+  ],
+  procedureQr: [
+    'orgId', 'procedureCode', 'title', 'equipment', 'site', 'status', 'revision', 'lockStatus',
+    'lockedCount', 'pointCount', 'points', 'updatedAt',
+  ],
+}
+const PROCEDURE_POINT_FIELDS = [
+  'key', 'energySource', 'rating', 'isolationDetails', 'hazard', 'verification', 'device',
+  'devices', 'locked',
+]
+
+/** The first field this mirror write may not carry, or ''. */
+export function mirrorProblem(path, prev, next) {
+  const allowed = MIRROR_FIELDS[path]
+  if (!allowed) return ''
+  const keep = new Set([...allowed, ...Object.keys(prev || {})])
+  const extra = Object.keys(next || {}).find((k) => !keep.has(k))
+  if (extra) return extra
+  if (path === 'procedureQr') {
+    const points = next?.points
+    if (points !== undefined && (!Array.isArray(points) || points.length > 100)) return 'points'
+    for (const p of points || []) {
+      if (!p || typeof p !== 'object' || Array.isArray(p)) return 'points'
+      const bad = Object.keys(p).find((k) => !PROCEDURE_POINT_FIELDS.includes(k))
+      if (bad) return `points.${bad}`
+    }
+  }
+  return ''
+}
+
 const num = (v) => {
   const n = Number(v)
   return Number.isFinite(n) ? n : 0
@@ -524,7 +598,8 @@ export function invariantProblem(path, id, prev, next, ctx) {
       changedText('dept')
     if (privileged && !isAdmin(ctx)) return 'privilege'
   }
-  if (prev && collectionOf(path) === 'meta' && id !== 'cryptoKeys') {
+  if (!ctx.worker && mirrorProblem(path, prev, n)) return 'mirror-field'
+  if (prev && ['meta', 'docSeq'].includes(collectionOf(path)) && id !== 'cryptoKeys') {
     for (const k of ['nextSeq', 'permitSeq', 'n']) {
       if (num(prev[k]) > num(n[k])) return 'counter'
     }
