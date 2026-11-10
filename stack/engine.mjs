@@ -40,6 +40,7 @@ import {
   siteBlocked,
   siteScoped,
   updateAllowed,
+  visibleRow,
 } from './policy.mjs'
 
 const ROLES = new Set(['ohsms_browser', 'ohsms_worker'])
@@ -65,9 +66,11 @@ function parse(text) {
   return typeof text === 'string' ? JSON.parse(text) : text
 }
 
-function rowToDoc(row, { rev = false } = {}) {
+function rowToDoc(row, { rev = false, path, ctx } = {}) {
   if (!row) return null
-  const data = revive(parse(row.data))
+  // What this caller is shown of the row (policy.visibleRow narrows profiles).
+  const stored = parse(row.data)
+  const data = revive(ctx && path ? visibleRow(path, row.id, stored, ctx) : stored)
   const doc = { id: row.id, ...data }
   if (rev) return { rev: row.rev, data: doc }
   return doc
@@ -456,7 +459,7 @@ export function createEngine(db) {
         .bind(path, id)
         .first()
       if (!ctx.worker && row && !canRead(path, id, ctx, parse(row.data))) return null
-      return rowToDoc(row, opts)
+      return rowToDoc(row, { ...opts, path, ctx })
     },
 
     async list(session, path, opts = {}) {
@@ -476,7 +479,7 @@ export function createEngine(db) {
         .prepare(sql)
         .bind(...params)
         .all()
-      return (res.results || []).map((row) => rowToDoc(row))
+      return (res.results || []).map((row) => rowToDoc(row, { path, ctx }))
     },
 
     async count(session, path, opts = {}) {

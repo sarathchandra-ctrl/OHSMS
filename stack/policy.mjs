@@ -189,6 +189,23 @@ export function siteBlocked(path, row, ctx) {
   return Boolean(site) && !ctx.reach.has(site)
 }
 
+// ── The people directory ────────────────────────────────────────────────────
+// Every approved member reads users, because pickers, owners and rosters need
+// colleagues. They do not need a colleague's whole profile: who has asked for
+// which access, whether their password is temporary, their screen settings.
+// So other people's profiles go out with the directory fields only. Managers
+// also see site access grants, which assigning training by site, region or
+// entity reads. Admins, and everyone for their own profile, see it all.
+const DIRECTORY_FIELDS = ['name', 'displayName', 'email', 'role', 'status', 'department', 'dept', 'siteId']
+const MANAGER_DIRECTORY_FIELDS = [...DIRECTORY_FIELDS, 'access']
+
+/** The fields of `row` this caller is shown. Only users is narrowed. */
+export function visibleRow(path, id, row, ctx) {
+  if (path !== 'users' || !row || ctx.worker || isAdmin(ctx) || id === ctx.uid) return row
+  const allowed = isManager(ctx) ? MANAGER_DIRECTORY_FIELDS : DIRECTORY_FIELDS
+  return Object.fromEntries(Object.entries(row).filter(([k]) => allowed.includes(k)))
+}
+
 // ── Reading ─────────────────────────────────────────────────────────────────
 
 /**

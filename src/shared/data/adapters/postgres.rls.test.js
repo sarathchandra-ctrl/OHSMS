@@ -783,3 +783,40 @@ describe('site scope', () => {
     expect((await as('nobodyEmp').list('users')).length).toBeGreaterThan(3)
   })
 })
+
+// The people directory: colleagues' names and roles for everyone; the rest of
+// a profile only for its owner and admins.
+describe('the people directory', () => {
+  beforeAll(async () => {
+    await seed('users', 'dirTarget', {
+      name: 'Tara',
+      email: 'tara@example.test',
+      role: 'member',
+      status: 'approved',
+      department: 'Safety',
+      siteId: 's-1',
+      access: { sites: ['s-1', 's-2'] },
+      accessRequest: { sites: ['s-9'] },
+      mustChangePassword: false,
+      portalWidgets: ['a'],
+    })
+  })
+  const PRIVATE = ['accessRequest', 'mustChangePassword', 'portalWidgets']
+
+  it('shows an employee only the directory fields of a colleague, in a get and a list', async () => {
+    const got = await as('memberA').get('users', 'dirTarget')
+    expect(got).toMatchObject({ name: 'Tara', email: 'tara@example.test', role: 'member', department: 'Safety', siteId: 's-1' })
+    for (const k of [...PRIVATE, 'access']) expect(got, k).not.toHaveProperty(k)
+    const listed = (await as('memberA').list('users')).find((u) => u.id === 'dirTarget')
+    for (const k of [...PRIVATE, 'access']) expect(listed, k).not.toHaveProperty(k)
+    expect(await as('auditorA').get('users', 'dirTarget')).not.toHaveProperty('access')
+  })
+
+  it('adds site access for a manager, and everything for an admin and for the person themself', async () => {
+    const mgr = await as('managerA').get('users', 'dirTarget')
+    expect(mgr.access).toEqual({ sites: ['s-1', 's-2'] })
+    for (const k of PRIVATE) expect(mgr, k).not.toHaveProperty(k)
+    expect(await as('adminA').get('users', 'dirTarget')).toHaveProperty('accessRequest')
+    expect(await as('memberA').get('users', 'memberA')).toHaveProperty('access')
+  })
+})
