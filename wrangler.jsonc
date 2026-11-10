@@ -2,8 +2,7 @@
 //
 // The Worker (worker/index.js) serves the built app from Cloudflare's edge and
 // runs the organization's server itself (worker/server.js): the database in
-// Cloudflare D1, uploaded files in R2. Set ORIGIN_URL instead to forward the
-// server paths to a server of your own through a Cloudflare Tunnel.
+// Cloudflare D1, uploaded files in R2.
 //
 // This file exists so `wrangler deploy` does not run its framework
 // auto-configuration, which tried to rewrite vite.config.js and failed.
@@ -65,10 +64,7 @@
     // Sender of password-reset emails, on a domain verified in Resend, e.g.
     // "Cult Fit SMS <noreply@curefit.com>". With RESEND_API_KEY (secret) set,
     // the sign-in page offers "Forgot password?"; empty keeps resets with admins.
-    "MAIL_FROM": "",
-    // Leave empty to run the server here. Set to a Tunnel hostname
-    // (https://ehs-origin.example.com) to use a server of your own instead.
-    "ORIGIN_URL": ""
+    "MAIL_FROM": ""
   },
   // Secrets, set with `npx wrangler secret put NAME` (never in this file):
   //   SESSION_SECRET, DATA_KEY_MASTER, RESEND_API_KEY (password-reset mail),

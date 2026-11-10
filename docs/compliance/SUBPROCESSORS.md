@@ -11,14 +11,8 @@ Counsel must confirm legal names, locations, and DPA links before this is
 shown to a customer. **Do not add live account ids, hostnames, or regions
 here** — this repository is public.
 
-The application runs in one of two ways, and the list differs:
-
-- **On Cloudflare** (`wrangler.jsonc`, `worker/`): the database, files, and
-  server code run on Cloudflare.
-- **Self-hosted** (`stack/`, `docs/SELF-HOSTING.md`): the organization's own
-  server holds the database (SQLite) and files on its own disk. No hosting
-  subprocessor is involved; mail goes to whichever SMTP provider the
-  operator configures.
+The application runs on Cloudflare (`wrangler.jsonc`, `worker/`): the
+database, files, and server code all run there.
 
 Firebase / Google Cloud is **no longer** used for authentication, the
 database, files, functions or hosting. See "Legacy" below for the one

@@ -39,5 +39,4 @@ For another port, set `OHSMS_LOCAL_PORT`. To choose a separate local state folde
 set `OHSMS_LOCAL_DATA_DIR` to an absolute path. Stop both servers with Ctrl+C.
 
 `npm run dev` remains available when you want only the frontend and already
-have a configured backend. `npm run server` remains the production server
-entry point with the settings documented in `docs/SELF-HOSTING.md`.
+have a configured backend. Production runs on Cloudflare (`docs/CLOUDFLARE.md`).

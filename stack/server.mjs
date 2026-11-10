@@ -1,4 +1,4 @@
-// The organization's server as a Node HTTP server (Docker, tests). The
+// The organization's server as a Node HTTP server (local development, tests). The
 // request handling itself is stack/handler.mjs, which the Cloudflare Worker
 // (worker/index.js) calls directly without node:http.
 

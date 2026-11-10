@@ -2,7 +2,7 @@ name: Pages demo
 
 # A demo of the app on GitHub Pages: invented data kept in each visitor's
 # browser, no server, nothing real. See src/demo/demoMode.js. The real
-# deployment is deploy-cloudflare.yml (or self-hosted, docs/SELF-HOSTING.md);
+# deployment is deploy-cloudflare.yml;
 # this does not replace it.
 #
 # One-time setup: Settings > Pages > Build and deployment > Source:

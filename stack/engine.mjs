@@ -1,4 +1,4 @@
-// Document engine over SQLite (Cloudflare D1, or Node's SQLite in Docker).
+// Document engine over SQLite (Cloudflare D1; Node's SQLite locally and in tests).
 //
 // One table, addressed as (path, id), which is what the app's data seam
 // requires (src/shared/data/index.js): a QR mirror and the record it mirrors

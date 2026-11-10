@@ -68,7 +68,7 @@ matter, beyond the usual `dist/`:
   `store.json` is `no-cache`, and the shell worker does not cache it.
 
 The site, the server and its access rules deploy together
-(`docs/CLOUDFLARE.md`, or `docs/SELF-HOSTING.md`), so there is no separate
+(`docs/CLOUDFLARE.md`), so there is no separate
 rules release to remember. The phone's per-user "already opened" cursor is
 `alertReads/{uid}`, which each person may write for themselves
 (`stack/policy.mjs`).

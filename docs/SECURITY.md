@@ -652,6 +652,10 @@ store) and `src/shared/data/server.test.js` (disk store).
 
 ### S-24 · Self-hosted, one stranger could lock everyone out of signing in — HIGH
 
+**Since moot:** self-hosting was removed afterwards; the app runs only on
+Cloudflare, where the Worker reads the visitor from `cf-connecting-ip`. The
+files named below went with it. Kept as the record of the finding.
+
 The sign-in, reset and two-step limits count per source address, read from
 the socket. In the Docker install nobody reaches the app's socket directly:
 Caddy or the Cloudflare Tunnel connects to it over the compose network, so

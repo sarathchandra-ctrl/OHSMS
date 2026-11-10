@@ -1,15 +1,11 @@
-// The organization's server, as deployed: the gateway the app talks to
+// The organization's server as a Node process: the gateway the app talks to
 // (/data, /rpc, /presign, /blob, password sign-in) and the built app itself,
-// on one origin. docs/SELF-HOSTING.md.
-//
-// stack/main.mjs reads the environment and calls this. Everything here takes
-// its database and settings as arguments, so the tests run it on an in-memory SQLite.
+// on one origin. Production runs the same handler inside the Cloudflare
+// Worker (worker/server.js); this is for local development
+// (scripts/dev-local.mjs) and the tests, which run it on an in-memory SQLite.
 //
 // On start it creates the organization and its first administrator if the
-// database has none (bootstrapOrganization). The built app is served here too, so the session redirect, the SAML
-// assertion and the app's /data calls are all same-origin. When the app is
-// served from Cloudflare instead (worker/index.js), the Worker forwards these
-// same paths here, so they stay same-origin to the browser.
+// database has none (bootstrapOrganization).
 
 import { createReadStream } from 'node:fs'
 import { stat } from 'node:fs/promises'
@@ -95,7 +91,6 @@ function serveFile(res, file, method) {
  * @param {string} [o.staticDir]     the built app; omitted means API only
  * @param {string} [o.blobDir]       where uploaded files are kept on disk
  * @param {object} [o.bootstrap]     { orgName, adminEmail, adminPassword } for first start
- * @param {Function} [o.clientIp]    (req) => the visitor's address (stack/clientIp.mjs)
  */
 export async function createDedicatedApp({
   db,
@@ -107,7 +102,6 @@ export async function createDedicatedApp({
   blobDir = '',
   bootstrap = null,
   fetchImpl,
-  clientIp,
 }) {
   await applySchema(db)
   const engine = createEngine(db)
@@ -125,7 +119,6 @@ export async function createDedicatedApp({
     dataKeyMaster,
     mail,
     fetchImpl,
-    ...(clientIp ? { clientIp } : {}),
   })
   const delegate = host.listeners('request')[0]
   host.removeAllListeners('request')
@@ -161,6 +154,5 @@ export async function createDedicatedApp({
     }
   })
 
-  // engine and blobStore for the caller's scheduler (stack/main.mjs).
   return { server: host, created, engine, blobStore }
 }

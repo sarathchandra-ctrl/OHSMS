@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { openSqlite } from './sqlite.mjs'
 import { applySchema, createEngine } from './engine.mjs'
-import { FREQUENT_CRON, NIGHTLY_CRON, jobForCron, runNightly, startNodeSchedule } from './schedule.mjs'
+import { FREQUENT_CRON, NIGHTLY_CRON, jobForCron, runNightly } from './schedule.mjs'
 
 const DAY = 24 * 3600 * 1000
 const NOW = Date.parse('2026-11-10T22:15:00Z')
@@ -89,21 +89,5 @@ describe('the clocks', () => {
     expect(jobForCron(FREQUENT_CRON)).toBe('frequent')
     expect(jobForCron(NIGHTLY_CRON)).toBe('nightly')
     expect(jobForCron('0 0 * * *')).toBe('')
-  })
-
-  it('runs the nightly jobs once a day on a self-hosted server, at or after 22:15 UTC', async () => {
-    await seed('incidents', 'n1', { deletedAt: iso(NOW - 40 * DAY) })
-    let clock = new Date('2026-11-10T21:00:00Z')
-    const s = startNodeSchedule({ engine, clock: () => clock, log: () => {} })
-    await s.tick()
-    expect(await get('incidents', 'n1')).not.toBeNull()
-    clock = new Date('2026-11-10T22:16:00Z')
-    await s.tick()
-    expect(await get('incidents', 'n1')).toBeNull()
-    await seed('incidents', 'n2', { deletedAt: iso(NOW - 40 * DAY) })
-    clock = new Date('2026-11-10T23:00:00Z')
-    await s.tick()
-    expect(await get('incidents', 'n2')).not.toBeNull()
-    s.stop()
   })
 })

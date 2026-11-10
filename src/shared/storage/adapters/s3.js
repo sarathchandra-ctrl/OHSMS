@@ -17,7 +17,8 @@
 import { currentAccessToken, ownStackGateway } from '../../auth/ownStackSession'
 import { runtimeEnv } from '../../runtimeConfig'
 
-// Defaults to this installation's own server, which keeps the files on its disk.
+// Defaults to this installation's own server (files in R2 on Cloudflare; on
+// disk in local development).
 const ENDPOINT = String(
   runtimeEnv('S3_PRESIGN_ENDPOINT') || (ownStackGateway() ? `${ownStackGateway()}/presign` : '')
 ).trim()

@@ -1,6 +1,0 @@
-# HTTPS for the WEEHS app. Caddy obtains and renews the certificate for
-# DOMAIN itself (docs/SELF-HOSTING.md).
-{$DOMAIN} {
-	encode gzip
-	reverse_proxy app:8080
-}

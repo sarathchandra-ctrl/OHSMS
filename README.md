@@ -63,7 +63,7 @@ not share a name.
 
 ## Architecture
 
-One installation serves one organization. Three deployable pieces:
+One installation serves one organization, on Cloudflare. Three pieces:
 
 - **Web app** (`src/`) — one Vite React SPA. A shared shell (auth, nav,
   dashboard) mounts each module as a lazily-loaded feature area under
@@ -74,12 +74,11 @@ One installation serves one organization. Three deployable pieces:
   (`/rpc/*`) and file storage. It creates the organization and its first
   administrator on first start.
 - **Cloudflare Worker** (`worker/`) — serves the built app from the edge and
-  runs the server on Cloudflare (database in D1, files in R2), or
-  forwards to a self-hosted server through a Cloudflare Tunnel.
+  runs the server on Cloudflare (database in D1, files in R2).
 
 Cross-cutting:
 
-- **Data** — SQLite (Cloudflare D1, or a file in Docker), one `documents`
+- **Data** — SQLite (Cloudflare D1; a local file in development), one `documents`
   table addressed by collection path (`incidents`, `permits/<id>/events`, …).
   Access is enforced in `stack/policy.mjs`, checked by `stack/engine.mjs`
   before every read and write. Only the server's own jobs skip the rules.
@@ -88,7 +87,7 @@ Cross-cutting:
   also approve, verify and delete. Per-employee module permissions and site /
   region / entity scope are enforced by the server. An administrator adds
   people with a temporary password and can reset passwords.
-- **Files** — stored in Cloudflare R2 or on the server's disk (`/blob`),
+- **Files** — stored in Cloudflare R2 (on disk in local development), at `/blob`,
   reached through signed links that expire within two hours, issued to a
   reader the server has just let read the record.
 - **Application-layer encryption** (`src/shared/crypto/`) — envelope
@@ -106,7 +105,6 @@ src/
                 documents emergency objectives weather cctv stakeholder actions
 stack/          the organization's server (own package); stack/lib shared rules
 worker/         Cloudflare Worker
-selfhost/       Docker Compose install for the server
 docs/           deployment, security register, compliance
 ```
 
@@ -140,7 +138,6 @@ Cloudflare credentials are not required. See [local development](docs/LOCAL-DEVE
 | `npm run dev`                     | Vite dev server                                 |
 | `npm run dev:local`               | App, local SQLite backend, uploads and email outbox |
 | `npm run build`                   | Production build of the app (`dist/`)           |
-| `npm run server`                  | The organization's server (`stack/main.mjs`)    |
 | `npm run deploy:cloudflare`       | Build and deploy the Cloudflare Worker          |
 | `npm test`                        | Unit tests: app, server and Worker (Vitest)     |
 | `npm run lint` / `npm run format` | Lint / format                                   |

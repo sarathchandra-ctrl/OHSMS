@@ -7,7 +7,7 @@ in the repository today, not what is planned.
 **Short answer: the access model is ready for a security review, and
 two-step login is available; single sign-on, operations evidence and
 compliance paperwork are not yet.** The app now runs as one organization per installation on its own
-server — on Cloudflare (Workers, D1, R2) or self-hosted — and every read and
+server — on Cloudflare (Workers, D1, R2) — and every read and
 write is decided by that server.
 
 **Read this next to `SECURITY.md`, not instead of it.** That file is the
@@ -29,13 +29,13 @@ the buyer-facing summary. Where they disagree, `SECURITY.md` is right.
 | Encryption at rest (application layer) | Envelope encryption of personal and health fields (`src/shared/crypto/`), master key held as a server secret; on when the build sets `VITE_ENCRYPTION=on` | **Ready** |
 | Files | Expiring download links issued per reader; upload types allow-listed; uploads cannot replace a stored file; medical files to managers only | **Ready** |
 | Public QR surfaces | Writes bound to a scanned token, field- and length-limited; mirrors readable by token, never listable | **Ready** |
-| Backups / disaster recovery | Cloudflare: D1 point-in-time history (`docs/CLOUDFLARE.md`). Self-hosted: SQLite and files backup (`docs/SELF-HOSTING.md`). No restore drilled on this infrastructure yet | **Partial** |
+| Backups / disaster recovery | Cloudflare: D1 point-in-time history (`docs/CLOUDFLARE.md`). No restore drilled on this infrastructure yet | **Partial** |
 | Observability | Sentry when a DSN is set; uptime is a GitHub Action against `/health.json`; the deploy checks `/health` (`docs/OBSERVABILITY.md`). No metrics, no on-call rotation | **Partial** |
 | Data lifecycle — export | Subject access request, Admin → Maintenance (`docs/DATA-RIGHTS.md` §2) | **Ready** |
 | Data lifecycle — erasure & retention | Recycle Bin purge after 30 days. Period table with `NEEDS_LEGAL_SIGN_OFF` (`stack/lib/retentionPolicy.js`); live age-purge of statutory records is off | **Partial** |
 | Testing | Unit, access-rule (through the real engine) and server suites in one `npm test`; axe and smoke e2e | **Ready** |
-| CI/CD | Lint, audit gate, tests, build on every push; deploy to Cloudflare from `main`; versioned images on `v*` tags (`docs/RELEASES.md`) | **Ready** |
-| Secrets handling | Nothing committed; server secrets are Worker secrets or `selfhost/.env` | **Ready** |
+| CI/CD | Lint, audit gate, tests, build on every push; deploy to Cloudflare from `main` | **Ready** |
+| Secrets handling | Nothing committed; server secrets are Worker secrets | **Ready** |
 | Compliance artifacts | ISO 27001 self-audit written. DPA / subprocessor / pen-test **drafts** in `docs/compliance/` (not signed, not a certification) | **Partial** |
 
 ---

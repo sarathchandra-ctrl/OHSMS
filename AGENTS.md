@@ -28,12 +28,13 @@ arbitrary.
   `docs/PRODUCTION.md` on operating the deployed system. When another document
   restates either, it drifts. Link instead of copying.
 
-## Three deployable units, two npm packages
+## One deployment, three source folders, two npm packages
 
-`src/` (the app) and `stack/` (the organization's server) each have their own
-`package.json` and lockfile; `worker/` is the Cloudflare Worker and has no
-dependencies of its own. The root `npm test` covers all three, but needs
-`npm ci --prefix stack` first because the server tests import `pg`.
+Everything deploys as one Cloudflare Worker (`docs/CLOUDFLARE.md`); there is
+no self-hosted option. `src/` (the app) and `stack/` (the organization's
+server logic, run inside the Worker and by `npm run dev:local`) each have
+their own `package.json` and lockfile; `worker/` is the Worker itself and has
+no dependencies of its own. The root `npm test` covers all three.
 
 `stack/lib/` holds rules shared by the server and the app (file deletion,
 retention, data keys, subject data). The app imports them by relative path.
@@ -95,7 +96,7 @@ failure that motivated a line.
   data is invented. This is the one that gets in by accident.
 - **Credentials, obviously**, though nothing here has ever carried one:
   `.gitignore` covers `.env` and `.env.production`, and the full history has
-  been searched. Server secrets live in `selfhost/.env`; Worker secrets are
+  been searched. Server secrets are Worker secrets, set with
   `wrangler secret put`.
 
 **When unsure, private.** The asymmetry is total: a doc kept private that
