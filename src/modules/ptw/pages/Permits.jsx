@@ -15,6 +15,8 @@ import { STATUS, STATUS_META } from '../lib/permitStatus'
 const STATUS_FILTERS = [
   { key: 'all', label: 'All' },
   { key: STATUS.DRAFT, label: 'Draft' },
+  // Both: approved but not locked out yet, and closed but still locked.
+  { key: 'loto_pending', label: 'LOTO pending' },
   { key: STATUS.IN_PROGRESS, label: 'In Progress' },
   { key: STATUS.EXTENDED_IN_PROGRESS, label: 'Extended' },
   { key: STATUS.NOT_CLOSED, label: 'Not Closed' },
@@ -43,7 +45,9 @@ export default function Permits() {
     const base = isApprover ? permits : permits.filter((p) => p.createdBy === profile?.uid)
     const q = search.trim().toLowerCase()
     return base.filter((p) => {
-      if (status !== 'all' && p.status !== status) return false
+      if (status === 'loto_pending') {
+        if (p.status !== STATUS.APPROVED_LOTO_PENDING && p.status !== STATUS.CLOSED_LOTO_PENDING) return false
+      } else if (status !== 'all' && p.status !== status) return false
       if (type !== 'all' && p.typeOfWork !== type) return false
       if (site !== 'all' && p.site !== site) return false
       if (q) {

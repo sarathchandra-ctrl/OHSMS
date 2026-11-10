@@ -21,6 +21,7 @@ import {
   ensurePermitQr, subscribePermitObservations, createObservation, deletePermit, answerRejection,
 } from '../lib/data'
 import { ANSWER_MAX, canAnswer, pinnedTo } from '../lib/rejection'
+import { lockStateLabel } from '../lib/lotoLink'
 import { can, canActForTeam, TEAMS } from '../lib/permissions'
 import { STATUS, statusMeta } from '../lib/permitStatus'
 import { fileToDataUrl, formatBytes } from '../lib/files'
@@ -172,7 +173,7 @@ export default function PermitDetail() {
 
   const actor = { uid: user.uid, name: profile?.name || '', orgName: profile?.orgName || '', role: profile?.role }
   const bothApproved = permit.engineering?.status === 'approved' && permit.operations?.status === 'approved'
-  const isClosed = permit.status === STATUS.CLOSED || permit.status === STATUS.CLOSED_NONCOMPLIANCE
+  const isClosed = [STATUS.CLOSED, STATUS.CLOSED_NONCOMPLIANCE, STATUS.CLOSED_LOTO_PENDING].includes(permit.status)
   const isExpired = permit.status === STATUS.NOT_CLOSED
   const canRequestClosure = can(profile, 'requestClosure', permit) && bothApproved && !permit.closure && !isClosed
   // An expired (Not Closed) permit may still be extended to resume the work —
@@ -515,6 +516,26 @@ export default function PermitDetail() {
               <div className="grid place-items-center py-8 text-ink-400"><Spinner size={22} /></div>
             )}
           </div>
+
+          {permit.lotoProcedureId && (
+            <div className="card p-5">
+              <h2 className="mb-2 flex items-center gap-2 text-base font-bold text-ink-900"><Lock size={18} className="text-brand-600" /> LOTO isolation</h2>
+              <p className="text-sm text-ink-700">
+                <span className="font-semibold">{permit.lotoProcedureCode || 'Procedure'}</span>
+                {permit.lotoEquipment ? ` · ${permit.lotoEquipment}` : ''}
+              </p>
+              <p className={`mt-1 text-sm font-semibold ${permit.lotoLockStatus === 'locked' ? 'text-green-700' : 'text-amber-800'}`}>
+                {lockStateLabel(permit)}
+              </p>
+              <p className="mt-2 text-xs text-ink-500">
+                {permit.status === STATUS.APPROVED_LOTO_PENDING
+                  ? 'Approved, but work may not start until every isolation point of this procedure is locked out in LOTO → Operations.'
+                  : permit.status === STATUS.CLOSED_LOTO_PENDING
+                    ? 'Closure approved, but the permit is not closed until every lock on this procedure has been removed.'
+                    : 'Work waits on these locks: they go on before work starts and come off before the permit closes.'}
+              </p>
+            </div>
+          )}
 
           <div className="card p-5">
             <h2 className="mb-3 text-base font-bold text-ink-900">Approvals</h2>

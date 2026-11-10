@@ -19,7 +19,7 @@ import {
   QrCode, Loader2, ShieldCheck, ShieldAlert, Clock, MapPin, User, HardHat,
   AlertTriangle, Building2,
 } from 'lucide-react'
-import { subscribePermitByToken, createPublicObservation, OBSERVER_ROLES } from '../lib/data'
+import { subscribePermitByToken, subscribeProcedureLock, createPublicObservation, OBSERVER_ROLES } from '../lib/data'
 import { derivePermitStatus, statusMeta, effectiveValidTo, STATUS } from '../lib/permitStatus'
 
 /** Statuses under which work may actually proceed. */
@@ -43,6 +43,16 @@ export default function PublicPermit() {
 
   useEffect(() => subscribePermitByToken(token, setPermit, () => setPermit(null)), [token])
 
+  // An electrical permit waits on its LOTO procedure's locks. Read from the
+  // procedure's own public record, so the page at the work location says
+  // "LOTO pending" until the equipment is actually isolated.
+  const lotoId = permit?.lotoProcedureId || ''
+  const [lock, setLock] = useState(null)
+  useEffect(() => {
+    setLock(null)
+    return lotoId ? subscribeProcedureLock(lotoId, setLock) : undefined
+  }, [lotoId])
+
   // The verdict is time-sensitive: a permit that expires while someone is
   // looking at it must stop saying it is valid.
   useEffect(() => {
@@ -52,11 +62,13 @@ export default function PublicPermit() {
 
   const view = useMemo(() => {
     if (!permit) return null
-    const status = derivePermitStatus(permit, now)
+    // Until the lock state arrives the permit reads LOTO pending (unknown is
+    // not isolated), never in progress.
+    const status = derivePermitStatus(lotoId && lock ? { ...permit, ...lock } : permit, now)
     const meta = statusMeta(status)
     const validTo = effectiveValidTo(permit)
     return { status, meta, validTo, remaining: countdown(validTo, now), workable: WORKABLE.has(status) }
-  }, [permit, now])
+  }, [permit, now, lotoId, lock])
 
   if (permit === undefined) {
     return (

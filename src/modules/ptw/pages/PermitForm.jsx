@@ -10,7 +10,8 @@ import { toastCaught } from '../../../shared/lib/toastCaught'
 import { PageHeader, Field, Spinner, Modal } from '../components/ui'
 import { useAuth } from '../context/AuthContext'
 import { usePermits } from '../context/PermitContext'
-import { createPermit } from '../lib/data'
+import { createPermit, subscribeSiteProcedures } from '../lib/data'
+import { needsLotoProcedure, procedureLabel, proceduresForSite } from '../lib/lotoLink'
 import SiteScopePicker from '../../../shared/org/SiteScopePicker'
 import DepartmentSelect from '../../../shared/org/DepartmentSelect'
 import { subscribeSites as subscribeOrgSites } from '../../../shared/org/orgData'
@@ -46,6 +47,7 @@ const EMPTY = {
   confinedWatcher: { name: '', details: '' },
   assignedEngineer: '',
   assignedOperator: '',
+  lotoProcedureId: '',
 }
 
 function SectionCard({ icon: Icon, title, subtitle, children }) {
@@ -105,6 +107,24 @@ export default function PermitForm() {
   const extraInputRef = useRef(null)
 
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }))
+
+  // Electrical work names the LOTO procedure that isolates its equipment, from
+  // the approved ones at the chosen site (lib/lotoLink.js). The permit then
+  // waits on that procedure's locks: Approved — LOTO pending until they are on.
+  const askLoto = needsLotoProcedure(form.typeOfWork)
+  const [siteProcedures, setSiteProcedures] = useState(null) // null while loading
+  useEffect(() => {
+    if (!askLoto || !form.siteId) { setSiteProcedures([]); return undefined }
+    setSiteProcedures(null)
+    return subscribeSiteProcedures(form.siteId, setSiteProcedures)
+  }, [askLoto, form.siteId])
+  const lotoOptions = useMemo(() => proceduresForSite(siteProcedures || [], form.siteId), [siteProcedures, form.siteId])
+  // A procedure of the previous site, or of no longer approved, is not kept.
+  useEffect(() => {
+    if (form.lotoProcedureId && siteProcedures && !lotoOptions.some((p) => p.id === form.lotoProcedureId)) {
+      setForm((f) => ({ ...f, lotoProcedureId: '' }))
+    }
+  }, [lotoOptions, siteProcedures, form.lotoProcedureId])
 
   const engineers = useMemo(() => users.filter((u) => u.status === 'approved' && u.role === ROLES.ENGINEERING), [users])
   const operators = useMemo(() => users.filter((u) => u.status === 'approved' && u.role === ROLES.OPERATIONS), [users])
@@ -189,6 +209,7 @@ export default function PermitForm() {
         documents: buildDocuments(),
         assignedEngineer: form.assignedEngineer || null,
         assignedOperator: form.assignedOperator || null,
+        lotoProcedure: askLoto ? lotoOptions.find((p) => p.id === form.lotoProcedureId) || null : null,
       }
       const { id, permitNo } = await createPermit(payload, actor)
       toast.success(`Permit ${permitNo} created`)
@@ -207,6 +228,9 @@ export default function PermitForm() {
     if (siteInventory.length && !form.site) return toast.error('Select the site for this permit')
     if (locationKeys.some((k) => !form[k]))
       return toast.error('Select the location scope for this permit')
+    if (askLoto && !lotoOptions.some((p) => p.id === form.lotoProcedureId)) {
+      return toast.error('Select the LOTO procedure that isolates this equipment')
+    }
     if (!form.jobDescription.trim()) return toast.error('Enter a job description')
     if (!form.issuedToName.trim()) return toast.error('Enter the person the permit is issued to')
     // Hard blocks
@@ -259,6 +283,26 @@ export default function PermitForm() {
                 <p className="mt-1 text-xs text-amber-600">No sites you can access yet — an admin can add sites and grant you access.</p>
               )}
             </div>
+            {askLoto && (
+              <Field label="LOTO procedure *" className="sm:col-span-2"
+                hint={form.siteId && siteProcedures && !lotoOptions.length
+                  ? 'Electrical work needs an approved LOTO procedure at this site. Ask the LOTO team to create and approve one.'
+                  : 'After approval the permit stays “Approved — LOTO pending” until every isolation point is locked out, and on closure “Closed — LOTO pending” until the locks come off.'}>
+                <select required className="input" value={form.lotoProcedureId} onChange={set('lotoProcedureId')}
+                  disabled={!form.siteId || siteProcedures === null}>
+                  <option value="" disabled>
+                    {!form.siteId
+                      ? 'Select the site first…'
+                      : siteProcedures === null
+                        ? 'Loading the site’s LOTO procedures…'
+                        : lotoOptions.length
+                          ? 'Select the procedure that isolates this equipment…'
+                          : 'No approved LOTO procedure at this site'}
+                  </option>
+                  {lotoOptions.map((p) => <option key={p.id} value={p.id}>{procedureLabel(p)}</option>)}
+                </select>
+              </Field>
+            )}
             <Field label="Issuing department" className="sm:col-span-2"><DepartmentSelect value={form.issuingDepartment} onChange={set('issuingDepartment')} /></Field>
             <Field label="Job description *" className="sm:col-span-2">
               <textarea required rows={3} className="input" placeholder="Describe the work to be carried out" value={form.jobDescription} onChange={set('jobDescription')} />

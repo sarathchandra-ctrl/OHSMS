@@ -20,6 +20,12 @@ export const STATUS = {
   OPEN_WITH_OBSERVATIONS: 'open_with_observations',
   CLOSED: 'closed',
   CLOSED_NONCOMPLIANCE: 'closed_noncompliance',
+  // An electrical permit names a LOTO procedure (lotoProcedureId). Approved by
+  // both teams, its work still may not start until every isolation point of
+  // that procedure is locked out; closed by both teams, it is not closed until
+  // the locks have come off.
+  APPROVED_LOTO_PENDING: 'approved_loto_pending',
+  CLOSED_LOTO_PENDING: 'closed_loto_pending',
 }
 
 export const STATUS_META = {
@@ -32,6 +38,8 @@ export const STATUS_META = {
   [STATUS.OPEN_WITH_OBSERVATIONS]: { label: 'Open — Unsafe Observation Raised', color: '#ea580c' },
   [STATUS.CLOSED]: { label: 'Closed', color: '#334155' },
   [STATUS.CLOSED_NONCOMPLIANCE]: { label: 'Closed — Non-Compliance at work location', color: '#991b1b' },
+  [STATUS.APPROVED_LOTO_PENDING]: { label: 'Approved — LOTO pending', color: '#b45309' },
+  [STATUS.CLOSED_LOTO_PENDING]: { label: 'Closed — LOTO pending', color: '#b45309' },
 }
 
 export function statusMeta(status) {
@@ -67,6 +75,17 @@ export function extensionApproved(permit) {
   return Boolean(e && decided(e.engineering, 'approved') && decided(e.operations, 'approved'))
 }
 
+/**
+ * Does this permit wait on a LOTO procedure? Then `lotoLockStatus` is that
+ * procedure's live lock state ('unlocked' | 'partial' | 'locked'), joined on
+ * by PermitContext and the public page from the procedure's public record;
+ * it is not a stored field. Unknown counts as not done, both ways: a permit
+ * whose isolation cannot be confirmed is not one to start, or to call closed.
+ */
+export const needsLoto = (permit) => Boolean(permit?.lotoProcedureId)
+export const lotoLocked = (permit) => permit?.lotoLockStatus === 'locked'
+export const lotoReleased = (permit) => permit?.lotoLockStatus === 'unlocked'
+
 /** Effective end-of-validity (ISO) — the extended end if an extension is approved. */
 export function effectiveValidTo(permit) {
   return extensionApproved(permit) ? permit?.extension?.newValidTo || permit?.validTo : permit?.validTo
@@ -91,7 +110,9 @@ export function derivePermitStatus(permit, now = Date.now()) {
   if (!permit) return STATUS.DRAFT
   // An unsafe observation closes the permit for non-compliance — overrides all.
   if (permit.closedDueToObservation) return STATUS.CLOSED_NONCOMPLIANCE
-  if (closureDone(permit)) return STATUS.CLOSED
+  if (closureDone(permit)) {
+    return needsLoto(permit) && !lotoReleased(permit) ? STATUS.CLOSED_LOTO_PENDING : STATUS.CLOSED
+  }
 
   // An unsafe observation reported by QR scan does not close the permit — only
   // a signed-in decision does that — but it must be visible from the list
@@ -110,10 +131,16 @@ export function derivePermitStatus(permit, now = Date.now()) {
   const ext = extensionApproved(permit)
 
   // No usable window → treat an approved permit as open/in-progress.
-  if (to == null) return ext ? STATUS.EXTENDED_IN_PROGRESS : STATUS.IN_PROGRESS
+  if (to == null) {
+    if (needsLoto(permit) && !lotoLocked(permit)) return STATUS.APPROVED_LOTO_PENDING
+    return ext ? STATUS.EXTENDED_IN_PROGRESS : STATUS.IN_PROGRESS
+  }
 
   // Past the validity window → expired (Not Closed).
   if (now > to) return STATUS.NOT_CLOSED
+
+  // Approved, but the equipment is not isolated yet: no work.
+  if (needsLoto(permit) && !lotoLocked(permit)) return STATUS.APPROVED_LOTO_PENDING
 
   // Approved and still within its timeline → work may proceed, so it reads as
   // In Progress (there is no separate pre-start "Approved" holding state — an
@@ -130,11 +157,14 @@ export function dashboardBuckets(permits = [], now = Date.now()) {
   const c = {
     open: 0, inProgress: 0, extended: 0,
     notClosed: 0, notClosedExtended: 0, notClosedPlain: 0,
-    withObservations: 0, closed: 0, rejected: 0,
+    withObservations: 0, closed: 0, rejected: 0, lotoPending: 0,
   }
   for (const p of permits) {
     const s = derivePermitStatus(p, now)
     if (s === STATUS.CLOSED || s === STATUS.CLOSED_NONCOMPLIANCE) c.closed++
+    // Approved or closed by both teams, waiting on the locks: its own bucket,
+    // so it is counted neither as work in progress nor as done.
+    else if (s === STATUS.APPROVED_LOTO_PENDING || s === STATUS.CLOSED_LOTO_PENDING) c.lotoPending++
     // Its own bucket. Falling through to `open` would count a permit with an
     // unanswered unsafe report as one merely awaiting approval.
     else if (s === STATUS.OPEN_WITH_OBSERVATIONS) c.withObservations++

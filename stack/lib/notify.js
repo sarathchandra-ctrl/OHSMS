@@ -200,6 +200,8 @@ const PERMIT_STATUS_LABEL = {
   open_with_observations: 'open with observations',
   closed: 'closed',
   closed_noncompliance: 'closed for non-compliance',
+  approved_loto_pending: 'approved, waiting for its LOTO isolation',
+  closed_loto_pending: 'closed, waiting for its LOTO locks to come off',
 }
 
 const ASSET_COLLECTION = { aed: 'aeds', fas: 'fas', stretcher: 'stretchers' }

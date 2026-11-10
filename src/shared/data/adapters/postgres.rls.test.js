@@ -492,6 +492,32 @@ describe('module permission', () => {
     ).rejects.toMatchObject(denied)
   })
 
+  // An electrical work permit names a LOTO procedure, so Permit to Work may
+  // READ procedures (policy READ_ALSO), at its own sites, and nothing more.
+  it('lets Permit to Work read LOTO procedures at its sites, and nothing else of LOTO', async () => {
+    await seed('sites', 's-far', { name: 'Far Plant', region: 'South' })
+    await seed('users', 'ptwOnly', {
+      role: 'member',
+      status: 'approved',
+      siteId: 's-1',
+      access: { modules: ['ptw'] },
+    })
+    await seed('procedures', 'pr-here', { siteId: 's-1', equipment: 'Panel 1', status: 'approved' })
+    await seed('procedures', 'pr-far', { siteId: 's-far', equipment: 'Panel 9', status: 'approved' })
+    await seed('procedurePhotos', 'pr-here', { photos: {} })
+    await seed('locks', 'lk-1', { lockNo: 'D-1' })
+    const p = as('ptwOnly')
+    expect((await p.list('procedures')).map((d) => d.id)).toEqual(['pr-here'])
+    expect(await p.get('procedures', 'pr-far')).toBeNull()
+    expect(await p.list('procedurePhotos')).toEqual([])
+    expect(await p.list('locks')).toEqual([])
+    // Reading is all: no lock applied, no procedure changed or added.
+    await expect(p.update('procedures', 'pr-here', { status: 'draft' })).rejects.toMatchObject(denied)
+    await expect(p.set('procedures', 'pr-new', { siteId: 's-1', status: 'draft' })).rejects.toMatchObject(denied)
+    // Another module grants nothing of the kind.
+    expect(await as('hiraOnly').list('procedures')).toEqual([])
+  })
+
   it('works normally inside the granted modules', async () => {
     const h = as('hiraOnly')
     expect(await h.get('assessments', 'ma1')).toMatchObject({ title: 'Ladder' })
@@ -1133,6 +1159,7 @@ describe('work permits after a decision, and their public QR record', () => {
       { validTo: '2099-01-01T00:00:00.000Z' },
       { hazards: ['none'] },
       { issuedToName: 'Someone else' },
+      { lotoProcedureId: 'a-fully-locked-procedure' },
     ]) {
       for (const uid of ['memberA', 'managerA']) {
         await expect(
@@ -1556,5 +1583,66 @@ describe('a rejected permit, answered and sent back to the person who rejected i
     ).rejects.toMatchObject(denied)
     await as('managerA').update('permits', 'rj-close', { 'closure.engineering': approvedBy('managerA') })
     expect((await adminEngine.get(null, 'permits', 'rj-close')).closure.engineering.status).toBe('approved')
+  })
+})
+
+// An electrical work permit names an approved LOTO procedure of its own site,
+// because its status waits on that procedure's locks (stack/policy.mjs
+// permitLotoProblem). Each case is one way around the gate.
+describe('an electrical work permit and its LOTO procedure', () => {
+  const electrical = (extra = {}) => ({
+    permitNo: 'PTW-2026-E',
+    typeOfWork: 'Electrical Work',
+    siteId: 's-1',
+    site: 'Depot',
+    engineering: { status: 'pending' },
+    operations: { status: 'pending' },
+    storedStatus: 'draft',
+    createdBy: 'memberA',
+    lotoProcedureId: 'lp-ok',
+    ...extra,
+  })
+  const denied = { code: 'permission-denied' }
+
+  beforeAll(async () => {
+    await seed('procedures', 'lp-ok', { siteId: 's-1', status: 'approved', equipment: 'Panel 1' })
+    await seed('procedures', 'lp-draft', { siteId: 's-1', status: 'draft', equipment: 'Panel 2' })
+    await seed('procedures', 'lp-other-site', { siteId: 's-9', status: 'approved', equipment: 'Panel 9' })
+  })
+
+  it('accepts an electrical permit naming an approved procedure of its site', async () => {
+    await as('memberA').set('permits', 'el-ok', electrical())
+    // A permit of another kind needs none.
+    await as('memberA').set('permits', 'el-hot', electrical({ typeOfWork: 'Hot Work', lotoProcedureId: '' }))
+  })
+
+  it('refuses one with no procedure, a missing one, an unapproved one or another site’s', async () => {
+    for (const [i, lotoProcedureId] of ['', 'lp-nowhere', 'lp-draft', 'lp-other-site'].entries()) {
+      await expect(
+        as('memberA').set('permits', `el-bad-${i}`, electrical({ lotoProcedureId })),
+        lotoProcedureId || '(none)'
+      ).rejects.toMatchObject(denied)
+    }
+    // Not even a manager.
+    await expect(
+      as('managerA').set('permits', 'el-bad-mgr', electrical({ lotoProcedureId: '' }))
+    ).rejects.toMatchObject(denied)
+  })
+
+  it('refuses taking the procedure off, or turning a permit into electrical work without one', async () => {
+    await seed('permits', 'el-edit', electrical())
+    await expect(as('memberA').update('permits', 'el-edit', { lotoProcedureId: '' })).rejects.toMatchObject(denied)
+    await expect(
+      as('memberA').update('permits', 'el-edit', { lotoProcedureId: 'lp-other-site' })
+    ).rejects.toMatchObject(denied)
+    await seed('permits', 'el-was-hot', electrical({ typeOfWork: 'Hot Work', lotoProcedureId: '' }))
+    await expect(
+      as('memberA').update('permits', 'el-was-hot', { typeOfWork: 'Electrical Work' })
+    ).rejects.toMatchObject(denied)
+  })
+
+  it('still carries along an electrical permit raised before the rule', async () => {
+    await seed('permits', 'el-legacy', electrical({ lotoProcedureId: undefined }))
+    await as('memberA').update('permits', 'el-legacy', { jobDescription: 'Note added' })
   })
 })

@@ -350,6 +350,17 @@ export function createEngine(db) {
         permitKeys.push(['permits', permitId])
       }
     }
+    // An electrical work permit is judged against the LOTO procedure it names
+    // (policy permitLotoProblem): from the write, else from the stored permit.
+    for (const op of ops) {
+      if (op.path !== 'permits') continue
+      const stored = rows.get(keyOf('permits', op.id))
+      const procId = String(op.data?.lotoProcedureId ?? (stored && parse(stored.data)?.lotoProcedureId) ?? '')
+      if (procId && !keys.has(keyOf('procedures', procId))) {
+        want('procedures', procId)
+        permitKeys.push(['procedures', procId])
+      }
+    }
     if (permitKeys.length) for (const [k, row] of await readRows(permitKeys)) rows.set(k, row)
     const { ctx } = await contextFor(session, rows)
 

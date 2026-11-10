@@ -30,6 +30,7 @@ import { AUDIT } from './audit'
 import { ANSWERABLE_STAGES, answerBlock, stageBlock } from './rejection'
 import { computeWindow, derivePermitStatus } from './permitStatus'
 import { mirrorDisplayFields } from './publicPermit'
+import { lotoFields, needsLotoProcedure } from './lotoLink'
 import { generateQrToken } from './qr'
 import { logAudit as logOrgAudit } from '../../../shared/org/orgData'
 import { discardMailedReport } from '../../../shared/print/mailedReport'
@@ -125,6 +126,8 @@ function mirrorStatusFields(p) {
     closedDueToObservation: p.closedDueToObservation || null,
     validFrom: p.validFrom || null,
     validTo: p.validTo || null,
+    // The public page reads this procedure's lock state from its own record.
+    lotoProcedureId: p.lotoProcedureId || '',
     updatedAt: serverTimestamp(),
   }
 }
@@ -234,6 +237,10 @@ export async function createPermit(data, actor) {
     attachedDocKeys: (data.documents || []).map((d) => d.key),
     assignedEngineer: data.assignedEngineer || null,
     assignedOperator: data.assignedOperator || null,
+    // The LOTO procedure an electrical permit waits on (lib/lotoLink.js).
+    ...(needsLotoProcedure(data.typeOfWork)
+      ? lotoFields(data.lotoProcedure)
+      : lotoFields(null)),
     engineering: emptyDecision(),
     operations: emptyDecision(),
     closure: null,
@@ -480,8 +487,60 @@ export async function getPermit(id) {
   return snap.exists() ? { id, ...snap.data() } : null
 }
 
+// ── The LOTO procedure an electrical permit waits on ────────────────────────
+// Its lock state is read from the procedure's public record (procedureQr),
+// which the LOTO module rewrites in the same batch as every lock change. The
+// public record carries whether each point is locked, never who locked it.
+
+const procedureLockRef = (id) => doc(db, 'procedureQr', id)
+
+/** The lock fields joined onto a permit from its procedure's public record. */
+export function lockFieldsFrom(record) {
+  if (!record) return { lotoLockStatus: '', lotoLockedCount: 0, lotoPointCount: 0 }
+  return {
+    lotoLockStatus: String(record.lockStatus || ''),
+    lotoLockedCount: Number(record.lockedCount) || 0,
+    lotoPointCount: Number(record.pointCount) || 0,
+  }
+}
+
+/** Live lock state of one procedure: cb(lock fields), cb(blank) when it cannot be read. */
+export function subscribeProcedureLock(procedureId, cb) {
+  return onSnapshot(
+    procedureLockRef(procedureId),
+    (snap) => cb(lockFieldsFrom(snap.exists() ? snap.data() : null)),
+    () => cb(lockFieldsFrom(null)),
+  )
+}
+
+/** The permit with its procedure's current lock state, for a status computed now. */
+async function withLotoLock(permit) {
+  if (!permit?.lotoProcedureId) return permit
+  try {
+    const snap = await getDoc(procedureLockRef(permit.lotoProcedureId))
+    return { ...permit, ...lockFieldsFrom(snap.exists() ? snap.data() : null) }
+  } catch {
+    // Unknown reads as not isolated (permitStatus.js), the safe direction.
+    return { ...permit, ...lockFieldsFrom(null) }
+  }
+}
+
+/** A site's LOTO procedures, for the electrical permit's picker (policy READ_ALSO). */
+export function subscribeSiteProcedures(siteId, cb) {
+  if (!siteId) {
+    cb([])
+    return () => {}
+  }
+  return onSnapshot(
+    query(collection(db, 'procedures'), where('siteId', '==', siteId), limit(500)),
+    (snap) => cb(snap.docs.map((d) => ({ id: d.id, ...d.data() }))),
+    () => cb([]),
+  )
+}
+
 /** Recompute + persist storedStatus when it drifts; keep the public mirror in sync. */
-async function syncStoredStatus(id, merged) {
+async function syncStoredStatus(id, mergedIn) {
+  const merged = await withLotoLock(mergedIn)
   const live = derivePermitStatus(merged, Date.now())
   if (merged.storedStatus !== live) {
     await updateDoc(permitRef(id), { storedStatus: live, updatedAt: serverTimestamp() })

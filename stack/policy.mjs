@@ -156,14 +156,23 @@ const publicReport = (path, d) =>
   d?.source === 'qr' &&
   d?.approvalStatus === 'pending'
 
-/** Is this caller kept out of the module `path` belongs to? */
-export function moduleBlocked(path, ctx) {
+// Collections another module may READ, never write. An electrical work permit
+// names the LOTO procedure that isolates its equipment, and the permit's
+// status waits on that procedure's locks (ptw/lib/permitStatus.js), so the
+// person raising it has to see the site's procedures without being given the
+// LOTO module. Reads are still held to their sites (siteBlocked).
+export const READ_ALSO = { procedures: ['ptw'] }
+
+/** Is this caller kept out of the module `path` belongs to? A read may pass on READ_ALSO. */
+export function moduleBlocked(path, ctx, { read = false } = {}) {
   if (ctx.worker) return false
   const key = MODULE_OF_COLLECTION[rootOf(path)]
   if (!key || !ctx.profile) return false
   if (ALL_MODULE_ROLES.includes(ctx.profile.role)) return false
   const granted = ctx.profile.access?.modules
-  return Array.isArray(granted) && !granted.includes(key)
+  if (!Array.isArray(granted) || granted.includes(key)) return false
+  if (read && path === rootOf(path) && (READ_ALSO[path] || []).some((m) => granted.includes(m))) return false
+  return true
 }
 
 // ── Site scope ──────────────────────────────────────────────────────────────
@@ -267,7 +276,7 @@ export function readScope(path, ctx) {
   if (rootOf(path) === 'inbox') return ownInbox(path, ctx) && passwordOk(ctx) ? 'all' : 'none'
   if (serverOnly(path)) return 'none'
   if (isMedical(path) && !isManager(ctx)) return 'none'
-  if (moduleBlocked(path, ctx)) return ctx.uid ? { ownedBy: ctx.uid } : 'none'
+  if (moduleBlocked(path, ctx, { read: true })) return ctx.uid ? { ownedBy: ctx.uid } : 'none'
   // gate_password: a temporary password reaches nothing but the person's own profile.
   if (!passwordOk(ctx)) return path === 'users' && ctx.uid ? { onlyId: ctx.uid } : 'none'
   // The public QR mirrors are read one at a time, by the token printed on the
@@ -952,6 +961,32 @@ export function withoutPermitAnswers(prev, next) {
   return out
 }
 
+// ── An electrical work permit and its LOTO procedure ────────────────────────
+// Electrical work waits on a LOTO procedure: Approved — LOTO pending until its
+// isolation points are locked out, Closed — LOTO pending until the locks come
+// off (ptw/lib/permitStatus.js). That gate is only as good as the procedure
+// the permit names, so the name is checked here, not only in the form: an
+// electrical permit raised, or re-pointed, without an approved procedure of
+// its own site would read "in progress" with nothing isolated. Checked when
+// the permit is raised and whenever its work type, site or procedure changes,
+// so permits raised before this rule can still be carried to closure. After
+// the first decision those fields are frozen anyway (approvedPermitProblem).
+// Keep in step with LOTO_WORK_TYPES in ptw/lib/lotoLink.js.
+export const LOTO_WORK_TYPES = ['Electrical Work']
+
+export function permitLotoProblem(prev, next, lookup) {
+  const touched =
+    !prev || ['typeOfWork', 'siteId', 'lotoProcedureId'].some((k) => str(prev[k]) !== str(next[k]))
+  if (!touched || !LOTO_WORK_TYPES.includes(str(next.typeOfWork))) return ''
+  const id = str(next.lotoProcedureId)
+  if (!id) return 'permit-loto-procedure'
+  const procedure = lookup('procedures', id)
+  if (!procedure) return 'permit-loto-procedure-missing'
+  if (str(procedure.status) !== 'approved') return 'permit-loto-procedure-unapproved'
+  if (str(procedure.siteId) !== str(next.siteId)) return 'permit-loto-procedure-site'
+  return ''
+}
+
 // What the QR record copies from its permit. The public page works the
 // status out from these (derivePermitStatus), so they must be the permit's:
 // for every writer, managers included, since the copy is only ever written
@@ -974,6 +1009,10 @@ const MIRROR_FROM_PERMIT = [
   [['docId'], (p) => str(p.docId)],
   [['site'], (p) => str(p.site)],
   [['typeOfWork'], (p) => str(p.typeOfWork)],
+  // Which procedure's locks the QR page reports. Pointed at another machine's
+  // fully locked procedure, the page would read "in progress" over equipment
+  // nobody had isolated.
+  [['lotoProcedureId'], (p) => str(p.lotoProcedureId)],
 ]
 // The display half: the permit's own value, or blanked once the job is over
 // (withdrawnFields in ptw/lib/publicPermit.js). Never a third thing.
@@ -1153,6 +1192,9 @@ export const MIRROR_FIELDS = {
     'precautions', 'jsa', 'participantCount', 'fireWatcherCount', 'hasConfinedWatcher',
     'withdrawn', 'storedStatus', 'engineering', 'operations', 'closure', 'extension',
     'closedDueToObservation', 'validFrom', 'validTo', 'updatedAt',
+    // The LOTO procedure an electrical permit waits on. The QR page reads its
+    // lock state from that procedure's own public record (procedureQr).
+    'lotoProcedureId',
   ],
   procedureQr: [
     'orgId', 'procedureCode', 'title', 'equipment', 'site', 'status', 'revision', 'lockStatus',
@@ -1268,6 +1310,10 @@ export function invariantProblem(path, id, prev, next, ctx, lookup = () => undef
     if (closing && Array.isArray(list) && list.some((a) => a && str(a.status || 'open') !== 'closed')) {
       return 'actions-open'
     }
+  }
+  if (!ctx.worker && path === 'permits') {
+    const loto = permitLotoProblem(prev, n, lookup)
+    if (loto) return loto
   }
   if (!ctx.worker && !isManager(ctx) && path === 'permits' && prev) {
     const frozen = approvedPermitProblem(prev, decisionsLeft)
