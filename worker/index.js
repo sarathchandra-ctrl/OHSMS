@@ -98,6 +98,16 @@ export async function forward(request, env) {
 }
 
 export default {
+  // The cron triggers in wrangler.jsonc: the server's own jobs, on a clock
+  // (stack/schedule.mjs).
+  async scheduled(event, env, ctx) {
+    // Forwarding to the organization's own server: the database is there, and
+    // so is the schedule (stack/main.mjs). Nothing to run here.
+    if (!env.DB) return
+    const { runScheduledOnCloudflare } = await import('./server.js')
+    ctx.waitUntil(runScheduledOnCloudflare(event.cron, env))
+  },
+
   async fetch(request, env, ctx) {
     const { pathname } = new URL(request.url)
     if (isServerPath(pathname)) {

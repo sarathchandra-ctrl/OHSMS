@@ -7,14 +7,14 @@
 
 import { grantsFor, generateKeyset, releaseKeyset } from '../stack/lib/dataKeys.js'
 import { mayDeleteFile } from '../stack/lib/fileDelete.js'
-import { planPurge } from '../stack/lib/retention.js'
+import { planPurge, PURGEABLE, MAX_PURGES_PER_RUN, summarizeFailures } from '../stack/lib/retention.js'
 import {
   planLiveAgePurge,
   RECORD_CLASSES,
   NEEDS_LEGAL_SIGN_OFF,
 } from '../stack/lib/retentionPolicy.js'
 import { planWithdrawals, withdrawnFields } from '../stack/lib/permitMirror.js'
-import { planFlags } from '../stack/lib/lotoPermitSweep.js'
+import { planFlags, isPurgeable, MAX_PERMIT_PURGES_PER_RUN } from '../stack/lib/lotoPermitSweep.js'
 import { serveSiteWeather, WEATHER_FETCH_LIMIT, WEATHER_FETCH_WINDOW_S } from '../stack/lib/siteWeather.js'
 
 import { planExport, planScan, scanFeasibility, classifyErasure } from '../stack/lib/subjectData.js'
@@ -91,21 +91,111 @@ export async function isLiveAdmin(engine, uid) {
   )
 }
 
-export async function runRetention(engine, { now = Date.now() }) {
-  const live = []
+/** Stored file paths named anywhere in a record (pointers carry `path: 'files/…'`). */
+function storedFilePaths(value, out = new Set()) {
+  if (Array.isArray(value)) value.forEach((v) => storedFilePaths(v, out))
+  else if (value && typeof value === 'object') {
+    for (const [k, v] of Object.entries(value)) {
+      if (k === 'path' && typeof v === 'string' && v.startsWith('files/') && !v.includes('..')) out.add(v)
+      else storedFilePaths(v, out)
+    }
+  }
+  return out
+}
+
+/**
+ * Destroy one record with everything that hangs off it: its sub-collection
+ * rows, the stored files any of them name, and its public QR mirror. Files and
+ * rows first, the record last, so a failure part-way leaves the record (still
+ * in the bin) to be found and finished by the next run rather than files with
+ * nothing pointing at them.
+ */
+async function destroyRecord(engine, blobStore, { collection, id, record, subcollections = [], qrMirror = false }, failures) {
+  const rows = []
+  for (const sub of subcollections) {
+    for (const row of await engine.list(WORKER, `${collection}/${id}/${sub}`, {})) {
+      rows.push({ path: `${collection}/${id}/${sub}`, row })
+    }
+  }
+  let ok = true
+  for (const path of storedFilePaths([record, ...rows.map((r) => r.row)])) {
+    try {
+      if (blobStore) await blobStore.remove(path)
+    } catch (err) {
+      ok = false
+      failures.push({ kind: 'file', collection, id, error: err?.message || String(err) })
+    }
+  }
+  if (!ok) return false
+  for (const { path, row } of rows) await engine.commit(WORKER, [{ type: 'remove', path, id: row.id }])
+  if (qrMirror && record?.qrToken) {
+    await engine.commit(WORKER, [{ type: 'remove', path: 'qr', id: String(record.qrToken) }])
+  }
+  await engine.commit(WORKER, [{ type: 'remove', path: collection, id }])
+  return true
+}
+
+/**
+ * The Recycle Bin sweep: records deleted more than PURGE_AFTER_DAYS ago, in
+ * every collection stack/lib/retention.js lists, with what goes with each. At
+ * most MAX_PURGES_PER_RUN records a run across all of them. Live age-purge of
+ * statutory records stays off (NEEDS_LEGAL_SIGN_OFF) and is checked first.
+ * Failures do not stop the sweep; they are returned, and `failure` says so.
+ */
+export async function runRetention(engine, { now = Date.now(), blobStore = null } = {}) {
   for (const row of RECORD_CLASSES) {
     const plan = planLiveAgePurge([{ id: 'sample' }], row, { now })
-    live.push({ path: row.path, purge: plan.purge.length, period: row.proposedPeriod })
+    if (row.proposedPeriod === NEEDS_LEGAL_SIGN_OFF && plan.purge.length !== 0) {
+      throw new Error('retention: a statutory class was queued for deletion')
+    }
   }
-  if (live.some((row) => row.period === NEEDS_LEGAL_SIGN_OFF && row.purge !== 0)) {
-    throw new Error('retention: a statutory class was queued for deletion')
+  const failures = []
+  let purged = 0
+  for (const target of PURGEABLE) {
+    const remaining = MAX_PURGES_PER_RUN - purged
+    if (remaining <= 0) break
+    const docs = await engine.list(WORKER, target.collection, {})
+    const plan = planPurge(docs, { now, max: remaining })
+    for (const id of plan.purge) {
+      const record = docs.find((d) => d.id === id)
+      try {
+        if (await destroyRecord(engine, blobStore, { ...target, id, record }, failures)) purged += 1
+      } catch (err) {
+        failures.push({ kind: 'record', collection: target.collection, id, error: err?.message || String(err) })
+      }
+    }
   }
-  const docs = await engine.list(WORKER, 'incidents', {})
-  const plan = planPurge(docs, { now })
-  for (const item of plan.purge || []) {
-    await engine.commit(WORKER, [{ type: 'remove', path: 'incidents', id: item.id }])
+  return { livePurged: 0, recyclePurged: purged, failure: summarizeFailures(failures), failures }
+}
+
+/**
+ * Closed LOTO permits, a year after they closed (LOTO_PERMIT_RETENTION_DAYS),
+ * with their timeline, attachments, their files and the lock photo. Open
+ * permits are never touched (isPurgeable).
+ */
+export async function purgeClosedLotoPermits(engine, { nowMs = Date.now(), blobStore = null } = {}) {
+  const permits = await engine.list(WORKER, 'lotoPermits', {})
+  const failures = []
+  let purged = 0
+  for (const permit of permits) {
+    if (purged >= MAX_PERMIT_PURGES_PER_RUN) break
+    if (!isPurgeable(permit, nowMs)) continue
+    try {
+      const photoId = `permitlock_${permit.id}`
+      const photo = await engine.get(WORKER, 'procedurePhotos', photoId)
+      const done = await destroyRecord(
+        engine,
+        blobStore,
+        { collection: 'lotoPermits', id: permit.id, record: { permit, photo }, subcollections: ['events', 'attachments'] },
+        failures
+      )
+      if (done && photo) await engine.commit(WORKER, [{ type: 'remove', path: 'procedurePhotos', id: photoId }])
+      if (done) purged += 1
+    } catch (err) {
+      failures.push({ kind: 'record', collection: 'lotoPermits', id: permit.id, error: err?.message || String(err) })
+    }
   }
-  return { livePurged: 0, recyclePurged: (plan.purge || []).length }
+  return { purged, failure: summarizeFailures(failures), failures }
 }
 
 export async function withdrawStaleMirrors(engine, { now = Date.now() } = {}) {

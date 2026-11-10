@@ -171,7 +171,11 @@ a hope, not a backup.
 
 ## Everyday operation
 
-- **Logs:** `docker compose logs -f app`
+- **Logs:** `docker compose logs -f app`. The server runs its own scheduled
+  jobs (`stack/schedule.mjs`): LOTO due/overdue flags every five minutes, and
+  nightly at 03:45 IST (22:15 UTC) the Recycle Bin purge, the purge of LOTO
+  permits closed more than a year ago, and the withdrawal of stale public permit
+  pages. A run with a problem writes a `scheduled:` line to this log.
 - **Stop:** `docker compose down` (data is kept). Never add `-v` unless you
   mean to delete the database.
 - **Server updates:** keep the operating system and Docker patched; the

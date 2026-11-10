@@ -50,7 +50,9 @@ the server's own `/health` (database, file storage, deployed commit).
 
 ## What is still not here
 
-Metrics, SLOs, on-call rotations, dashboards. The Recycle Bin sweep
-(`purgeSoftDeleted`, `stack/lib/retention.js` `summarizeFailures`) reports
-its failures to whoever runs it; the current server has no scheduler, so it
-runs when an admin calls it.
+Metrics, SLOs, on-call rotations, dashboards. The scheduled jobs
+(`stack/schedule.mjs`: the Recycle Bin purge, the closed LOTO permit purge,
+stale public permit pages, LOTO due/overdue flags) finish their work and then
+fail if anything went wrong, naming every failure: on Cloudflare a failed cron
+invocation in the Worker's logs, self-hosted a line in the container log.
+Nothing alerts on those yet.

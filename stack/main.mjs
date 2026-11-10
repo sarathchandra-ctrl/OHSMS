@@ -4,6 +4,7 @@
 
 import nodemailer from 'nodemailer'
 import { createDedicatedApp } from './app.mjs'
+import { startNodeSchedule } from './schedule.mjs'
 import { openSqlite } from './sqlite.mjs'
 
 const env = process.env
@@ -87,7 +88,7 @@ if (env.SMTP_HOST && env.SMTP_USER && env.SMTP_PASS && env.MAIL_FROM) {
 
 // One SQLite file. Keep it on a volume and back it up with the files.
 const db = openSqlite(env.DATABASE_FILE || new URL('./data/ohsms.sqlite', import.meta.url).pathname)
-const { server } = await createDedicatedApp({
+const { server, engine, blobStore } = await createDedicatedApp({
   db,
   origin,
   sessionSecret,
@@ -105,6 +106,15 @@ const { server } = await createDedicatedApp({
   },
 })
 
+// The server's own jobs on a clock: LOTO flags every five minutes, the
+// Recycle Bin and closed-permit purges and stale permit pages nightly
+// (stack/schedule.mjs). Failures go to the container log.
+const schedule = startNodeSchedule({
+  engine,
+  blobStore,
+  log: (line) => process.stderr.write(`${line}\n`),
+})
+
 const port = Number(env.PORT || 8080)
 server.listen(port, '0.0.0.0', () => {
   process.stdout.write(
@@ -114,6 +124,7 @@ server.listen(port, '0.0.0.0', () => {
 
 // Docker sends SIGTERM before it stops the container.
 process.on('SIGTERM', () => {
+  schedule.stop()
   server.close(() => {
     db.close()
     process.exit(0)

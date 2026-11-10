@@ -144,22 +144,22 @@ in the app.
 
 ## Due / overdue (PR C)
 
-`sweepLotoPermits` is a server job (`stack/workers.mjs`) that writes
+`sweepLotoPermits` runs every 5 minutes on the **server** clock
+(`stack/schedule.mjs`) and writes
 `flags` (`windowEnd`, `dueAt`, `overdueCount`, `overdueSince`, `lastOverdueAt`)
 onto **active** permits only. Flags are keyed to the window end they were
 computed for, so an extension restarts the count. A window is two absolute
 instants, so a shift crossing midnight needs no special case. The app's badge
 uses the browser clock and defers to the server flags in the escalating
-direction. On Firebase it ran every 5 minutes; the current server has no
-scheduler, so it runs when an admin calls it.
+direction.
 
 ## Retention
 
-Closed permits (returned, rejected, withdrawn, emergency removal) are meant to
-be kept **1 year** from `closedAt` and then purged with their events,
-attachments and stored files. On Firebase that was a nightly sweep
-(`purgeClosedLotoPermits`); it has not been ported to the current server, so
-closed permits are kept until it is. Open permits are never purged.
+Closed permits (returned, rejected, withdrawn, emergency removal) are kept
+**1 year** from `closedAt` and then purged with their events, attachments,
+stored files and lock photo (`purgeClosedLotoPermits`, nightly 03:45 IST, at
+most 500 per run; a file that cannot be deleted keeps its permit for the next
+run and makes the run report failure). Open permits are never purged.
 
 ## Tags and the public procedure page
 

@@ -111,14 +111,15 @@ export async function createDedicatedApp({
   const engine = createEngine(db)
   const created = bootstrap ? await bootstrapOrganization(engine, db, bootstrap) : { created: false }
 
+  const blobStore = blobDir
+    ? createBlobStore({ dir: blobDir, key: blobKeyFrom(sessionSecret), origin })
+    : null
   const host = createOwnStackServer({
     engine,
     db,
     sessionSecret,
     origin,
-    blobStore: blobDir
-      ? createBlobStore({ dir: blobDir, key: blobKeyFrom(sessionSecret), origin })
-      : null,
+    blobStore,
     dataKeyMaster,
     mail,
     fetchImpl,
@@ -157,5 +158,6 @@ export async function createDedicatedApp({
     }
   })
 
-  return { server: host, created }
+  // engine and blobStore for the caller's scheduler (stack/main.mjs).
+  return { server: host, created, engine, blobStore }
 }

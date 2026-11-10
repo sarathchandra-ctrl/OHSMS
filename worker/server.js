@@ -26,6 +26,7 @@ import { bootstrapOrganization } from '../stack/passwords.mjs'
 import { createR2FileStore } from './files.js'
 import { nodeRequest, nodeResponse } from './bridge.js'
 import { resendMailer } from './mail.js'
+import { jobForCron, runFrequent, runNightly } from '../stack/schedule.mjs'
 
 const initializations = new WeakMap()
 
@@ -65,6 +66,27 @@ function json(status, body) {
     status,
     headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' },
   })
+}
+
+/**
+ * A cron trigger (wrangler.jsonc). Runs the server's own jobs, as the server;
+ * see stack/schedule.mjs. A failure throws, so it shows in the Worker's logs
+ * as a failed invocation rather than passing for "nothing to do".
+ */
+export async function runScheduledOnCloudflare(cron, env) {
+  const problems = settingsProblems(env)
+  if (problems.length) throw new Error(`the server is not configured: ${problems.join(', ')}`)
+  const job = jobForCron(cron)
+  if (!job) throw new Error(`no job for cron "${cron}"`)
+  const db = env.DB
+  await initialize(db, env)
+  const engine = createEngine(db)
+  if (job === 'frequent') return runFrequent(engine)
+  const origin = String(env.PUBLIC_ORIGIN).replace(/\/$/, '')
+  const blobStore = env.FILES
+    ? createR2FileStore({ bucket: env.FILES, key: blobKeyFrom(env.SESSION_SECRET), origin })
+    : null
+  return runNightly(engine, { blobStore })
 }
 
 /** Answers one server request inside the Worker. */

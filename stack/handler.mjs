@@ -319,7 +319,7 @@ export function createOwnStackHandler({
         resetMemberPassword(engine, db, { uid, targetUid: body.uid, password: body.password }),
       getDataKeys: () => releaseDataKeys(engine, { uid, master: dataKeyMaster }),
       deleteOrgFile: () => deleteOrgFile(engine, blobStore, { uid, path: body.path }),
-      purgeSoftDeleted: () => runRetention(engine, { uid }),
+      purgeSoftDeleted: () => runRetention(engine, { blobStore }),
       withdrawStalePermitMirrors: () => withdrawStaleMirrors(engine),
       sweepLotoPermits: () => sweepLoto(engine, { uid }),
       migrateLegacyFiles: () =>

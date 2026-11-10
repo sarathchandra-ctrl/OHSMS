@@ -66,6 +66,14 @@ Limits of A: the only mail sent is password-reset links; D1 holds up to
 10 GB per database and runs one write at a time, which is ample for one
 organization.
 
+**Scheduled jobs (A).** `wrangler.jsonc` sets two cron triggers that run the
+server's own jobs (`stack/schedule.mjs`): LOTO due/overdue flags every five
+minutes, and nightly at 03:45 IST the Recycle Bin purge, the purge of LOTO
+permits closed more than a year ago, and the withdrawal of stale public permit
+pages. They deploy with the Worker. A run that hit a problem shows as a failed
+invocation under the Worker's logs. When the Worker forwards to your own
+server (B), the triggers do nothing; that server runs the jobs itself.
+
 **Backups (A).** D1 keeps 30 days of point-in-time history (Time Travel):
 `npx wrangler d1 time-travel restore ohsms --timestamp <time>`. For a copy
 you hold yourself: `npx wrangler d1 export ohsms --remote --output ohsms.sql`.
