@@ -1,11 +1,10 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // Third-party connection settings, one document per integration.
 //
-// /organizations/{orgId}/integrations/{name}, admin-only on both sides — see the
-// match block in firestore.rules and tests/integrations.rules.test.js. The
-// collection is excluded from the generic member grant, which is the half that
-// does the work: a narrow rule restricts nothing while a broader one still
-// grants the same access.
+// integrations/{name}. Server-only (serverOnly in stack/policy.mjs): no browser
+// session reads or writes it, admin included, because it holds credentials.
+// The Metabase server job that will read it is not ported yet
+// (src/shared/serverFeatures.js), so the settings screen is hidden.
 //
 // There is deliberately no subscribe() here, and no read helper either. The
 // settings screen reads the connection back through the `metabaseConfig`

@@ -70,6 +70,16 @@ describe('who belongs', () => {
     expect((await member.list('users')).length).toBeGreaterThan(1)
   })
 
+  it('keeps third-party credentials out of the data API, admin included', async () => {
+    await seed('integrations', 'metabase', { baseUrl: 'https://bi.example.test', apiKey: 'mb-secret' })
+    for (const uid of ['memberA', 'adminA']) {
+      expect(await as(uid).get('integrations', 'metabase'), uid).toBeNull()
+      expect(await as(uid).list('integrations'), uid).toEqual([])
+      await expect(as(uid).set('integrations', 'metabase', { apiKey: 'swapped' }, { merge: true })).rejects.toThrow()
+    }
+    expect((await adminEngine.get(null, 'integrations', 'metabase')).apiKey).toBe('mb-secret')
+  })
+
   it('keeps the directory token out of the data API, admin included', async () => {
     const adminA = as('adminA')
     expect(await adminA.get('scimTokens', 'current')).toBeNull()

@@ -30,8 +30,10 @@ export const collectionOf = (path) => String(path).split('/').pop()
 export const rootOf = (path) => String(path).split('/')[0]
 export const isMedical = (path) => /^(injuries|illnesses)(\/|$)/.test(String(path))
 /** Written and read only by the server. */
+// integrations holds third-party credentials (the Metabase API key): read
+// and written by server jobs only, which strip the key before answering.
 export const serverOnly = (path) =>
-  ['scimTokens', 'scimUsers', 'scimGroups', 'weatherCache'].includes(rootOf(path))
+  ['scimTokens', 'scimUsers', 'scimGroups', 'weatherCache', 'integrations'].includes(rootOf(path))
 /** Documents with their own, narrower write rules. */
 export const specialPath = (path) => ['users', 'organization', 'moduleEntitlements'].includes(path)
 const isCryptoKey = (path, id) =>
