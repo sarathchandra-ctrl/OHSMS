@@ -13,6 +13,20 @@ Two ways, chosen by the Worker's settings in `wrangler.jsonc`:
 
 ## A. Everything on Cloudflare
 
+**Plan: Workers Paid ($5 a month) is required.** The Free plan does not
+fit this server, for three reasons that each fail in front of users:
+
+- **CPU time.** Free allows 10 ms of CPU per request. One password check
+  (PBKDF2-SHA256 at 100,000 iterations, the most Workers allows) takes about
+  20 ms, so sign-in, password changes and resets fail with error 1102. Paid
+  allows 30 seconds.
+- **Queries per invocation.** Free allows 50 D1 queries in one request or
+  cron run, Paid 1,000. The nightly jobs save one record at a time, so on
+  Free a Recycle Bin of a dozen or so items stops the purge part-way.
+- **Daily D1 quotas.** Since 1 September 2026 Free accounts get hard errors
+  after 100,000 rows written or 5 million rows read in a day, until midnight
+  UTC. The five-minute LOTO sweep reads every LOTO permit, around the clock.
+
 1. **Database.** Create a D1 database near your users:
    ```bash
    npx wrangler d1 create ohsms --location apac
@@ -45,14 +59,23 @@ Two ways, chosen by the Worker's settings in `wrangler.jsonc`:
 5. **Password-reset email (optional).** Create a Resend account
    (resend.com), verify the sending domain there (it gives DNS records to
    add), create an API key, then set `MAIL_FROM` in `wrangler.jsonc` (for
-   example `Cult Fit SMS <noreply@curefit.com>`) and
+   example `OHSMS <noreply@example.com>`) and
    `npx wrangler secret put RESEND_API_KEY`. The sign-in page then offers
    **Forgot password?**, which emails a one-time link valid for 30 minutes.
    Without it, administrators reset passwords from Employees.
-6. **Address.** `PUBLIC_ORIGIN` in `wrangler.jsonc` is the address people
-   type (the `workers.dev` URL, or a custom domain added under the Worker's
-   Settings → Domains & Routes).
-7. **Deploy:** `npm run deploy:cloudflare`. Check
+6. **Address.** `PUBLIC_ORIGIN` is the address people type (the
+   `workers.dev` URL, or a custom domain added under the Worker's Settings →
+   Domains & Routes). It is **not** in `wrangler.jsonc`: the repository is
+   public and the live hostname stays with the operator. Set it on the
+   Worker, either with the first deploy (step 7) or under Settings →
+   Variables and Secrets. `"keep_vars": true` in `wrangler.jsonc` stops
+   later deploys from deleting it. Until it is set the server answers 503
+   `the server is not configured: PUBLIC_ORIGIN`.
+7. **Deploy.** The first time:
+   ```bash
+   npm run build && npx wrangler deploy --var PUBLIC_ORIGIN:https://<address>
+   ```
+   and after that `npm run deploy:cloudflare`. Check
    `curl -s https://<address>/health` — it answers
    `{"ok":true,"database":"ok",…}`, or says what is missing.
 8. **Sign in** at `https://<address>` with `ADMIN_EMAIL` and `ADMIN_PASSWORD`.
@@ -65,7 +88,10 @@ Two ways, chosen by the Worker's settings in `wrangler.jsonc`:
 
 Limits of A: the only mail sent is password-reset links; D1 holds up to
 10 GB per database and runs one write at a time, which is ample for one
-organization.
+organization. One record may be at most 1,900,000 bytes, under D1's
+2,000,000-byte row limit (`MAX_RECORD_BYTES` in `stack/engine.mjs`); a larger
+save is refused with `record too large` rather than failing inside D1. Files
+belong in R2, not inside records.
 
 **Scheduled jobs (A).** `wrangler.jsonc` sets two cron triggers that run the
 server's own jobs (`stack/schedule.mjs`): LOTO due/overdue flags every five
@@ -86,8 +112,12 @@ existing **ohsms** Worker on every push, and can also be run from Actions.
 It does not deploy the separate sms Worker.
 
 Before the first run, in GitHub **Settings → Secrets and variables → Actions**,
-add repository secrets named `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`.
-Use an API token scoped to the intended account that can deploy Workers and
+add three repository secrets: `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`
+and `OHSMS_PUBLIC_ORIGIN` (the Worker's address, `https://<address>`). The
+address is a secret rather than a variable so that GitHub masks it in this
+public repository's Actions logs, including where `wrangler deploy` prints the
+URL. The workflow passes it to the Worker as `PUBLIC_ORIGIN` on every deploy
+and checks `/health` there. Use an API token scoped to the intended account that can deploy Workers and
 access the configured D1 and R2 resources. Enter credentials in GitHub's secure
 settings, never in a source file or issue.
 
@@ -98,8 +128,9 @@ Email reset also needs `RESEND_API_KEY` and a verified `MAIL_FROM` setting.
 
 The workflow installs locked dependencies, runs lint and tests, builds the app,
 and deploys its assets and backend together. It then checks `/health` for the
-database, storage binding and deployed Git commit. A missing deployment secret
-stops the job with a setup error; a pushed commit alone is not a live deployment.
+database, storage binding and deployed Git commit. Until all three secrets
+exist the job is skipped with a notice, so a pushed commit alone is not a live
+deployment.
 After supplying secrets, use **Actions → Deploy OHSMS → Run workflow**, branch `main`.
 
 ## B. Cloudflare in front of your own server
@@ -111,7 +142,7 @@ Postgres database**. Cloudflare sits in front of it:
  browser ──https──▶  Cloudflare Worker  (ehs.example.com)
                       │  serves the app (dist/) from Cloudflare's edge
                       │  forwards /data /auth/* /rpc/* /presign /blob
-                      │           /scim/* /health /runtime-config.js
+                      │           /health /runtime-config.js
                       ▼
                      Cloudflare Tunnel  (ehs-origin.example.com, Access-protected)
                       │  outbound-only connection, no open ports on the server
@@ -296,6 +327,7 @@ A backup is only real once it has been restored somewhere else and signed in to.
 
 | Symptom                                                 | Likely cause                                                                                       |
 | ------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| `/health` answers 503 `not configured: PUBLIC_ORIGIN`  | (A) the address was never set on the Worker: deploy once with `--var PUBLIC_ORIGIN:https://<address>`, or set it under Settings → Variables and Secrets |
 | `/health` answers 503 `ORIGIN_URL is not configured`    | `ORIGIN_URL` missing or not `https://` in `wrangler.jsonc`                                         |
 | `/health` answers 403 from Cloudflare Access            | Worker secrets `CF_ACCESS_CLIENT_ID` / `_SECRET` missing or wrong                                  |
 | `/health` answers 502/530                               | Tunnel down: `docker compose logs cloudflared`, or the hostname's service is not `http://app:8080` |

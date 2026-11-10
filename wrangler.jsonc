@@ -45,6 +45,10 @@
   "rules": [{ "type": "Text", "globs": ["**/*.sql"], "fallthrough": true }],
   // The database: Cloudflare D1 (SQLite), Asia-Pacific. Access rules are
   // enforced by stack/policy.mjs; the tables are created on first request.
+  // The id is not a credential (it is useless without an API token for the
+  // account) and stays here on purpose: without it Wrangler provisions a
+  // database by name, and a new empty one would bootstrap a blank
+  // organization in front of the real records.
   "d1_databases": [
     {
       "binding": "DB",
@@ -54,16 +58,22 @@
   ],
   // Create this private bucket once before deploying: wrangler r2 bucket create ohsms-files.
   "r2_buckets": [{ "binding": "FILES", "bucket_name": "ohsms-files" }],
+  // PUBLIC_ORIGIN, the address people type, is deliberately not in this file:
+  // the repository is public, and the live hostname is operational detail
+  // that stays with the operator (AGENTS.md). It is set on the Worker itself
+  // (dashboard, or `--var PUBLIC_ORIGIN:https://…` on the first deploy), and
+  // keep_vars stops every later deploy from deleting it. Every sign-in
+  // redirect and file link is built on it; without it the server answers 503
+  // naming PUBLIC_ORIGIN (worker/server.js settingsProblems).
+  "keep_vars": true,
   "vars": {
-    // The address people type. Every sign-in redirect and file link is built on it.
-    "PUBLIC_ORIGIN": "https://ohsms.sarath-chandra.workers.dev",
     // The organization created on first start.
     "ORG_NAME": "Cult Fit",
     // The first administrator's ADMIN_PASSWORD was chosen by the operator, so
     // it is not forced to change at first sign-in. "true" for a generated one.
     "ADMIN_MUST_CHANGE": "false",
     // Sender of password-reset emails, on a domain verified in Resend, e.g.
-    // "Cult Fit SMS <noreply@curefit.com>". With RESEND_API_KEY (secret) set,
+    // "OHSMS <noreply@example.com>". With RESEND_API_KEY (secret) set,
     // the sign-in page offers "Forgot password?"; empty keeps resets with admins.
     "MAIL_FROM": "",
     // Leave empty to run the server here. Set to a Tunnel hostname

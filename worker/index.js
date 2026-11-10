@@ -12,8 +12,8 @@
 // /runtime-config.js — is forwarded to the organization's own server, which
 // Cloudflare reaches through a Cloudflare Tunnel (cloudflared, next to the
 // server; selfhost/compose.yaml runs it). The browser only ever sees this one
-// hostname, so the app.s
-// fetches stay same-origin, exactly as when the server serves the app itself.
+// hostname, so the app's fetches stay same-origin, exactly as when the server
+// serves the app itself.
 //
 // Settings (wrangler.jsonc "vars", or the dashboard):
 //   ORIGIN_URL               https URL of the Tunnel hostname for the server,
@@ -26,7 +26,8 @@
 // (the hostname people type), because it builds every redirect and file URL
 // on it.
 
-// Keep in step with API_PREFIXES in stack/app.mjs.
+// Keep in step with API_PREFIXES in stack/runtimeConfig.mjs. /scim is not
+// here on purpose: the server does not serve it (worker/index.test.js).
 export const SERVER_PREFIXES = [
   '/data',
   '/auth/',

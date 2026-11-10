@@ -1,5 +1,5 @@
 // Outgoing mail from the Worker, through Resend's HTTP API (Workers have no
-// SMTP). Settings: MAIL_FROM (var, e.g. "Cult Fit SMS <noreply@curefit.com>",
+// SMTP). Settings: MAIL_FROM (var, e.g. "OHSMS <noreply@example.com>",
 // on a domain verified in Resend) and RESEND_API_KEY (secret).
 //
 // Returns { sent } and never throws: a mail that could not be sent is logged,
