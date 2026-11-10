@@ -1,3 +1,4 @@
+import { publicPath } from '../../shared/publicPath'
 import { useEffect, useId, useState } from 'react'
 import { isNativePlatform } from '../../shared/mobile/native'
 import { loadPublicStoreConfig, resolveStoreLinks } from '../../shared/mobile/storeLinks'
@@ -12,7 +13,7 @@ import { loadPublicStoreConfig, resolveStoreLinks } from '../../shared/mobile/st
 const BADGES = [
   {
     key: 'appStore',
-    src: '/badges/app-store-badge.svg',
+    src: publicPath('/badges/app-store-badge.svg'),
     alt: 'Download on the App Store',
     width: 120,
     height: 40,

@@ -1,0 +1,63 @@
+name: Pages demo
+
+# A demo of the app on GitHub Pages: invented data kept in each visitor's
+# browser, no server, nothing real. See src/demo/demoMode.js. The real
+# deployment is deploy-cloudflare.yml (or self-hosted, docs/SELF-HOSTING.md);
+# this does not replace it.
+#
+# One-time setup: Settings > Pages > Build and deployment > Source:
+# "GitHub Actions".
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages-demo
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install locked dependencies
+        run: npm ci --no-audit --no-fund
+      - name: Build the demo
+        env:
+          VITE_BASE: /${{ github.event.repository.name }}/
+          VITE_DEMO: '1'
+          VITE_DATA_DRIVER: memory
+          VITE_STORAGE_DRIVER: demo
+          VITE_DATA_GATEWAY: https://demo.invalid
+        run: |
+          npx vite build
+          # GitHub Pages has no SPA fallback: a deep link or a reload on
+          # /<repo>/portal is served 404.html, which is the app.
+          cp dist/index.html dist/404.html
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

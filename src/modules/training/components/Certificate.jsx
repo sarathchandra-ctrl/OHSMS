@@ -1,3 +1,4 @@
+import { publicPath } from '../../../shared/publicPath'
 import { Printer, X, Award } from 'lucide-react'
 import { PrintIsolate } from '../../../shared/ui'
 import { formatDate } from '../../../shared/lib/format'
@@ -46,7 +47,7 @@ export default function CertificateModal({ record, orgName, onClose }) {
             <div className="flex h-full flex-col items-center px-10 py-7 text-center">
               <div className="flex items-center gap-3">
                 <img
-                  src="/brand/logo.svg"
+                  src={publicPath('/brand/logo.svg')}
                   alt="Cult Fit SMS"
                   className="h-12 w-12 rounded-lg ring-1 ring-ink-200"
                 />

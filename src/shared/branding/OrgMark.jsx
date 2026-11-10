@@ -11,13 +11,14 @@
 // Both the header and the breadcrumb read this component, so "which logo"
 // cannot drift between them.
 // ─────────────────────────────────────────────────────────────────────────────
+import { publicPath } from '../publicPath'
 import { useEffect, useRef, useState } from 'react'
 import { useAuth } from '../auth/AuthContext'
 import { safeSrc } from '../safeUrl'
 import { inlineImageSrc, useFileUrl } from '../storage/useFileUrl'
 
 /** The Cult Fit logo, in /public/brand. Also the fallback identity when none is set. */
-export const WE_EHS_MARK = '/brand/logo.svg'
+export const WE_EHS_MARK = publicPath('/brand/logo.svg')
 
 /**
  * True when the org document points at a logo.

@@ -1,3 +1,4 @@
+import { publicPath } from '../publicPath'
 // Optional iOS store listings. Environment values override public/store.json.
 // Accept only HTTPS URLs on the official Apple hosts.
 const APPLE_HOST = 'apps.apple.com'
@@ -33,7 +34,7 @@ export function resolveStoreLinks({ env = {}, config = {} } = {}) {
 
 export async function loadPublicStoreConfig(fetchImpl = globalThis.fetch) {
   try {
-    const res = await fetchImpl('/store.json')
+    const res = await fetchImpl(publicPath('/store.json'))
     if (!res?.ok) return {}
     const data = await res.json()
     if (!data || typeof data !== 'object' || Array.isArray(data)) return {}
