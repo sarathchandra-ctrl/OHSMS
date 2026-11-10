@@ -399,7 +399,7 @@ const AuditorWorkplace = ({ setView, session, isGlobalOwner, plans, findings, si
         createdByUid: session.uid || null,
         auditeeUid: auditee.length === 1 ? auditee[0].id : null,
       })
-      alert('Audit saved & sent to auditee.')
+      alert('Audit saved. The auditee finds it in their Auditee Workplace.')
       setView('hub')
     } catch (e) { alert('Error saving: ' + e.message) }
   }

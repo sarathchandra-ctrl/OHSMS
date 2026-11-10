@@ -20,6 +20,7 @@
 // The two packages cannot import each other. Both tests pin the same literal.
 import { reportError } from '../monitoring'
 import { putFile, removeFile } from '../storage'
+import { SERVER_FEATURES } from '../serverFeatures'
 
 export const MAILED_REPORT_KIND = 'mailed-reports'
 
@@ -145,7 +146,11 @@ export async function uploadMailedReport(blob, fileName) {
  * (tests, a save that is not in a browser) or when capture fails. A failed
  * capture must not fail the save: the mail still goes, without the file.
  */
-export async function captureReactPdf(fileName, node) {
+export async function captureReactPdf(fileName, node, { enabled = SERVER_FEATURES.mail } = {}) {
+  // No mailer yet: rendering and uploading the PDF cost every save time on a
+  // phone, and left the decrypted print (names, minutes, narrative) stored
+  // unsealed where no browser may read it and nothing ever sent it.
+  if (!enabled) return ''
   if (typeof document === 'undefined' || !node) return ''
   try {
     const blob = await renderElementPdf(node)

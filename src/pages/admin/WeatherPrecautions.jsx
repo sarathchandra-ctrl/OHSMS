@@ -95,7 +95,8 @@ export default function WeatherPrecautions({ activityTypes, value, onChange }) {
         <CloudRain size={17} className="text-brand-600" /> Weather digest precautions
       </h3>
       <p className="mb-3 mt-1 text-sm text-ink-500">
-        The six-hour weather mail fills each site’s precautions from its site type. Heat stress,
+        The precautions a weather alert gives for each site come from its site type. Weather alert
+        mail is not switched on yet; the Weather Risk page shows each site’s conditions now. Heat stress,
         cold stress, rain, lightning and air quality can differ for an office, an indoor gym, pool
         or court, a warehouse, a kitchen, a shop, a plant or a construction site. A permit or a
         hazard assessment can still add the work happening there. Leave a box blank to keep the
@@ -104,7 +105,7 @@ export default function WeatherPrecautions({ activityTypes, value, onChange }) {
       </p>
       {selected.length === 0 && (
         <p className="mb-3 text-sm text-ink-600">
-          No activities selected yet. The digest will use the general precautions until you select
+          No activities selected yet. The general precautions apply until you select
           some above, or until a site has a matching permit, HIRA activity or site type.
         </p>
       )}

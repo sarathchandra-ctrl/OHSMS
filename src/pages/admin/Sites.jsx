@@ -133,7 +133,7 @@ export default function Sites() {
       return
     }
     if (editing === 'new' && !form.facility) {
-      toast.error('Choose a site type. The weather digest uses it for this site’s precautions.')
+      toast.error('Choose a site type. It sets the weather precautions for this site.')
       return
     }
     setBusy(true)
@@ -634,10 +634,10 @@ export default function Sites() {
             htmlFor="facility"
             hint={
               editing === 'new'
-                ? 'Required. The weather digest takes this site’s precautions from the type.'
+                ? 'Required. It sets the weather precautions for this site.'
                 : form.facility
-                  ? 'The weather digest takes this site’s precautions from the type.'
-                  : 'Not set. Choose a type so the weather digest can use it. You can still save other changes.'
+                  ? 'Sets the weather precautions for this site.'
+                  : 'Not set. Choose a type to set this site’s weather precautions. You can still save other changes.'
             }
           >
             <Select id="facility" required={editing === 'new'} value={form.facility || ''} onChange={set('facility')}>
@@ -922,7 +922,7 @@ export default function Sites() {
         <div className="space-y-4">
           <p className="text-sm text-ink-600">
             This replaces the site type on every selected site, including one that already has a type.
-            The weather digest takes each site’s precautions from the type you set.
+            Each site’s weather precautions come from the type you set.
           </p>
           <Field label="Site type" htmlFor="bulk-facility">
             <Select id="bulk-facility" value={bulkType} onChange={(e) => setBulkType(e.target.value)}>

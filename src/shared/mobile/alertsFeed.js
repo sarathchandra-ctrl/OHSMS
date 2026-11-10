@@ -2,10 +2,9 @@
 //
 // There is no alerts collection. A row here is a document the product already
 // stores — a defect report, an incident, a committee meeting, a mock drill —
-// or a weather reading assessed the same way the six-hour digest is. The
-// digest itself is a mail, not a table (stack/lib/weatherDigest.js), so a
-// weather row is the current Medium-or-worse picture for a site, keyed to
-// that digest's slot. It comes back unread when the slot or the hazard changes.
+// or a weather reading, assessed in six-hour slots (stack/lib/siteWeather.js).
+// A weather row is the current Medium-or-worse picture for a site, keyed to
+// its slot. It comes back unread when the slot or the hazard changes.
 //
 // Scope is the sites the viewer can already see. A record that does not
 // resolve to one of those sites is left out: showing it would be another

@@ -569,7 +569,7 @@ export default function OrgSettings() {
               <Field
                 label="Notification email"
                 htmlFor="email"
-                hint="Where safety notifications are sent"
+                hint="Kept for safety notification mail, which is not switched on yet. Only password-reset mail is sent today."
               >
                 <Input
                   id="email"
