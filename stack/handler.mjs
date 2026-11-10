@@ -18,6 +18,7 @@ import {
   isLiveAdmin,
   siteWeather,
   exportSubject,
+  migrateLegacyFiles,
   WEATHER_FETCH_LIMIT,
   WEATHER_FETCH_WINDOW_S,
   stampIdentity,
@@ -33,7 +34,12 @@ import {
 } from './passwords.mjs'
 
 const WORKER = { role: 'ohsms_worker', uid: '' }
-const ADMIN_JOBS = new Set(['purgeSoftDeleted', 'withdrawStalePermitMirrors', 'sweepLotoPermits'])
+const ADMIN_JOBS = new Set([
+  'purgeSoftDeleted',
+  'withdrawStalePermitMirrors',
+  'sweepLotoPermits',
+  'migrateLegacyFiles',
+])
 
 function send(res, status, body, headers = {}) {
   const payload = typeof body === 'string' ? body : JSON.stringify(body)
@@ -307,6 +313,8 @@ export function createOwnStackHandler({
       purgeSoftDeleted: () => runRetention(engine, { uid }),
       withdrawStalePermitMirrors: () => withdrawStaleMirrors(engine),
       sweepLotoPermits: () => sweepLoto(engine, { uid }),
+      migrateLegacyFiles: () =>
+        migrateLegacyFiles(engine, db, blobStore, { dryRun: body.dryRun !== false, fetchImpl }),
       exportSubjectData: () =>
         exportSubject(engine, {
           uid,

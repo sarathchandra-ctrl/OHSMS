@@ -18,6 +18,10 @@ import { planFlags } from '../stack/lib/lotoPermitSweep.js'
 import { serveSiteWeather, WEATHER_FETCH_LIMIT, WEATHER_FETCH_WINDOW_S } from '../stack/lib/siteWeather.js'
 
 import { planExport, planScan, scanFeasibility, classifyErasure } from '../stack/lib/subjectData.js'
+import { findLegacyUrls, isLegacyFileUrl, legacyCopyPath, rewriteLegacyUrls } from '../stack/lib/legacyFiles.js'
+import { allowedUploadType } from '../stack/lib/uploadLimits.js'
+import { serverOnly as serverOnlyPath } from './policy.mjs'
+import { createHash } from 'node:crypto'
 
 export { WEATHER_FETCH_LIMIT, WEATHER_FETCH_WINDOW_S }
 
@@ -260,4 +264,76 @@ export async function exportSubject(engine, { uid, subjectUid, personId, encrypt
     erasure: classifyErasure(),
     problems,
   }
+}
+
+// ── Legacy files (migrateLegacyFiles) ───────────────────────────────────────
+// Copy files still on Firebase Storage into this deployment's own storage and
+// point the records at the copies. The finding and rewriting are
+// stack/lib/legacyFiles.js. Admin-only (ADMIN_JOBS in handler.mjs).
+//
+// A batch per run (`max` files), because a Worker request has a time limit;
+// the admin runs it again until nothing remains. Fetches go only to the two
+// Firebase Storage hosts, over https, with redirects refused, so a link
+// someone planted on a record cannot point the server anywhere else. A
+// download link carries its own access token, so links are never echoed back:
+// failures are reported by record, not by URL.
+
+export const LEGACY_FILE_MAX_BYTES = 25 * 1024 * 1024
+
+const sha256hex = async (text) => createHash('sha256').update(String(text)).digest('hex')
+
+export async function migrateLegacyFiles(engine, db, blobStore, { dryRun = true, max = 25, fetchImpl = globalThis.fetch } = {}) {
+  if (!blobStore?.put) return { ok: false, reason: 'no-storage', message: 'File storage is not configured.' }
+  const res = await db.prepare('SELECT path, id, rev, data FROM documents').all()
+  const records = []
+  const urls = new Map() // url -> [{ path, id }]
+  for (const row of res.results || []) {
+    if (serverOnlyPath(row.path)) continue
+    const found = findLegacyUrls(JSON.parse(row.data))
+    if (!found.length) continue
+    records.push(row)
+    for (const { url } of found) {
+      if (!urls.has(url)) urls.set(url, [])
+      urls.get(url).push({ path: row.path, id: row.id })
+    }
+  }
+  const byCollection = {}
+  for (const r of records) byCollection[r.path.split('/')[0]] = (byCollection[r.path.split('/')[0]] || 0) + 1
+  const summary = { records: records.length, files: urls.size, byCollection }
+  if (dryRun) return { ...summary, copied: 0, failed: [], remaining: urls.size }
+
+  const copies = new Map()
+  const failed = []
+  for (const [url, where] of [...urls.entries()].slice(0, max)) {
+    const at = where.map((w) => `${w.path}/${w.id}`).slice(0, 3)
+    try {
+      if (!isLegacyFileUrl(url)) throw new Error('not a Firebase Storage link')
+      const resp = await fetchImpl(url, { redirect: 'error' })
+      if (!resp.ok) throw new Error(`Firebase Storage answered ${resp.status}`)
+      const bytes = new Uint8Array(await resp.arrayBuffer())
+      if (bytes.length > LEGACY_FILE_MAX_BYTES) throw new Error('larger than 25 MB')
+      const declared = String(resp.headers.get('content-type') || '').slice(0, 200)
+      // A type the store would not accept is kept as bytes: it downloads
+      // rather than opening as a page.
+      const type = allowedUploadType(declared) ? declared : 'application/octet-stream'
+      const path = await legacyCopyPath(url, sha256hex)
+      await blobStore.put(path, bytes, type) // false = already copied by an earlier run
+      copies.set(url, { url: blobStore.downloadUrl(path), path })
+    } catch (err) {
+      failed.push({ records: at, error: err?.message || String(err) })
+    }
+  }
+
+  // Rewrite each record that named a copied link. Written with a rev check,
+  // so a record someone edited meanwhile is left for the next run.
+  for (const row of records) {
+    const data = JSON.parse(row.data)
+    if (!findLegacyUrls(data).some(({ url }) => copies.has(url))) continue
+    const next = JSON.stringify(rewriteLegacyUrls(data, copies))
+    await db
+      .prepare('UPDATE documents SET data = ?, rev = rev + 1 WHERE path = ? AND id = ? AND rev = ?')
+      .bind(next, row.path, row.id, row.rev)
+      .run()
+  }
+  return { ...summary, copied: copies.size, failed, remaining: urls.size - copies.size }
 }

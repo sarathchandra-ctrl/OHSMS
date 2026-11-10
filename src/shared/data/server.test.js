@@ -25,7 +25,7 @@ function staticDir() {
   return dir
 }
 
-async function start({ db, dir = '', bootstrap, mail, fetchImpl } = {}) {
+async function start({ db, dir = '', bootstrap, mail, fetchImpl, blobDir = '' } = {}) {
   const database = db || (await hostedLikeDb())
   const app = await createDedicatedApp({
     db: database,
@@ -35,6 +35,7 @@ async function start({ db, dir = '', bootstrap, mail, fetchImpl } = {}) {
     staticDir: dir,
     mail,
     fetchImpl,
+    blobDir,
     bootstrap: bootstrap ?? { orgName: 'Cult Fit', adminEmail: ADMIN.email, adminPassword: ADMIN.password },
   })
   await new Promise((resolve) => app.server.listen(0, '127.0.0.1', resolve))
@@ -352,6 +353,51 @@ describe('subject access export', () => {
     // Ids are checked before anything is read.
     expect((await s.rpc(admin, 'exportSubjectData', { uid: '../users' })).status).toBe(403)
     expect((await s.rpc(admin, 'exportSubjectData', { uid: 'nobody-here' })).status).toBe(403)
+    await s.stop()
+  })
+})
+
+describe('legacy Firebase files', () => {
+  it('copies files off Firebase Storage for an admin, and points the records at the copies', async () => {
+    const { mkdtemp } = await import('node:fs/promises')
+    const { tmpdir } = await import('node:os')
+    const { join } = await import('node:path')
+    const blobDir = await mkdtemp(join(tmpdir(), 'ohsms-legacy-'))
+    const FB = 'https://firebasestorage.googleapis.com/v0/b/x/o/orgs%2Fa%2Fcrack.jpg?alt=media&token=t1'
+    const asked = []
+    const fetchImpl = async (url, init) => {
+      asked.push({ url: String(url), redirect: init?.redirect })
+      return new Response(new Uint8Array([0xff, 0xd8, 0xff]), { headers: { 'Content-Type': 'image/jpeg' } })
+    }
+    const s = await start({ fetchImpl, blobDir })
+    const admin = await readyAdmin(s)
+    await s.post(
+      '/data',
+      { op: 'commit', ops: [
+        { type: 'set', path: 'incidents', id: 'old1', merge: false, data: { title: 'Old', photo: { url: FB, path: 'orgs/a/crack.jpg' } } },
+        { type: 'set', path: 'incidents', id: 'old2', merge: false, data: { title: 'Planted', photo: { url: 'https://firebasestorage.googleapis.com.evil.test/x' } } },
+      ] },
+      admin
+    )
+    const check = await s.rpc(admin, 'migrateLegacyFiles', { dryRun: true })
+    expect(check.body).toMatchObject({ records: 1, files: 1, remaining: 1 })
+    expect(asked).toEqual([])
+
+    const run = await s.rpc(admin, 'migrateLegacyFiles', { dryRun: false })
+    expect(run.body).toMatchObject({ copied: 1, failed: [], remaining: 0 })
+    // Only the Firebase host, and no redirect followed.
+    expect(asked).toEqual([{ url: FB, redirect: 'error' }])
+    const rec = await s.read(admin, 'incidents', 'old1')
+    expect(rec.photo.url.startsWith('https://ehs.example.com/blob?')).toBe(true)
+    expect(rec.photo.path.startsWith('files/legacy/')).toBe(true)
+    // A second run has nothing left to do.
+    expect((await s.rpc(admin, 'migrateLegacyFiles', { dryRun: true })).body.files).toBe(0)
+
+    const made = await s.rpc(admin, 'createMember', { email: 'lf@cult.test', role: 'manager', password: 'temporary-pass-9' })
+    await s.rpc(await s.signIn('lf@cult.test', 'temporary-pass-9'), 'completePasswordChange', { current: 'temporary-pass-9', password: 'lf-own-pass-10' })
+    const mgr = await s.signIn('lf@cult.test', 'lf-own-pass-10')
+    expect(made.body.ok).toBe(true)
+    expect((await s.rpc(mgr, 'migrateLegacyFiles', { dryRun: true })).status).toBe(403)
     await s.stop()
   })
 })

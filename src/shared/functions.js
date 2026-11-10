@@ -282,3 +282,13 @@ export async function fetchSiteWeather({ lat, lng } = {}) {
   const fn = await callable('fetchSiteWeather')
   return (await fn({ lat, lng })).data
 }
+
+/**
+ * Copy files still on Firebase Storage into this deployment's storage and
+ * point the records at the copies. Admin-only. `dryRun` counts; otherwise one
+ * batch is copied per call and `remaining` says how many are left.
+ */
+export async function migrateLegacyFiles({ dryRun = true } = {}) {
+  const fn = await callable('migrateLegacyFiles', { timeout: 120000 })
+  return (await fn({ dryRun })).data
+}

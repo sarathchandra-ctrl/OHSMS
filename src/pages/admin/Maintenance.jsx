@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import toast from 'react-hot-toast'
-import { Play, Check, Bug, QrCode, Lock, UserCheck, FileDown, MapPin } from 'lucide-react'
+import { Play, Check, Bug, QrCode, Lock, UserCheck, FileDown, MapPin, CloudDownload } from 'lucide-react'
 import { Card, Button, Field, Select, Input } from '../../shared/ui'
 import { reportError } from '../../shared/monitoring'
 import { backfillProcedureMirrors } from '../../modules/loto/services/procedures'
@@ -8,7 +8,7 @@ import { backfillLockClaims } from '../../modules/loto/services/lockClaims'
 import { backfillAll } from '../../shared/crypto/backfill'
 import { backfillCreatorUids } from '../../shared/org/creatorBackfill'
 import { backfillSiteIds } from '../../shared/org/siteBackfill'
-import { exportSubjectData } from '../../shared/functions'
+import { exportSubjectData, migrateLegacyFiles } from '../../shared/functions'
 import { logAudit, subscribeOrgUsers } from '../../shared/org/orgData'
 import { sealingEnabled } from '../../shared/crypto'
 import { useAuth } from '../../shared/auth/AuthContext'
@@ -24,6 +24,7 @@ export default function Maintenance() {
       <SealHistory />
       <ProcedureMirrors />
       <LockClaims />
+      <LegacyFiles />
       <SiteIds />
       <CreatorUids />
       <ErrorReporting />
@@ -357,6 +358,78 @@ function SealHistory() {
 }
 
 /** Shared shell: title, why it matters, a result panel, and the action. */
+/**
+ * Move files still on Firebase Storage into this deployment's own storage.
+ *
+ * Run on the server (migrateLegacyFiles in stack/workers.mjs), a batch at a
+ * time, because a browser cannot fetch from Firebase Storage across origins
+ * and a Worker request has a time limit.
+ */
+function LegacyFiles() {
+  const [busy, setBusy] = useState('')
+  const [state, setState] = useState(null)
+  const [failed, setFailed] = useState([])
+
+  const run = async (dryRun) => {
+    setBusy(dryRun ? 'dry' : 'write')
+    try {
+      const r = await migrateLegacyFiles({ dryRun })
+      setState(r)
+      if (!dryRun) {
+        setFailed((f) => [...f, ...r.failed])
+        toast.success(r.remaining ? `Copied ${r.copied}; ${r.remaining} left — run it again` : 'Every file is copied')
+      } else if (r.files === 0) {
+        toast.success('Nothing to do — no record links to Firebase Storage')
+      }
+    } catch (err) {
+      reportError(err, { where: 'migrateLegacyFiles' })
+      toast.error(err?.message || 'Failed')
+    } finally {
+      setBusy('')
+    }
+  }
+
+  const where = state ? Object.entries(state.byCollection || {}).map(([c, n]) => `  ${c}: ${n}`) : []
+
+  return (
+    <Job
+      icon={CloudDownload}
+      title="Move old files off Firebase Storage"
+      result={state && [
+        `${state.records} record${state.records === 1 ? '' : 's'} link to ${state.files} file${state.files === 1 ? '' : 's'} on Firebase Storage`,
+        ...where,
+        state.remaining !== undefined && state.copied ? `${state.remaining} still to copy` : '',
+        failed.length ? `\nCould not copy (left as they are):\n${failed.slice(0, 8).map((f) => `  ${f.records.join(', ')} — ${f.error}`).join('\n')}` : '',
+        state.files === 0 ? '\nNothing links to Firebase Storage any more. Firebase can be removed from the img-src line of the Content-Security-Policy in public/_headers.' : '',
+      ].filter(Boolean).join('\n')}
+      actions={
+        <>
+          <Button variant="ghost" icon={Play} loading={busy === 'dry'} disabled={Boolean(busy)} onClick={() => run(true)}>
+            Check first
+          </Button>
+          <Button
+            loading={busy === 'write'}
+            disabled={Boolean(busy) || !state || state.remaining === 0}
+            onClick={() => run(false)}
+          >
+            Copy next batch
+          </Button>
+        </>
+      }
+    >
+      <p>
+        Photos and documents attached before files moved to this server are still stored on Google
+        Firebase Storage, and opening those records loads them from Google. This copies each file
+        here and points the record at the copy, 25 files at a time.
+      </p>
+      <p>
+        Encrypted files are copied as they are and stay encrypted. A file that cannot be fetched is
+        listed and its record left unchanged.
+      </p>
+    </Job>
+  )
+}
+
 /**
  * Record the site on older records that name it only in text.
  *

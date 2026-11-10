@@ -137,5 +137,20 @@ export function createBlobStore({ dir, key, origin }) {
     return deny(405, 'method not allowed')
   }
 
-  return { uploadUrl, downloadUrl, remove, handle, fileFor }
+  /** Store bytes from the server itself (the legacy-file copy). Never replaces. */
+  async function put(path, bytes, type) {
+    const file = fileFor(path)
+    if (!file) return false
+    await mkdir(dirname(file), { recursive: true })
+    try {
+      await writeFile(file, bytes, { flag: 'wx' })
+    } catch (err) {
+      if (err?.code === 'EEXIST') return false
+      throw err
+    }
+    await writeFile(`${file}.type`, type)
+    return true
+  }
+
+  return { uploadUrl, downloadUrl, put, remove, handle, fileFor }
 }

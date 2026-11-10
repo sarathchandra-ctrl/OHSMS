@@ -67,6 +67,11 @@ opened, the **browser** loads the file from Firebase Storage
 reason). Until those files are copied to the deployment's own storage,
 Google remains a processor of those historical files.
 
+Admin → Maintenance → "Move old files off Firebase Storage" copies them
+(`migrateLegacyFiles`, `stack/workers.mjs`) and points each record at the
+copy. Once it reports nothing left, remove Firebase Storage from `img-src` in
+`public/_headers` and this section from the list.
+
 A future malware-scanning vendor would **become** a subprocessor of medical
 data if sealed or unsealed health documents were sent to it. That is
 explicitly **not** done today. See `docs/ADR-0001-malware-scanning.md`.
