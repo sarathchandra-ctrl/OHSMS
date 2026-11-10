@@ -1146,3 +1146,34 @@ describe('work permits after a decision, and their public QR record', () => {
     ).rejects.toThrow()
   })
 })
+
+describe('the people directory cannot be searched by what it hides', () => {
+  beforeAll(async () => {
+    await seed('users', 'noMfa', { role: 'member', status: 'approved', name: 'Nia', mfaEnabled: false, mustChangePassword: true })
+  })
+
+  it('refuses an employee or a manager filtering or sorting people by a hidden field', async () => {
+    for (const uid of ['memberA', 'managerA', 'auditorA']) {
+      for (const opts of [
+        { where: [{ field: 'mfaEnabled', op: '==', value: false }] },
+        { where: [{ field: 'mustChangePassword', op: '==', value: true }] },
+        { where: [{ field: 'accessRequest.sites', op: '!=', value: null }] },
+        { orderBy: ['mfaRequired', 'desc'] },
+      ]) {
+        await expect(as(uid).list('users', opts), `${uid} ${JSON.stringify(opts)}`).rejects.toThrow()
+        await expect(as(uid).count('users', opts), `${uid} count`).rejects.toThrow()
+      }
+    }
+    // A manager may search by access, which a manager is shown; an employee may not.
+    const byAccess = { where: [{ field: 'access.sites', op: '!=', value: null }] }
+    await as('managerA').list('users', byAccess)
+    await expect(as('memberA').list('users', byAccess)).rejects.toThrow()
+  })
+
+  it('still lets anyone search by what the directory shows, and an admin by anything', async () => {
+    const byName = { where: [{ field: 'name', op: '==', value: 'Nia' }], orderBy: ['name', 'asc'] }
+    expect((await as('memberA').list('users', byName)).map((u) => u.id)).toEqual(['noMfa'])
+    const flagged = await as('adminA').list('users', { where: [{ field: 'mfaEnabled', op: '==', value: false }] })
+    expect(flagged.map((u) => u.id)).toContain('noMfa')
+  })
+})

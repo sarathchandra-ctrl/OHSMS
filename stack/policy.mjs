@@ -227,6 +227,20 @@ export function visibleRow(path, id, row, ctx) {
   return Object.fromEntries(Object.entries(row).filter(([k]) => allowed.includes(k)))
 }
 
+/**
+ * A users query that filters or sorts on a field this caller is not shown,
+ * or ''. visibleRow narrows what comes back, but a `where mfaEnabled == false`
+ * answered the question anyway: which colleagues have no two-step login, or
+ * still hold a temporary password. The rows that matched were the answer.
+ */
+export function queryProblem(path, opts, ctx) {
+  if (path !== 'users' || ctx.worker || isAdmin(ctx)) return ''
+  const allowed = isManager(ctx) ? MANAGER_DIRECTORY_FIELDS : DIRECTORY_FIELDS
+  const fields = [...(opts?.where || []).map((c) => c?.field), ...(opts?.orderBy ? [opts.orderBy[0]] : [])]
+  const hidden = fields.find((f) => !allowed.includes(String(f || '').split('.')[0]))
+  return hidden === undefined ? '' : `users-field:${hidden}`
+}
+
 // ── Reading ─────────────────────────────────────────────────────────────────
 
 /**

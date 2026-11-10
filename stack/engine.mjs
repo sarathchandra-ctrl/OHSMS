@@ -35,6 +35,7 @@ import {
   deleteAllowed,
   insertAllowed,
   invariantProblem,
+  queryProblem,
   reachOf,
   readScope,
   serverStampedInsert,
@@ -481,6 +482,8 @@ export function createEngine(db) {
     async list(session, path, opts = {}) {
       checkRole(session)
       const { ctx } = await contextFor(session)
+      const hidden = queryProblem(path, opts, ctx)
+      if (hidden) throw fail('permission-denied', `sqlite: query refused at ${path} (${hidden})`)
       if (await parentBlocked(path, ctx)) return []
       const params = [path]
       const scope = ctx.worker ? '' : scopeSql(path, ctx, params)
@@ -501,6 +504,8 @@ export function createEngine(db) {
     async count(session, path, opts = {}) {
       checkRole(session)
       const { ctx } = await contextFor(session)
+      const hidden = queryProblem(path, opts, ctx)
+      if (hidden) throw fail('permission-denied', `sqlite: query refused at ${path} (${hidden})`)
       if (await parentBlocked(path, ctx)) return 0
       const params = [path]
       const scope = ctx.worker ? '' : scopeSql(path, ctx, params)

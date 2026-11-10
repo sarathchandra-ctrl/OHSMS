@@ -679,6 +679,24 @@ Tests: `stack/clientIp.test.js` (fifty failures from one visitor behind the
 proxy, then the admin from another, through a real HTTP server) and
 `worker/index.test.js`.
 
+### S-25 · The people directory could be searched by the fields it hides — LOW
+
+`visibleRow` narrows what an employee or a manager is shown of a colleague's
+profile: no `mfaEnabled`, `mfaRequired`, `mustChangePassword`, access
+request or widget settings (a manager also sees `access`). But a list or a
+count could still filter or sort on any field, so `where mfaEnabled ==
+false` or `where mustChangePassword == true` answered the question the
+narrowing hid: the rows that came back were the colleagues without two-step
+login, or still on a temporary password. That is a target list.
+
+**Fixed:** a non-admin's query on `users` may filter and sort only on fields
+that caller is shown (`queryProblem` in `stack/policy.mjs`, checked by the
+engine's `list` and `count`); anything else is refused. The app filters
+people by no field at all, so nothing it does changed.
+
+Tests: `postgres.rls.test.js` "the people directory cannot be searched by
+what it hides".
+
 ---
 
 ## Testing
