@@ -404,6 +404,25 @@ const AuditorWorkplace = ({ setView, session, isGlobalOwner, plans, findings, si
     } catch (e) { alert('Error saving: ' + e.message) }
   }
 
+  // Verification used to be approve-only: a weak answer could not go back.
+  // Returning sends it to Reported (the auditee's "Action Required"), with
+  // the auditor's note shown to them.
+  const [returnNote, setReturnNote] = useState('')
+  const handleReturn = async () => {
+    if (!currentTask.findingRecord) return
+    if (!returnNote.trim()) return alert('Say what the auditee needs to change.')
+    try {
+      await updateAuditFinding(currentTask.findingRecord.docKey, {
+        status: 'Reported',
+        returnNote: returnNote.trim().slice(0, 2000),
+        returnedAt: new Date().toISOString(),
+      })
+      alert('Returned to the auditee.')
+      setReturnNote('')
+      setView('hub')
+    } catch (e) { alert('Error returning: ' + e.message) }
+  }
+
   const handleVerifyClose = async () => {
     if (!currentTask.findingRecord) return
     try {
@@ -530,9 +549,16 @@ const AuditorWorkplace = ({ setView, session, isGlobalOwner, plans, findings, si
               <button onClick={() => setWView('list')} className="text-sm font-bold text-ink-500 hover:text-ink-800"><ArrowLeft size={16} className="inline mr-2" />Back to Audit List</button>
               <div className="flex gap-3">
                 <button onClick={() => window.print()} className="rounded-xl bg-surface-100 px-5 py-2.5 text-sm font-bold text-ink-700 hover:bg-surface-200"><Printer size={16} className="inline mr-2" />Print Report</button>
+                {view === 'verify' && <button onClick={handleReturn} className="rounded-xl bg-surface-100 px-5 py-2.5 text-sm font-bold text-ink-700 hover:bg-surface-200">Return to auditee</button>}
                 {view === 'verify' && <button onClick={handleVerifyClose} className="rounded-xl bg-orange-600 px-6 py-2.5 text-sm font-bold text-white shadow-lg transition active:scale-95 hover:bg-orange-500"><CheckCheck size={16} className="inline mr-2" />Verify & Close Audit</button>}
               </div>
             </div>
+            {view === 'verify' && (
+              <div className="mb-4">
+                <label htmlFor="audit-return-note" className="mb-1 block text-xs font-bold uppercase tracking-wide text-ink-500">Note for the auditee, if returning</label>
+                <textarea id="audit-return-note" className="input min-h-[72px] w-full" value={returnNote} onChange={(e) => setReturnNote(e.target.value)} placeholder="What needs to change before this can be closed" />
+              </div>
+            )}
             <div className={`${panel} p-7`}>
               <div className="mb-8 flex items-start justify-between border-b border-ink-100 pb-6">
                 <div>
@@ -678,6 +704,12 @@ const AuditeeWorkplace = ({ session, users, findings }) => {
                 </div>
               </div>
               <div className="max-h-[55vh] flex-1 space-y-6 overflow-y-auto p-6">
+                {selected.status === 'Reported' && selected.returnNote && (
+                  <div className="rounded-xl border border-orange-200 bg-orange-50 p-4 text-sm text-orange-800">
+                    <p className="font-bold">Returned by the auditor</p>
+                    <p className="mt-1 whitespace-pre-wrap">{selected.returnNote}</p>
+                  </div>
+                )}
                 {(selected.findings || []).map((f, i) => {
                   const has = f.response?.status === 'Completed'
                   const overdue = !has && isOverdueDate(f.auditeeDueDate)

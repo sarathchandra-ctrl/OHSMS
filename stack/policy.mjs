@@ -762,6 +762,32 @@ function selfTrainingProblem(d, ctx, lookup, now = Date.now()) {
   return ''
 }
 
+// ── An audit finding's status ───────────────────────────────────────────────
+// The assigned auditee may write `status` (AUDITEE_FIELDS), and nothing said
+// to what: an auditee could set their own findings Closed and skip
+// verification. The lifecycle is:
+//   Reported -> Submitted for Verification    the auditee answers (or a manager)
+//   Submitted -> Closed                       the auditor verifies (or a manager)
+//   Submitted -> Reported                     the auditor sends it back
+// and nobody verifies or returns their own answer, a manager included.
+const AUDIT_STATUS = { REPORTED: 'Reported', SUBMITTED: 'Submitted for Verification', CLOSED: 'Closed' }
+
+function auditStatusProblem(prev, next, ctx) {
+  const from = str(prev.status)
+  const to = str(next.status)
+  if (from === to) return ''
+  const isAuditee = Boolean(ctx.uid) && prev.auditeeUid === ctx.uid
+  const isAuditor = Boolean(ctx.uid) && prev.createdByUid === ctx.uid
+  if (from === AUDIT_STATUS.REPORTED && to === AUDIT_STATUS.SUBMITTED) {
+    return isAuditee || isManager(ctx) ? '' : 'audit-status'
+  }
+  if (from === AUDIT_STATUS.SUBMITTED && (to === AUDIT_STATUS.CLOSED || to === AUDIT_STATUS.REPORTED)) {
+    if (isAuditee) return 'audit-self-verify'
+    return isAuditor || isManager(ctx) ? '' : 'audit-status'
+  }
+  return isManager(ctx) && !isAuditee ? '' : 'audit-status'
+}
+
 // ── Work permits after a decision, and their public QR record ───────────────
 // An employee carries out a permit's work, so `permits` is a field
 // collection (any employee may write it) and approving is a manager's
@@ -1096,6 +1122,18 @@ export function invariantProblem(path, id, prev, next, ctx, lookup = () => undef
     }
   }
   if (!ctx.worker && !isManager(ctx) && decisionChanged(path, prev, n)) return 'manager-decision'
+  if (!ctx.worker && prev && path === 'auditFindings') {
+    const audit = auditStatusProblem(prev, n, ctx)
+    if (audit) return audit
+  }
+  // Not closed while its corrective actions are open (incidents/lib/openActions.js).
+  if (!ctx.worker && prev && (path === 'incidents' || path === 'illnesses')) {
+    const list = path === 'incidents' ? n.capa : n.actions
+    const closing = str(prev.lifecycle) !== 'closed' && str(n.lifecycle) === 'closed'
+    if (closing && Array.isArray(list) && list.some((a) => a && str(a.status || 'open') !== 'closed')) {
+      return 'actions-open'
+    }
+  }
   if (!ctx.worker && !isManager(ctx) && path === 'permits' && prev) {
     const frozen = approvedPermitProblem(prev, n)
     if (frozen) return frozen

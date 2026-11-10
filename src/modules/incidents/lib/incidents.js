@@ -38,6 +38,7 @@ import { putFile, removeFile, MAX_INLINE_BYTES, tooLargeForInline } from '../../
 import { sealDoc, openDoc, openSnapshots } from '../../../shared/crypto'
 import { discardMailedReport } from '../../../shared/print/mailedReport'
 import { resolveSubscription } from '../../../shared/storage/resolveFiles'
+import { closeBlocker } from './openActions'
 
 /** The policy key for this collection. See src/shared/crypto/policy.js. */
 const SEALED = 'incidents'
@@ -318,6 +319,9 @@ export function subscribeIncidents(cb, max = INCIDENT_LOAD_CAP) {
 
 /** Mark an incident closed (after horizontal-deployment step). */
 export async function closeIncident(id, actor) {
+  const current = await getIncident(id)
+  const blocker = closeBlocker(current?.capa, 'incident')
+  if (blocker) throw new Error(blocker)
   await updateIncident(id, {
     lifecycle: 'closed',
     'stagesDone.horizontal': true,

@@ -411,6 +411,12 @@ describe('employee: edits', () => {
     await expect(
       m.update('incidents', 'e-theirs', { lifecycle: 'closed', title: 'Nothing happened' })
     ).rejects.toMatchObject(denied)
+    // Not while its actions are open (actions-open); the employee closes those first.
+    await expect(m.update('incidents', 'e-theirs', { lifecycle: 'closed' })).rejects.toMatchObject(denied)
+    const row0 = await adminEngine.get(null, 'incidents', 'e-theirs')
+    await m.update('incidents', 'e-theirs', {
+      capa: row0.capa.map((a) => ({ ...a, status: 'closed' })),
+    })
     await m.update('incidents', 'e-theirs', {
       lifecycle: 'closed',
       closedAt: '2026-11-10',
@@ -871,7 +877,7 @@ describe('employee: assigned work', () => {
   it('lets the assigned auditee answer, and nothing more', async () => {
     const m = as('memberA')
     await m.update('auditFindings', 'af1', {
-      findings: [{ id: 'f1', text: 'No guard', response: 'Guard fitted' }], status: 'Submitted', submissionDate: '2026-11-10',
+      findings: [{ id: 'f1', text: 'No guard', response: 'Guard fitted' }], status: 'Submitted for Verification', submissionDate: '2026-11-10',
     })
     await expect(m.update('auditFindings', 'af1', { auditeeUid: 'crewB' })).rejects.toMatchObject(denied)
     await expect(m.update('auditFindings', 'af1', { taskDetails: { auditee: 'Someone' } })).rejects.toMatchObject(denied)
@@ -1269,5 +1275,63 @@ describe('certifying yourself', () => {
       expiresOn: '2027-01-05',
       createdBy: 'managerA',
     })
+  })
+})
+
+describe('closing an incident or illness with open actions', () => {
+  beforeAll(async () => {
+    await seed('incidents', 'incOpenCapa', {
+      lifecycle: 'capa',
+      createdBy: 'memberA',
+      capa: [{ id: 'a1', status: 'closed' }, { id: 'a2', status: 'in_progress' }],
+    })
+    await seed('illnesses', 'illOpen', { lifecycle: 'actions', createdBy: 'memberA', actions: [{ id: 'b1' }] })
+  })
+
+  it('refuses closing while any action is not closed, for anyone', async () => {
+    for (const uid of ['memberA', 'managerA', 'adminA']) {
+      await expect(as(uid).update('incidents', 'incOpenCapa', { lifecycle: 'closed' }), uid).rejects.toThrow()
+      await expect(as(uid).update('illnesses', 'illOpen', { lifecycle: 'closed' }), uid).rejects.toThrow()
+    }
+  })
+
+  it('allows it once every action is closed', async () => {
+    await as('managerA').update('incidents', 'incOpenCapa', {
+      capa: [{ id: 'a1', status: 'closed' }, { id: 'a2', status: 'closed' }],
+    })
+    await as('managerA').update('incidents', 'incOpenCapa', { lifecycle: 'closed' })
+    expect((await adminEngine.get(null, 'incidents', 'incOpenCapa')).lifecycle).toBe('closed')
+  })
+})
+
+describe('an audit finding moves through its lifecycle only by the right hands', () => {
+  beforeAll(async () => {
+    await seed('users', 'auditeeA', { role: 'member', status: 'approved', name: 'Aud Ee' })
+    await seed('users', 'auditorM', { role: 'member', status: 'approved', name: 'Aud Or' })
+  })
+  const finding = (status) => ({ status, auditeeUid: 'auditeeA', createdByUid: 'auditorM', findings: [] })
+
+  it('refuses an auditee closing or returning their own findings', async () => {
+    await seed('auditFindings', 'afl1', finding('Reported'))
+    await expect(as('auditeeA').update('auditFindings', 'afl1', { status: 'Closed' })).rejects.toThrow()
+    await as('auditeeA').update('auditFindings', 'afl1', { status: 'Submitted for Verification' })
+    await expect(as('auditeeA').update('auditFindings', 'afl1', { status: 'Closed' })).rejects.toThrow()
+    await expect(as('auditeeA').update('auditFindings', 'afl1', { status: 'Reported' })).rejects.toThrow()
+  })
+
+  it('lets the auditor return a submitted answer, and verify one', async () => {
+    await seed('auditFindings', 'afl2', finding('Submitted for Verification'))
+    await as('auditorM').update('auditFindings', 'afl2', { status: 'Reported', returnNote: 'Add evidence' })
+    await as('auditeeA').update('auditFindings', 'afl2', { status: 'Submitted for Verification' })
+    await as('auditorM').update('auditFindings', 'afl2', { status: 'Closed' })
+    expect((await adminEngine.get(null, 'auditFindings', 'afl2')).status).toBe('Closed')
+  })
+
+  it('refuses a stranger moving the status, and a manager verifying their own answer', async () => {
+    await seed('auditFindings', 'afl3', finding('Submitted for Verification'))
+    await expect(as('memberA').update('auditFindings', 'afl3', { status: 'Closed' })).rejects.toThrow()
+    await seed('auditFindings', 'afl4', { ...finding('Submitted for Verification'), auditeeUid: 'managerA' })
+    await expect(as('managerA').update('auditFindings', 'afl4', { status: 'Closed' })).rejects.toThrow()
+    await as('managerA').update('auditFindings', 'afl3', { status: 'Closed' })
   })
 })

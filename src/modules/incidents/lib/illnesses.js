@@ -38,6 +38,7 @@ import { putFile, removeFile, MAX_INLINE_BYTES, tooLargeForInline } from '../../
 import { sealDoc, openDoc, openSnapshots } from '../../../shared/crypto'
 import { stampNewAssignees } from '../../../shared/org/stampAssignee'
 import { resolveSubscription } from '../../../shared/storage/resolveFiles'
+import { closeBlocker } from './openActions'
 
 /** Policy keys for this collection and its attachments. See shared/crypto/policy.js. */
 const SEALED = 'illnesses'
@@ -141,6 +142,9 @@ export function subscribeIllnesses(cb, max = ILLNESS_LOAD_CAP) {
 }
 
 export async function closeIllness(id, actor) {
+  const current = await getIllness(id)
+  const blocker = closeBlocker(current?.actions, 'illness report')
+  if (blocker) throw new Error(blocker)
   await updateIllness(id, {
     lifecycle: 'closed',
     'stagesDone.actions': true,

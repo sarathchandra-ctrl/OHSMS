@@ -33,6 +33,7 @@ import {
 } from '../lib/injuries'
 import { isFutureDate } from '../../../shared/lib/dates'
 import { captureIncidentReport } from '../lib/incidentReportPdf'
+import { closeBlocker } from '../lib/openActions'
 
 // Forward-only lifecycle: never downgrade when revisiting an earlier step.
 const forwardLifecycle = (current, target) =>
@@ -515,9 +516,14 @@ export default function IncidentWizard() {
             </button>
           )}
           {step === 'horizontal' && canInvestigate && (
-            <button className="btn-primary" onClick={saveHorizontal} disabled={saving}>
-              {saving ? <Loader2 size={16} className="animate-spin" /> : <CheckCircle2 size={16} />} Close Incident
-            </button>
+            <>
+              {closeBlocker(incident?.capa, 'incident') && (
+                <span className="text-xs text-ink-500">{closeBlocker(incident?.capa, 'incident')}</span>
+              )}
+              <button className="btn-primary" onClick={saveHorizontal} disabled={saving || Boolean(closeBlocker(incident?.capa, 'incident'))}>
+                {saving ? <Loader2 size={16} className="animate-spin" /> : <CheckCircle2 size={16} />} Close Incident
+              </button>
+            </>
           )}
           {step === 'investigation' && stepIndex < steps.length - 1 && (
             <button className="btn-ghost" onClick={() => goStep(nextStep())}>Next <ChevronRight size={16} /></button>

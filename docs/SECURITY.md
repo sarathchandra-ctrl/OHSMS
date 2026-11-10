@@ -751,6 +751,27 @@ the module:
 Tests: `postgres.rls.test.js` "certifying yourself", including the record
 My Learning writes.
 
+### S-28 · An auditee could close their own audit findings — MEDIUM
+
+The assigned auditee may write a finding's `status` (`AUDITEE_FIELDS`), so
+that they can submit their answer. Nothing said to what value: from the
+browser console an auditee could set `Closed` and skip verification of their
+own corrective actions.
+
+**Fixed:** the status follows its lifecycle in `stack/policy.mjs`
+(`auditStatusProblem`): Reported to Submitted for Verification by the auditee
+or a manager; Submitted to Closed, or back to Reported, by the auditor who
+raised it or a manager; and nobody verifies or returns their own answer, a
+manager included. The auditor can now send a weak answer back with a note
+(Return to auditee).
+
+The same change stops an incident or illness being closed while any of its
+corrective actions is open (`actions-open`), which the screens allowed.
+
+Tests: `postgres.rls.test.js` "an audit finding moves through its lifecycle
+only by the right hands" and "closing an incident or illness with open
+actions".
+
 ---
 
 ## Testing

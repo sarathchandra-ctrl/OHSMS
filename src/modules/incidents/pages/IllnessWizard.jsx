@@ -16,6 +16,7 @@ import {
   createIllness, updateIllness, getIllness, closeIllness,
   subscribeIllnessFiles, addIllnessFile, deleteIllnessFile,
 } from '../lib/illnesses'
+import { closeBlocker } from '../lib/openActions'
 
 const STEPS = ['initial', 'actions']
 const LABEL = { initial: 'Initial Reporting', actions: 'Corrective Actions' }
@@ -172,7 +173,7 @@ export default function IllnessWizard() {
           {step === 'actions' && (
             <>
               <button className="btn-ghost" onClick={() => saveActions(false)} disabled={saving}><Save size={16} /> Save</button>
-              <button className="btn-primary" onClick={() => saveActions(true)} disabled={saving}>{saving ? <Loader2 size={16} className="animate-spin" /> : <CheckCircle2 size={16} />} Save & Close</button>
+              <button className="btn-primary" onClick={() => saveActions(true)} disabled={saving || Boolean(closeBlocker(actions, 'illness report'))} title={closeBlocker(actions, 'illness report') || undefined}>{saving ? <Loader2 size={16} className="animate-spin" /> : <CheckCircle2 size={16} />} Save & Close</button>
             </>
           )}
         </div>
