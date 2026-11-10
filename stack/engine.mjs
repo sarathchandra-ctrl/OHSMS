@@ -35,7 +35,10 @@ import {
   deleteAllowed,
   insertAllowed,
   invariantProblem,
+  reachOf,
   readScope,
+  siteBlocked,
+  siteScoped,
   updateAllowed,
 } from './policy.mjs'
 
@@ -164,22 +167,43 @@ function orderSql(opts) {
     id ASC`
 }
 
+/**
+ * The site half of a read: rows that name a site the caller does not reach
+ * are left out (policy.siteBlocked). The reach goes in as ONE JSON parameter,
+ * because Cloudflare D1 caps a statement at 100 bound values and an
+ * organization can have more sites than that.
+ */
+function siteSql(path, ctx, params) {
+  if (ctx.worker || !ctx.reach || !siteScoped(path)) return ''
+  params.push(JSON.stringify([...ctx.reach]))
+  const visibleToAll =
+    path === 'documents' ? " OR json_extract(data, '$.visibility') = 'all'" : ''
+  return (
+    " AND (json_extract(data, '$.siteId') IS NULL OR json_extract(data, '$.siteId') = ''" +
+    " OR json_extract(data, '$.siteId') IN (SELECT value FROM json_each(?))" +
+    visibleToAll +
+    ')'
+  )
+}
+
 /** The SQL that limits a read to what readScope allows, or null for nothing. */
 function scopeSql(path, ctx, params) {
   const scope = readScope(path, ctx)
   if (scope === 'none') return null
-  if (scope === 'all') return ''
-  if (scope === 'all-but-crypto') return " AND id != 'cryptoKeys'"
   // Read by id only (the public QR mirrors): a get is answered, a list or a
   // count is not.
   if (scope === 'get-only') return null
-  if (scope.ownedBy) {
+  let sql = ''
+  if (scope === 'all-but-crypto') sql = " AND id != 'cryptoKeys'"
+  else if (scope !== 'all' && scope.ownedBy) {
     // The same two fields policy.ownedBy reads, so a list and a get agree.
     params.push(scope.ownedBy, scope.ownedBy)
-    return " AND (json_extract(data, '$.createdBy') = ? OR json_extract(data, '$.createdByUid') = ?)"
+    sql = " AND (json_extract(data, '$.createdBy') = ? OR json_extract(data, '$.createdByUid') = ?)"
+  } else if (scope !== 'all') {
+    params.push(scope.onlyId)
+    sql = ' AND id = ?'
   }
-  params.push(scope.onlyId)
-  return ' AND id = ?'
+  return sql + siteSql(path, ctx, params)
 }
 
 const keyOf = (path, id) => `${path}\u0000${id}`
@@ -234,10 +258,44 @@ export function createEngine(db) {
             .first()) || null
       }
     }
-    return {
-      ctx: { uid, worker, profile: profileRow ? parse(profileRow.data) : null },
-      profileRow,
+    const profile = profileRow ? parse(profileRow.data) : null
+    // The sites this caller reaches (policy.reachOf). Admins, server jobs and
+    // signed-out callers are not site-scoped; for everyone else this is one
+    // read of the site register per request.
+    let reach = null
+    if (!worker && profile && profile.role !== 'admin') {
+      const res = await db
+        .prepare("SELECT id, data FROM documents WHERE path = 'sites'")
+        .all()
+      reach = reachOf(
+        profile,
+        (res.results || []).map((r) => ({ id: r.id, ...parse(r.data) }))
+      )
     }
+    return { ctx: { uid, worker, profile, reach }, profileRow }
+  }
+
+  /**
+   * Records inside a record (an incident's photos, a permit's documents) carry
+   * no site of their own; they are as visible as the record they belong to.
+   * Returns [parentPath, parentId] for a sub-collection path, else null.
+   */
+  const parentOf = (path) => {
+    const parts = String(path).split('/')
+    return parts.length >= 3 ? [parts[0], parts[1]] : null
+  }
+
+  async function parentBlocked(path, ctx, rows) {
+    const parent = parentOf(path)
+    if (!parent || ctx.worker || !ctx.reach) return false
+    let row = rows?.get(keyOf(parent[0], parent[1]))
+    if (row === undefined) {
+      row = await db
+        .prepare('SELECT data FROM documents WHERE path = ? AND id = ?')
+        .bind(parent[0], parent[1])
+        .first()
+    }
+    return Boolean(row) && siteBlocked(parent[0], parse(row.data), ctx)
   }
 
   async function commitOnce(session, ops, expect) {
@@ -256,6 +314,8 @@ export function createEngine(db) {
       }
       // A new LOTO permit's window is judged against the site's shift clocks.
       if (op.path === 'lotoPermits') want('lotoSettings', 'shifts')
+      const parent = parentOf(op.path)
+      if (parent) want(parent[0], parent[1])
     }
     const rows = await readRows([...keys.values()])
     const { ctx } = await contextFor(session, rows)
@@ -275,6 +335,14 @@ export function createEngine(db) {
     for (const op of ops) {
       const k = keyOf(op.path, op.id)
       const current = state.get(k)
+      // Inside a record of a site the writer does not reach (as the batch has
+      // it so far, so a record and its photo created together are judged
+      // together).
+      const parent = parentOf(op.path)
+      const parentRow = parent ? state.get(keyOf(parent[0], parent[1])) : null
+      if (!ctx.worker && parentRow && siteBlocked(parent[0], parentRow.data, ctx)) {
+        throw fail('permission-denied', `sqlite: write refused at ${op.path}/${op.id} (site)`)
+      }
       if (op.type === 'remove') {
         if (!current) continue
         // Not visible to this caller: nothing they could remove.
@@ -382,6 +450,7 @@ export function createEngine(db) {
       checkRole(session)
       const { ctx } = await contextFor(session)
       if (!ctx.worker && readScope(path, ctx) === 'none') return null
+      if (await parentBlocked(path, ctx)) return null
       const row = await db
         .prepare('SELECT id, rev, data FROM documents WHERE path = ? AND id = ?')
         .bind(path, id)
@@ -393,6 +462,7 @@ export function createEngine(db) {
     async list(session, path, opts = {}) {
       checkRole(session)
       const { ctx } = await contextFor(session)
+      if (await parentBlocked(path, ctx)) return []
       const params = [path]
       const scope = ctx.worker ? '' : scopeSql(path, ctx, params)
       if (scope === null) return []
@@ -412,6 +482,7 @@ export function createEngine(db) {
     async count(session, path, opts = {}) {
       checkRole(session)
       const { ctx } = await contextFor(session)
+      if (await parentBlocked(path, ctx)) return 0
       const params = [path]
       const scope = ctx.worker ? '' : scopeSql(path, ctx, params)
       if (scope === null) return 0

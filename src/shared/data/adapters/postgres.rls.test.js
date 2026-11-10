@@ -21,7 +21,14 @@ async function seed(path, id, data) {
 beforeAll(async () => {
   await applySchema(db)
   await seed('users', 'adminA', { role: 'admin', status: 'approved', name: 'Ada' })
-  await seed('users', 'memberA', { role: 'member', status: 'approved', name: 'Mo' })
+  // Posted to s-1 and granted s-9: the sites the fixtures below name.
+  await seed('users', 'memberA', {
+    role: 'member',
+    status: 'approved',
+    name: 'Mo',
+    siteId: 's-1',
+    access: { sites: ['s-9'] },
+  })
   await seed('users', 'managerA', { role: 'manager', status: 'approved', name: 'Mia' })
   await seed('users', 'auditorA', {
     role: 'auditor',
@@ -709,5 +716,70 @@ describe('anonymous QR reports are bounded', () => {
     await expect(anon.set('reports', 'anon-name', report({ reportedByName: 'y'.repeat(121) }))).rejects.toMatchObject({ code: 'permission-denied' })
     await expect(anon.set('reports', 'anon-extra', report({ payload: 'anything' }))).rejects.toMatchObject({ code: 'permission-denied' })
     await expect(anon.set('reports', 'anon-obj', report({ note: { nested: 'x' } }))).rejects.toMatchObject({ code: 'permission-denied' })
+  })
+})
+
+// Site scope: a record that names a site is for the people who reach that
+// site. Reach is the posting, granted sites, and every site of a granted
+// region or entity; an admin reaches all.
+describe('site scope', () => {
+  beforeAll(async () => {
+    for (const [id, region, entity] of [
+      ['n1', 'North', 'E1'], ['n2', 'North', 'E2'], ['s1', 'South', 'E1'], ['e1', 'East', 'E3'],
+    ]) {
+      await seed('sites', id, { name: id, region, entity })
+    }
+    await seed('users', 'northMgr', { role: 'manager', status: 'approved', access: { regions: ['North'] } })
+    await seed('users', 'e1Emp', { role: 'member', status: 'approved', access: { entities: ['E1'] } })
+    await seed('users', 'nobodyEmp', { role: 'member', status: 'approved', access: {} })
+    for (const site of ['n1', 'n2', 's1', 'e1']) {
+      await seed('incidents', `inc-${site}`, { title: `At ${site}`, siteId: site })
+    }
+    await seed('incidents', 'inc-unsited', { title: 'Older, named by text', location: 'n1' })
+    await seed('incidents/inc-e1/photos', 'p1', { url: 'x' })
+    await seed('documents', 'doc-e1-site', { title: 'Local', siteId: 'e1', visibility: 'site' })
+    await seed('documents', 'doc-e1-all', { title: 'Shared', siteId: 'e1', visibility: 'all' })
+  })
+  const denied = { code: 'permission-denied' }
+  const ids = async (uid, path) => (await as(uid).list(path)).map((d) => d.id).sort()
+
+  it('shows each person only the sites they reach, plus records that name no site', async () => {
+    expect(await ids('northMgr', 'incidents')).toEqual(
+      expect.arrayContaining(['inc-n1', 'inc-n2', 'inc-unsited'])
+    )
+    expect(await ids('northMgr', 'incidents')).not.toContain('inc-s1')
+    expect(await ids('e1Emp', 'incidents')).toEqual(expect.arrayContaining(['inc-n1', 'inc-s1']))
+    expect(await ids('e1Emp', 'incidents')).not.toContain('inc-n2')
+    const none = await ids('nobodyEmp', 'incidents')
+    expect(none).toContain('inc-unsited')
+    expect(none.filter((id) => ['inc-n1', 'inc-n2', 'inc-s1', 'inc-e1'].includes(id))).toEqual([])
+    expect((await ids('adminA', 'incidents')).length).toBeGreaterThanOrEqual(5)
+  })
+
+  it('refuses a get, and everything inside the record, outside the reach', async () => {
+    expect(await as('northMgr').get('incidents', 'inc-e1')).toBeNull()
+    expect(await as('northMgr').list('incidents/inc-e1/photos')).toEqual([])
+    expect(await as('northMgr').get('incidents/inc-e1/photos', 'p1')).toBeNull()
+    await expect(as('northMgr').set('incidents/inc-e1/photos', 'p2', { url: 'y' })).rejects.toMatchObject(denied)
+    expect(await as('adminA').get('incidents/inc-e1/photos', 'p1')).toMatchObject({ url: 'x' })
+  })
+
+  it('refuses writing a record into a site outside the reach, or moving one there', async () => {
+    const mgr = as('northMgr')
+    await mgr.set('incidents', 'inc-new-n1', { title: 'New', siteId: 'n1' })
+    await expect(mgr.set('incidents', 'inc-new-e1', { title: 'New', siteId: 'e1' })).rejects.toMatchObject(denied)
+    await expect(mgr.update('incidents', 'inc-n1', { siteId: 'e1' })).rejects.toMatchObject(denied)
+    await expect(mgr.update('incidents', 'inc-e1', { title: 'Edited' })).rejects.toThrow()
+    expect((await adminEngine.get(null, 'incidents', 'inc-e1')).title).toBe('At e1')
+  })
+
+  it('keeps a document marked for everyone visible to everyone', async () => {
+    expect(await ids('northMgr', 'documents')).toContain('doc-e1-all')
+    expect(await ids('northMgr', 'documents')).not.toContain('doc-e1-site')
+  })
+
+  it('does not filter the people directory or the site register', async () => {
+    expect((await as('nobodyEmp').list('sites')).length).toBeGreaterThanOrEqual(4)
+    expect((await as('nobodyEmp').list('users')).length).toBeGreaterThan(3)
   })
 })

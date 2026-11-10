@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react'
 import toast from 'react-hot-toast'
-import { Play, Check, Bug, QrCode, Lock, UserCheck, FileDown } from 'lucide-react'
+import { Play, Check, Bug, QrCode, Lock, UserCheck, FileDown, MapPin } from 'lucide-react'
 import { Card, Button, Field, Select, Input } from '../../shared/ui'
 import { reportError } from '../../shared/monitoring'
 import { backfillProcedureMirrors } from '../../modules/loto/services/procedures'
 import { backfillLockClaims } from '../../modules/loto/services/lockClaims'
 import { backfillAll } from '../../shared/crypto/backfill'
 import { backfillCreatorUids } from '../../shared/org/creatorBackfill'
+import { backfillSiteIds } from '../../shared/org/siteBackfill'
 import { exportSubjectData } from '../../shared/functions'
 import { logAudit, subscribeOrgUsers } from '../../shared/org/orgData'
 import { sealingEnabled } from '../../shared/crypto'
@@ -23,6 +24,7 @@ export default function Maintenance() {
       <SealHistory />
       <ProcedureMirrors />
       <LockClaims />
+      <SiteIds />
       <CreatorUids />
       <ErrorReporting />
     </div>
@@ -355,6 +357,80 @@ function SealHistory() {
 }
 
 /** Shared shell: title, why it matters, a result panel, and the action. */
+/**
+ * Record the site on older records that name it only in text.
+ *
+ * The server restricts a record to the people who reach its site once it has a
+ * siteId; until then it is visible to everyone who can see the module. See
+ * src/shared/org/siteBackfill.js.
+ */
+function SiteIds() {
+  const [busy, setBusy] = useState('')
+  const [preview, setPreview] = useState(null)
+  const [done, setDone] = useState(false)
+
+  const run = async (dryRun) => {
+    setBusy(dryRun ? 'dry' : 'write')
+    try {
+      const r = await backfillSiteIds({ dryRun })
+      setPreview(r)
+      if (!dryRun) {
+        setDone(true)
+        toast.success(`Recorded the site on ${r.written} record${r.written === 1 ? '' : 's'}`)
+      } else if (r.writes.length === 0) {
+        toast.success('Nothing to do — every record that can be matched already has its site')
+      }
+    } catch (err) {
+      reportError(err, { where: 'backfillSiteIds' })
+      toast.error(err?.message || 'Failed')
+    } finally {
+      setBusy('')
+    }
+  }
+
+  const sample = (list) =>
+    list.slice(0, 6).map((r) => `    ${r.collection}: "${r.text || '(no site text)'}"`).join('\n')
+
+  return (
+    <Job
+      icon={MapPin}
+      title="Record the site on older records"
+      result={preview && [
+        `${preview.sited} records already name their site`,
+        `${preview.writes.length} can be matched to one site${done ? ` (${preview.written} written)` : ''}`,
+        preview.ambiguous.length ? `${preview.ambiguous.length} name more than one site — left alone:\n${sample(preview.ambiguous)}` : '',
+        preview.unmatched.length ? `${preview.unmatched.length} match no site — left alone:\n${sample(preview.unmatched)}` : '',
+      ].filter(Boolean).join('\n')}
+      actions={
+        <>
+          <Button variant="ghost" icon={Play} loading={busy === 'dry'} disabled={Boolean(busy)} onClick={() => run(true)}>
+            Check first
+          </Button>
+          <Button
+            icon={done ? Check : undefined}
+            loading={busy === 'write'}
+            disabled={Boolean(busy) || !preview || preview.writes.length === 0 || done}
+            onClick={() => run(false)}
+          >
+            {done ? 'Recorded' : 'Record sites'}
+          </Button>
+        </>
+      }
+    >
+      <p>
+        Each record that names a site is shown only to the people who can access that site.
+        Older incidents, drills, meetings, permits and equipment name their site in text instead,
+        so everyone who can open the module still sees them.
+      </p>
+      <p>
+        This matches that text to one site in your register and records it. Text that fits more
+        than one site, or none, is listed and left alone. After this, those records follow the
+        same site access as new ones.
+      </p>
+    </Job>
+  )
+}
+
 /**
  * Record who wrote older committee meetings and inspection records.
  *

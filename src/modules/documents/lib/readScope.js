@@ -12,9 +12,15 @@
 // than an error anyone would report. Hence this file, and hence it being pure:
 // the plan is worth testing on its own.
 //
-// The plan mirrors firestore.rules exactly:
-//   elevated (admin | manager | auditor) → everything, one unfiltered query
+// The plan:
+//   elevated (admin | manager | auditor) → one unfiltered query
 //   everyone else → visibility == 'all', PLUS siteId in <sites they can reach>
+//
+// The server is the control (stack/policy.mjs siteBlocked): it returns only
+// documents marked for everyone or filed at a site the viewer reaches, for
+// managers and auditors as well as employees — only admins reach every site.
+// It filters rather than refusing the whole query, so the unfiltered query
+// for elevated roles simply comes back as their share.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { VISIBLE_ALL } from './classification'

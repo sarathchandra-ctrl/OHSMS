@@ -137,6 +137,58 @@ export function moduleBlocked(path, ctx) {
   return Array.isArray(granted) && !granted.includes(key)
 }
 
+// ── Site scope ──────────────────────────────────────────────────────────────
+// A person reaches the sites of their posting (profile.siteId) and of their
+// grants (access.sites, and every site in access.regions / access.entities),
+// the same reach as resolveAccessibleSites in src/shared/auth/access.js.
+// Admins reach every site. `ctx.reach` is that set of site ids, computed by
+// the engine from the site register; null means unrestricted.
+//
+// A record that names a site (siteId) is visible to, and writable by, only
+// people who reach that site. A record that names none stays visible to
+// whoever can see its module, as before: older records that identify their
+// site only by name are given a siteId by the Maintenance job, and are
+// restricted from then on. Hiding them before that would have taken records
+// away from their own site's people.
+//
+// Not site records, so never filtered: the people directory (a user's siteId
+// is their posting, and pickers need colleagues at other sites), the site
+// register itself, the audit trail, counters, settings and the public QR
+// mirrors (read by token). A document filed at a site but marked visible to
+// everyone (visibility 'all') is visible to everyone.
+const SITE_EXEMPT = [
+  'users', 'sites', 'organization', 'auditLogs', 'meta', 'docSeq', 'qr', 'permitQr',
+  'procedureQr', 'lotoSettings', 'moduleEntitlements', 'alertReads', 'weatherCache',
+  'integrations',
+]
+
+/** The site ids this profile reaches, or null for every site. */
+export function reachOf(profile, sites = []) {
+  if (!profile || profile.role === 'admin') return null
+  const a = profile.access || {}
+  const list = (v) => (Array.isArray(v) ? v : [])
+  const ids = new Set(list(a.sites).map(String))
+  if (profile.siteId) ids.add(String(profile.siteId))
+  const regions = new Set(list(a.regions))
+  const entities = new Set(list(a.entities))
+  for (const site of sites) {
+    if ((site.region && regions.has(site.region)) || (site.entity && entities.has(site.entity))) {
+      ids.add(String(site.id))
+    }
+  }
+  return ids
+}
+
+export const siteScoped = (path) => !SITE_EXEMPT.includes(rootOf(path))
+
+/** Does this record name a site the caller does not reach? */
+export function siteBlocked(path, row, ctx) {
+  if (ctx.worker || !ctx.reach || !siteScoped(path)) return false
+  if (rootOf(path) === 'documents' && row?.visibility === 'all') return false
+  const site = str(row?.siteId)
+  return Boolean(site) && !ctx.reach.has(site)
+}
+
 // ── Reading ─────────────────────────────────────────────────────────────────
 
 /**
@@ -172,8 +224,9 @@ export function readScope(path, ctx) {
   return 'none'
 }
 
-/** `row` is the stored document, needed only for an { ownedBy } scope. */
+/** `row` is the stored document; with it, the site scope applies too. */
 export function canRead(path, id, ctx, row) {
+  if (row && siteBlocked(path, row, ctx)) return false
   const scope = readScope(path, ctx)
   if (scope === 'all') return true
   if (scope === 'all-but-crypto') return !isCryptoKey(path, id)
@@ -319,6 +372,9 @@ function restrictWrite(op, path, id, ctx, { next, prev } = {}) {
   if (op === 'insert' && isAuditor(ctx) && collectionOf(path) !== 'auditLogs') return 'auditor'
   if ((op === 'update' || op === 'delete') && isAuditor(ctx)) return 'auditor'
   if ((op === 'update' || op === 'delete') && collectionOf(path) === 'auditLogs') return 'audit-log'
+  // Writing a record into a site the writer does not reach (a new record, or
+  // moving one there). Reaching the record's current site is canRead's.
+  if ((op === 'insert' || op === 'update') && siteBlocked(path, next, ctx)) return 'site'
   if (
     moduleBlocked(path, ctx) &&
     !(op === 'insert' && (REPORTABLE.includes(rootOf(path)) || publicReport(path, next)))
