@@ -8,8 +8,9 @@ import { QUIZ_PASS_PERCENT } from '../../../../stack/lib/quiz.js'
 /**
  * Certificate for a training quiz passed at 80% or more (stack/lib/quiz.js):
  * the Cult logo in the header, the person's name, employee ID and centre, the
- * quiz, the score and the certificate number the server issued with the
- * result. Print / Save as PDF from the browser; only the certificate prints.
+ * quiz, the score, the certificate number the server issued with the result,
+ * and that it is provided by the Safety & Security Team. Print / Save as PDF
+ * from the browser; only the certificate prints.
  *
  * Shown on the QR page straight after a pass, and from Quiz Results for any
  * passing response. `result` is a response: { name, employeeId, centerName,
@@ -83,9 +84,11 @@ export default function QuizCertificate({ result, onClose }) {
                   <p className="font-mono text-xs font-semibold text-ink-800">{result.certificateNo || '—'}</p>
                   <p className="mt-1 text-[10px] text-ink-400">Issued {formatDate(result.submittedAt || new Date())}</p>
                 </div>
+                {/* No signature line: the certificate is issued by the team, not
+                    signed by a person (owner's request, 2026-11-10). */}
                 <div className="text-right">
-                  <div className="mb-1 h-px w-40 bg-ink-200" />
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-ink-400">HSE Manager — Cult Fit</p>
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-ink-400">Provided by</p>
+                  <p className="text-xs font-semibold text-ink-800">Safety &amp; Security Team, Cult Fit</p>
                 </div>
               </div>
             </div>
