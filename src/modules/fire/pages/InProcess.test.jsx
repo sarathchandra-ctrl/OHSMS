@@ -7,7 +7,7 @@ const { markReceivedFromVendor, toast } = vi.hoisted(() => ({
   toast: { success: vi.fn(), error: vi.fn() },
 }))
 
-vi.mock('../lib/firestore', () => ({
+vi.mock('../lib/data', () => ({
   markReceivedFromVendor,
   markRefilledAndClosed: vi.fn(),
 }))
@@ -57,7 +57,7 @@ describe('In Process — received back from the vendor', () => {
   })
 
   it('does not close a refill on a due date that is today or earlier', async () => {
-    const { markRefilledAndClosed } = await import('../lib/firestore')
+    const { markRefilledAndClosed } = await import('../lib/data')
     render(<InProcess />)
     fireEvent.click(screen.getByRole('button', { name: 'Refilled & closed' }))
     fireEvent.change(screen.getByLabelText('New Next Refill date'), {
@@ -72,7 +72,7 @@ describe('In Process — received back from the vendor', () => {
   })
 
   it('does not record a new hydrostatic date without its certificate', async () => {
-    const { markRefilledAndClosed } = await import('../lib/firestore')
+    const { markRefilledAndClosed } = await import('../lib/data')
     render(<InProcess />)
     fireEvent.click(screen.getByRole('button', { name: 'Refilled & closed' }))
     fireEvent.change(screen.getByLabelText('New Next Refill date'), {

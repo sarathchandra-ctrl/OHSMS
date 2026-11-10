@@ -9,7 +9,7 @@ import {
 import { PageHeader, Spinner, Field } from '../components/ui'
 import { useAuth } from '../context/AuthContext'
 import { useData } from '../context/DataContext'
-import { addTemplate, updateTemplate } from '../lib/firestore'
+import { addTemplate, updateTemplate } from '../lib/data'
 import {
   FREQUENCIES, STATUSES, QUESTION_TYPES, CHOICE_TYPES, PHOTO_REQUIREMENTS,
   emptyTemplate, normalizeTemplateFields, normalizeQuestionType, normalizePhotoRequirement,

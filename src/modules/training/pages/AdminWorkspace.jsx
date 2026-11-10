@@ -10,7 +10,7 @@ import { useAuth } from '../../../shared/auth/AuthContext'
 import { orgDepartments } from '../../../shared/auth/access'
 import { formatDate } from '../../../shared/lib/format'
 import { useTraining } from '../context/TrainingContext'
-import { assignCourse, cancelAssignment, cancelAssignmentsBulk } from '../lib/firestore'
+import { assignCourse, cancelAssignment, cancelAssignmentsBulk } from '../lib/data'
 import { assignmentStatus, ASSIGNMENT_META, todayISO } from '../lib/status'
 import EmployeeChips from '../components/EmployeeChips'
 

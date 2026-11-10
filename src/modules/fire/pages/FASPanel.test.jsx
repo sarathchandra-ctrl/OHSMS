@@ -12,7 +12,7 @@ const printed = []
 
 vi.mock('../context/AuthContext', () => ({ useAuth: () => auth.value }))
 vi.mock('../context/FleetContext', () => ({ useFleet: () => fleet.value }))
-vi.mock('../lib/firestore', () => ({
+vi.mock('../lib/data', () => ({
   getFas: (...args) => getFas(...args),
   generateFasQr: (...args) => generateFasQr(...args),
 }))

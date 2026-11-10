@@ -13,7 +13,7 @@ import {
   addDvr, updateDvr, deleteDvr,
   addMeraki, updateMeraki, deleteMeraki,
   setDefects, provisionSiteMerakis,
-} from '../lib/firestore'
+} from '../lib/data'
 import { sitesMissingMeraki, sitesWithDuplicateMerakis } from '../lib/provision'
 import { downloadInventory } from '../lib/exporter'
 import {

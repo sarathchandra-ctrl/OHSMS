@@ -6,7 +6,7 @@ import { Ambulance, ShieldCheck, Wrench, AlertOctagon, CalendarClock, ArrowRight
 import { PageHeader, EmptyState, Spinner } from '../components/ui'
 import { useFleet } from '../context/FleetContext'
 import { useAuth } from '../context/AuthContext'
-import { decideAssetReport } from '../lib/firestore'
+import { decideAssetReport } from '../lib/data'
 import { stretcherSummary, stretcherCondition } from '../lib/assetLogic'
 import { STRETCHER_STATUS_LABEL, STRETCHER_STATUS_COLOR, STRETCHER_TYPES } from '../lib/constants'
 import { HealthBar, OpenDefectsPanel } from '../components/AssetHealth'

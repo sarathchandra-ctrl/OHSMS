@@ -12,7 +12,7 @@
 import { doc, getDoc, updateDoc } from '../../../shared/data/client.js'
 import { db } from '../../../shared/db'
 import { subscribeOrgCollection, incompleteReadNotice } from '../../../shared/org/orgData'
-import { releaseDefectLocks } from '../../fire/lib/firestore'
+import { releaseDefectLocks } from '../../fire/lib/data'
 // The tracker is a cross-module READER, so it has to open what each module
 // sealed. Its writes need nothing: updateActionStatus rewrites the `capa`/
 // `actions` array with only `status` and `closedAt` changed, and every sealed

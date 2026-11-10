@@ -28,7 +28,7 @@ import { toastCaught } from '../../../shared/lib/toastCaught'
 import ReportDefectModal from '../components/ReportDefectModal'
 import ReportAssetDefectModal from '../components/ReportAssetDefectModal'
 import { useAuth } from '../context/AuthContext'
-import { restoreExtinguisher, restoreAed, restoreFas } from '../lib/firestore'
+import { restoreExtinguisher, restoreAed, restoreFas } from '../lib/data'
 import { canManageAsset, daysRemaining, retiredQrCopy } from '../lib/recycle'
 import { STATUS_LABEL, AED_STATUS, AED_STATUS_LABEL, FAS_STATUS, FAS_STATUS_LABEL, STRETCHER_STATUS, STRETCHER_STATUS_LABEL } from '../lib/constants'
 

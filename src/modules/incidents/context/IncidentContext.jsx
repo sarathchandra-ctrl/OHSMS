@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useState } from 'react'
 import { useAuth } from './AuthContext'
-import { subscribeOrgUsers, subscribeOrg } from '../lib/firestore'
+import { subscribeOrgUsers, subscribeOrg } from '../lib/data'
 import { subscribeSites } from '../../../shared/org/orgData'
 import { resolveAccessibleSites } from '../../../shared/auth/access'
 import { subscribeIncidents, subscribeStats, INCIDENT_LOAD_CAP } from '../lib/incidents'

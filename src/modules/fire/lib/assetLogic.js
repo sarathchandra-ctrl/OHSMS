@@ -27,7 +27,7 @@ export function formatAssetId(prefix, n) {
 }
 // nextAssetId() lived here — highestAssetSeq + 1, computed in the browser. It
 // is gone rather than deprecated: leaving it exported is how the next register
-// gets colliding ids. Numbers now come from reserveAssetIds() in lib/firestore,
+// gets colliding ids. Numbers now come from reserveAssetIds() in lib/data,
 // which reserves them in a transaction; highestAssetSeq survives as the FLOOR
 // that seeds a counter against a register numbered before it existed.
 

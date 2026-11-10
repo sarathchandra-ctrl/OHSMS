@@ -12,7 +12,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { onSiteCreated } from '../../shared/org/siteHooks'
-import { provisionMerakisForNewSites } from './lib/firestore'
+import { provisionMerakisForNewSites } from './lib/data'
 
 onSiteCreated('cctv', async (sites, actor) => {
   await provisionMerakisForNewSites(sites, actor)

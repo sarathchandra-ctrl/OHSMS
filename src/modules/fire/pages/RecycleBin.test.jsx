@@ -18,7 +18,7 @@ vi.mock('../context/AuthContext', () => ({
   }),
 }))
 vi.mock('../context/FleetContext', () => ({ useFleet: () => fleet.value }))
-vi.mock('../lib/firestore', () => ({
+vi.mock('../lib/data', () => ({
   restoreExtinguishers: vi.fn(() => Promise.resolve()),
   purgeExtinguisher: vi.fn(() => Promise.resolve()),
   restoreAeds: vi.fn(() => Promise.resolve()),
@@ -30,7 +30,7 @@ vi.mock('../lib/exporter', () => ({ downloadJsonBackup: vi.fn() }))
 vi.mock('react-hot-toast', () => ({ default: { success: vi.fn(), error: vi.fn() } }))
 
 const { default: RecycleBin } = await import('./RecycleBin')
-const { restoreExtinguishers, restoreAeds } = await import('../lib/firestore')
+const { restoreExtinguishers, restoreAeds } = await import('../lib/data')
 
 const deletedAt = new Date('2026-09-20T08:00:00Z')
 

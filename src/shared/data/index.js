@@ -64,7 +64,7 @@
 // before their subscribe() returns pass in tests and fail in the browser.
 //
 // onError must be CALLED, not swallowed (shared/org/orgData.js and
-// modules/cctv/lib/firestore.js both branch on it): "the read failed" rendered
+// modules/cctv/lib/data.js both branch on it): "the read failed" rendered
 // as "there is nothing here" is the most dangerous way for a safety system to
 // be wrong. Cap detection stays with the caller — rows.length >= CAP.
 //

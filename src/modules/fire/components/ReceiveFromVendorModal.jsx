@@ -3,7 +3,7 @@ import { PackageCheck } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { toastCaught } from '../../../shared/lib/toastCaught'
 import { Modal, Spinner, Field } from './ui'
-import { markReceivedFromVendor } from '../lib/firestore'
+import { markReceivedFromVendor } from '../lib/data'
 import { validateReceive } from '../lib/receive'
 import { todayISO } from '../../../shared/lib/dates'
 

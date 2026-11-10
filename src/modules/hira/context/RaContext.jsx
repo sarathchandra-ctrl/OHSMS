@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useMemo, useState } from 'react'
 import toast from 'react-hot-toast'
 import { useAuth } from './AuthContext'
-import { subscribeAssessments, subscribeOrg, subscribeActivity } from '../lib/firestore'
+import { subscribeAssessments, subscribeOrg, subscribeActivity } from '../lib/data'
 import { subscribeSites } from '../../../shared/org/orgData'
 import { resolveAccessibleSites } from '../../../shared/auth/access'
 import { summarize } from '../lib/raStats'

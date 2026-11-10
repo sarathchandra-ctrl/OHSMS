@@ -44,7 +44,7 @@ function makeBatch() {
 /** getDocs answering with a fixed Meraki collection. */
 const collectionOf = (rows) => vi.fn(async () => ({ docs: rows.map((r) => ({ id: r.id, data: () => r })) }))
 
-const { provisionSiteMerakis, provisionMerakisForNewSites } = await import('./firestore')
+const { provisionSiteMerakis, provisionMerakisForNewSites } = await import('./data')
 
 const site = (o = {}) => ({ id: 's1', name: 'Hosur', ...o })
 const stored = (o = {}) => ({ id: 'site_s1', name: 'MX-Hosur', siteId: 's1', status: 'unknown', ...o })

@@ -6,7 +6,7 @@ import { Users as UsersIcon, Check, X, Shield } from 'lucide-react'
 import { PageHeader, Badge, EmptyState } from '../components/ui'
 import { useAuth } from '../context/AuthContext'
 import { useIncidents } from '../context/IncidentContext'
-import { setUserStatus, setUserRole } from '../lib/firestore'
+import { setUserStatus, setUserRole } from '../lib/data'
 import { ROLES, roleLabel } from '../lib/permissions'
 
 const ROLE_COLOR = { reporter: '#0891b2', investigator: '#795548', admin: '#dc2626' }

@@ -19,7 +19,7 @@ import {
   decideApproval, requestClosure, decideClosure, requestExtension, addExtensionSuggestion, decideExtension,
   subscribePermitDocuments, addPermitDocument, deletePermitDocument,
   ensurePermitQr, subscribePermitObservations, createObservation, deletePermit,
-} from '../lib/firestore'
+} from '../lib/data'
 import { can, canActForTeam, TEAMS } from '../lib/permissions'
 import { STATUS, statusMeta } from '../lib/permitStatus'
 import { fileToDataUrl, formatBytes } from '../lib/files'

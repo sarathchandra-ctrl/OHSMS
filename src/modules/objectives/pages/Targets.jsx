@@ -7,7 +7,7 @@ import { usePagination } from '../../../shared/ui/usePagination'
 import { useAuth } from '../../../shared/auth/AuthContext'
 import { useObjectives } from '../context/ObjectivesContext'
 import DocIdTag from '../../../shared/docId/DocIdTag'
-import { addObjective, updateObjective, deleteObjective, seedDefaultTargets } from '../lib/firestore'
+import { addObjective, updateObjective, deleteObjective, seedDefaultTargets } from '../lib/data'
 import { KPIS, KPI_BY_KEY, LEVELS } from '../lib/kpis'
 
 const thisPeriod = () => `FY${new Date().getFullYear()}`

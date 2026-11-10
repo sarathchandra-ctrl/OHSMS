@@ -45,7 +45,7 @@ vi.mock('../../../shared/org/orgData', () => ({ logAudit: vi.fn(), COLLECTION_RE
 vi.mock('../../../shared/org/readError', () => ({ onReadError: () => () => {} }))
 vi.mock('../../../shared/docId/reserve', () => ({ reserveDocId: async () => 'TRN-ACME_0001' }))
 
-const { logTraining } = await import('./firestore')
+const { logTraining } = await import('./data')
 
 const course = { id: 'c1', name: 'Induction', validityMonths: 12, category: 'Induction' }
 const people = (n) => Array.from({ length: n }, (_, i) => ({ uid: `u${i}`, name: `P${i}` }))

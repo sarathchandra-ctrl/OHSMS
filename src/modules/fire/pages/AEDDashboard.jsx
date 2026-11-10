@@ -6,7 +6,7 @@ import { HeartPulse, ShieldCheck, Wrench, AlertOctagon, BatteryWarning, Zap, Cal
 import { PageHeader, EmptyState, Spinner } from '../components/ui'
 import { useFleet } from '../context/FleetContext'
 import { useAuth } from '../context/AuthContext'
-import { decideAssetReport } from '../lib/firestore'
+import { decideAssetReport } from '../lib/data'
 import { aedSummary, aedCondition } from '../lib/assetLogic'
 import { AED_STATUS_LABEL, AED_STATUS_COLOR } from '../lib/constants'
 import { HealthBar, OpenDefectsPanel } from '../components/AssetHealth'

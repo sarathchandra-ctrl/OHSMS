@@ -10,7 +10,7 @@ const { exportDefectRepository, toast, fleet } = vi.hoisted(() => ({
 vi.mock('./lib/exporter', () => ({ exportDefectRepository }))
 vi.mock('react-hot-toast', () => ({ default: toast }))
 vi.mock('../../shared/lib/toastCaught', () => ({ toastCaught: vi.fn() }))
-vi.mock('./lib/firestore', () => ({ resolveDefects: vi.fn(), decideAssetReport: vi.fn() }))
+vi.mock('./lib/data', () => ({ resolveDefects: vi.fn(), decideAssetReport: vi.fn() }))
 vi.mock('./context/FleetContext', () => ({ useFleet: () => fleet }))
 vi.mock('./context/AuthContext', () => ({
   useAuth: () => ({ orgName: 'O', profile: { name: 'M' }, isManager: false }),

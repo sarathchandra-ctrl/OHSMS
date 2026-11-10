@@ -5,7 +5,7 @@ import toast from 'react-hot-toast'
 import { toastCaught } from '../../../shared/lib/toastCaught'
 import { Modal, Spinner, Field } from './ui'
 import { ASSET_DEFECTS, OTHER_DEFECT, REPORTER_ROLES } from '../lib/constants'
-import { createAssetReport } from '../lib/firestore'
+import { createAssetReport } from '../lib/data'
 
 /**
  * Report a defect against an AED, a FAS device or a stretcher from a public QR

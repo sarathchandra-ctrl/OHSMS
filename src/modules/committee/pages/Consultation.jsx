@@ -45,7 +45,7 @@ import {
     addConsultation,
     updateConsultation,
     deleteConsultation,
-} from '../lib/firestore';
+} from '../lib/data';
 
 const MEETING_TYPES = [
     "HSE Committee Meeting",
@@ -148,7 +148,7 @@ const MeetingDetailModal = ({ meeting, siteLabel, onClose, onUpdateStatus, onPri
                                                     <select
                                                         aria-label={`Status of action: ${row.action || `row ${idx + 1}`}`}
                                                         value={row.status || 'Open'}
-                                                        onChange={e => onUpdateStatus(meeting.firebaseKey, idx, e.target.value)}
+                                                        onChange={e => onUpdateStatus(meeting.docKey, idx, e.target.value)}
                                                         disabled={!canEditStatus(row)}
                                                         className={`text-xs px-3 py-1.5 rounded-lg font-bold outline-hidden border ${canEditStatus(row) ? 'cursor-pointer' : 'cursor-not-allowed opacity-80'} ${row.status === 'Closed' ? 'bg-emerald-100 text-emerald-600 border-emerald-500/30' : row.status === 'In Progress' ? 'bg-yellow-100 text-yellow-600 border-yellow-500/30' : 'bg-red-100 text-red-600 border-red-500/30'}`}
                                                     >
@@ -220,7 +220,7 @@ export default function Consultation() {
 
     // Form Data State
     const [formData, setFormData] = useState({
-        id: '', firebaseKey: '', siteId: '', type: 'HSE Committee Meeting', subject: '',
+        id: '', docKey: '', siteId: '', type: 'HSE Committee Meeting', subject: '',
         date: todayISO(), time: '', preRequisites: '', minutes: '',
         attendees: [], actions: []
     });
@@ -241,7 +241,7 @@ export default function Consultation() {
             setView('calendar');
         } else if (v === 'new') {
             setFormData({
-                id: '', firebaseKey: '', siteId: filterSite !== 'All' ? filterSite : '',
+                id: '', docKey: '', siteId: filterSite !== 'All' ? filterSite : '',
                 type: 'HSE Committee Meeting', subject: '',
                 date: todayISO(), time: '', preRequisites: '', minutes: '',
                 attendees: [], actions: []
@@ -299,7 +299,7 @@ export default function Consultation() {
     // when the app moved to a hub layout, so the page needs its own buttons).
     const openNewMeeting = () => {
         setFormData({
-            id: '', firebaseKey: '', siteId: filterSite !== 'All' ? filterSite : '',
+            id: '', docKey: '', siteId: filterSite !== 'All' ? filterSite : '',
             type: 'HSE Committee Meeting', subject: '',
             date: todayISO(), time: '', preRequisites: '', minutes: '',
             attendees: [], actions: []
@@ -442,8 +442,8 @@ export default function Consultation() {
         }
 
         setSaving(true);
-        // firebaseKey is the Firestore doc id (a local handle), not a stored field.
-        const { firebaseKey, ...rest } = formData;
+        // docKey is the record id (a local handle), not a stored field.
+        const { docKey, ...rest } = formData;
         const payload = {
             ...rest,
             actions: (rest.actions || []).map((a) => ({ ...a, ...actionOwnerRecord(a) })),
@@ -452,7 +452,7 @@ export default function Consultation() {
         };
 
         try {
-            if (firebaseKey) {
+            if (docKey) {
                 // A meeting saved before references existed has none. It used to
                 // be given `MOM-<site>-<last 4 digits of the clock>` — a ten
                 // SECOND cycle, so two meetings for one site minuted in the same
@@ -463,7 +463,7 @@ export default function Consultation() {
                 // addConsultation reserves its own after spreading the payload,
                 // so anything sent on a create was discarded anyway.
                 payload.docId = formData.docId || await reserveDocId('committee');
-                await updateConsultation(firebaseKey, payload);
+                await updateConsultation(docKey, payload);
             } else {
                 delete payload.docId;
                 // The creator's uid, set once: stack/policy.mjs lets an employee
@@ -498,7 +498,7 @@ export default function Consultation() {
     };
 
     const quickStatusUpdate = async (key, idx, newStatus) => {
-        const meeting = meetings.find(m => m.firebaseKey === key);
+        const meeting = meetings.find(m => m.docKey === key);
         const actionRow = meeting.actions[idx];
 
         if (!canUpdateActionStatus(actionRow, session, {
@@ -518,9 +518,9 @@ export default function Consultation() {
         const updatedActions = meeting.actions.map((a, x) =>
             (x === idx ? { ...a, status: newStatus } : a));
         await updateConsultation(key, { actions: updatedActions });
-        setMeetings(meetings.map(m => m.firebaseKey === key ? { ...m, actions: updatedActions } : m));
+        setMeetings(meetings.map(m => m.docKey === key ? { ...m, actions: updatedActions } : m));
 
-        if (formData && formData.firebaseKey === key) {
+        if (formData && formData.docKey === key) {
             setFormData(prev => ({ ...prev, actions: updatedActions }));
         }
     };
@@ -570,7 +570,7 @@ export default function Consultation() {
         const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
         const today = new Date();
         setFormData({
-            id: '', firebaseKey: '', siteId: calSiteFilter, type: type,
+            id: '', docKey: '', siteId: calSiteFilter, type: type,
             subject: `${type} _ ${monthNames[calMonth]} _ ${calYear}`,
             date: todayISO(today), time: '', preRequisites: '', minutes: '',
             attendees: [], actions: []
@@ -591,7 +591,7 @@ export default function Consultation() {
                 <ModuleMark tone="brand" size="md"><Logo size={24} /></ModuleMark>
                 <div>
                     <h1 className="text-2xl font-extrabold tracking-tight text-ink-900">
-                        {view === 'calendar' ? 'Compliance Calendar' : view === 'form' ? (formData.firebaseKey ? (canEditForm ? 'Edit Meeting' : 'Meeting Record') : 'New Meeting') : 'Consultation & Meetings'}
+                        {view === 'calendar' ? 'Compliance Calendar' : view === 'form' ? (formData.docKey ? (canEditForm ? 'Edit Meeting' : 'Meeting Record') : 'New Meeting') : 'Consultation & Meetings'}
                     </h1>
                     <p className="text-sm text-ink-500">HSE committees, management reviews and consultations.</p>
                 </div>
@@ -781,7 +781,7 @@ export default function Consultation() {
                                 const totalAct = m.actions ? m.actions.length : 0;
                                 const closedAct = m.actions ? m.actions.filter(a => a.status === 'Closed').length : 0;
                                 return (
-                                    <button type="button" key={m.firebaseKey} className="glass-panel p-6 rounded-3xl border-t-4 border-green-500 flex flex-col w-full text-left shadow-xl hover:shadow-2xl hover:-translate-y-1 transition-all cursor-pointer group" onClick={() => { setFormData(m); setView('detail'); }}>
+                                    <button type="button" key={m.docKey} className="glass-panel p-6 rounded-3xl border-t-4 border-green-500 flex flex-col w-full text-left shadow-xl hover:shadow-2xl hover:-translate-y-1 transition-all cursor-pointer group" onClick={() => { setFormData(m); setView('detail'); }}>
                                         <div className="flex justify-between items-start mb-4">
                                             <span className="font-mono text-[10px] font-bold text-green-700 bg-green-100 px-2 py-1 rounded-lg border border-green-500/30">{m.docId}</span>
                                             <span className="text-[10px] bg-surface text-ink-600 px-2 py-1 rounded-lg border border-surface-200 font-bold"><Calendar size={12} className="inline mr-1" /> {m.date}</span>
@@ -802,7 +802,7 @@ export default function Consultation() {
                                                     <button type="button" onClick={e => { e.stopPropagation(); setFormData(m); setView('form'); }} className="text-ink-500 hover:text-ink-900 bg-surface-100 hover:bg-surface-200 w-8 h-8 rounded-lg flex items-center justify-center transition-colors shadow-lg"><Eye size={16} /></button>
                                                 )}
 
-                                                {permissions.canDelete && <button type="button" onClick={e => { e.stopPropagation(); deleteRecord(m.firebaseKey); }} className="text-red-600 hover:text-white bg-surface-100 hover:bg-red-600 w-8 h-8 rounded-lg flex items-center justify-center transition-colors shadow-lg"><Trash2 size={16} /></button>}
+                                                {permissions.canDelete && <button type="button" onClick={e => { e.stopPropagation(); deleteRecord(m.docKey); }} className="text-red-600 hover:text-white bg-surface-100 hover:bg-red-600 w-8 h-8 rounded-lg flex items-center justify-center transition-colors shadow-lg"><Trash2 size={16} /></button>}
                                             </div>
                                         </div>
                                     </button>
@@ -902,12 +902,12 @@ export default function Consultation() {
                         <div className="glass-panel p-8 md:p-10 rounded-3xl border border-surface-200 shadow-2xl">
                             <div className="flex justify-between items-center mb-10 border-b border-surface-200 pb-6">
                                 <div>
-                                    <h2 className="text-3xl font-bold text-green-700 flex items-center gap-4"><Pencil size={24} /> {formData.firebaseKey ? (canEditForm ? 'Edit Consultation Record' : 'View Consultation Record') : 'Log New Meeting'}</h2>
+                                    <h2 className="text-3xl font-bold text-green-700 flex items-center gap-4"><Pencil size={24} /> {formData.docKey ? (canEditForm ? 'Edit Consultation Record' : 'View Consultation Record') : 'Log New Meeting'}</h2>
                                     <p className="text-sm text-ink-500 font-mono mt-2 ml-10">Ref: {formData.docId || 'DRAFT'}</p>
                                 </div>
                                 <div className="flex gap-3">
                                     <button type="button" onClick={() => setView('list')} className="text-ink-500 hover:text-ink-900 px-5 py-2.5 rounded-xl font-bold text-sm transition-colors">Cancel</button>
-                                    {formData.firebaseKey && <button type="button" onClick={() => triggerPrint(formData)} className="bg-surface-100 hover:bg-surface-200 text-ink-900 px-6 py-2.5 rounded-xl font-bold text-sm shadow-lg transition-colors flex items-center gap-2"><Printer size={16} /> Print</button>}
+                                    {formData.docKey && <button type="button" onClick={() => triggerPrint(formData)} className="bg-surface-100 hover:bg-surface-200 text-ink-900 px-6 py-2.5 rounded-xl font-bold text-sm shadow-lg transition-colors flex items-center gap-2"><Printer size={16} /> Print</button>}
                                     {canEditForm && (
                                         <button type="button" onClick={saveRecord} disabled={saving} className="bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-500 hover:to-emerald-500 text-white font-bold px-6 py-2.5 rounded-xl text-sm shadow-lg shadow-green-900/30 transition-transform active:scale-95 flex items-center gap-2 disabled:opacity-50">{saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />} Save</button>
                                     )}
@@ -921,7 +921,7 @@ export default function Consultation() {
                                         module="committee"
                                         sites={visibleSites}
                                         value={formData}
-                                        disabled={!canEditForm || (formData.firebaseKey && !isGlobalUser)}
+                                        disabled={!canEditForm || (formData.docKey && !isGlobalUser)}
                                         onChange={(v) => setFormData((f) => ({ ...f, ...v, ...(v.siteId !== f.siteId ? { attendees: [], actions: [] } : {}) }))}
                                     />
                                 </div>

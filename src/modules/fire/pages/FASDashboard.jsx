@@ -6,7 +6,7 @@ import { BellRing, ShieldCheck, Wrench, AlertOctagon, CalendarClock, ArrowRight,
 import { PageHeader, EmptyState, Spinner } from '../components/ui'
 import { useFleet } from '../context/FleetContext'
 import { useAuth } from '../context/AuthContext'
-import { decideAssetReport } from '../lib/firestore'
+import { decideAssetReport } from '../lib/data'
 import { fasSummary, fasCondition } from '../lib/assetLogic'
 import { FAS_STATUS_LABEL, FAS_STATUS_COLOR, FAS_DEVICE_TYPES, FAS_STATUS } from '../lib/constants'
 import { HealthBar, OpenDefectsPanel } from '../components/AssetHealth'

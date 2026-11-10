@@ -20,7 +20,7 @@
 //    note) are the ones a recompute is allowed to replace.
 // ─────────────────────────────────────────────────────────────────────────────
 import { findNearestServices } from './nearby'
-import { addContact, updateContact, deleteContact } from './firestore'
+import { addContact, updateContact, deleteContact } from './data'
 
 /** National/generic emergency lines — never a specific station's own number. */
 const GENERIC = new Set([

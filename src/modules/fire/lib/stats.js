@@ -1,6 +1,6 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // Pure helpers for the org stats counter doc (organizations/{orgId}/meta/stats).
-// Kept Firestore-free so they're unit-testable; firestore.js turns the delta
+// Kept Firestore-free so they're unit-testable; data.js turns the delta
 // objects into FieldValue.increment() writes inside each mutation batch.
 //
 // Stats track the ACTIVE fleet only (soft-deleted units are excluded), giving

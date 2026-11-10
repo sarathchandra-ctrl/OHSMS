@@ -13,7 +13,7 @@ import { formatDate, daysUntil } from '../../../shared/lib/format'
 import { useTraining } from '../context/TrainingContext'
 import {
   selfCompleteTraining, subscribeSessions, subscribeRequests, requestSession, withdrawRequest,
-} from '../lib/firestore'
+} from '../lib/data'
 import { isClassroom, sortSessions, sessionState, canRequest, sessionWhere } from '../lib/sessions'
 import { assignmentStatus, ASSIGNMENT_META, recordStatus, STATUS_META, todayISO } from '../lib/status'
 import CertificateModal from '../components/Certificate'

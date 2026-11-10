@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useMemo, useState } from 'react'
 import { useAuth } from '../../../shared/auth/AuthContext'
 import { subscribeSites } from '../../../shared/org/orgData'
-import { subscribeEscalations, subscribeLegalIssues } from '../lib/firestore'
+import { subscribeEscalations, subscribeLegalIssues } from '../lib/data'
 import { withLegal, withEscalation, summarise, repeatMembers } from '../lib/linkage'
 import { isPermissionDenied } from '../../../shared/lib/permissionDenied'
 import { AccessDenied } from '../../../shared/ui'

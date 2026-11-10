@@ -5,7 +5,7 @@ import toast from 'react-hot-toast'
 import { toastCaught } from '../../../shared/lib/toastCaught'
 import { Modal, Spinner, Field } from './ui'
 import { DEFECTS, REPORTER_ROLES } from '../lib/constants'
-import { createReport } from '../lib/firestore'
+import { createReport } from '../lib/data'
 import { lockedDefects } from '../lib/defectLock'
 
 /**

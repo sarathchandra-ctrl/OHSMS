@@ -9,7 +9,7 @@ import { useAuth } from '../context/AuthContext'
 import { useAccessibleSites } from '../../../shared/org/useAccessibleSites'
 import { summariseLinkedSites, listLinkedAssets } from '../lib/linkedSites'
 import { planAllSiteLinks } from '../lib/siteLink'
-import { linkAllEquipmentToSites } from '../lib/firestore'
+import { linkAllEquipmentToSites } from '../lib/data'
 import LinkSitesModal from '../components/LinkSitesModal'
 
 // Which registry sites the equipment is actually keyed to. The repository can

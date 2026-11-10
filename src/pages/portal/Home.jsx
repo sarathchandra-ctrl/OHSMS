@@ -33,7 +33,7 @@ import {
 import { useAccessibleSitesRead } from '../../shared/org/useAccessibleSites'
 import { regionsOf, entitiesOf, sitesInSelection, shortList } from '../../shared/auth/access'
 import { subscribeActions, NORM_BY_KEY, SOURCES } from '../../modules/actions/lib/sources'
-import { subscribeAssignmentsRead } from '../../modules/training/lib/firestore'
+import { subscribeAssignmentsRead } from '../../modules/training/lib/data'
 import { INCIDENT_TYPE_BY_KEY } from '../../modules/incidents/lib/constants'
 import { enabledModules } from '../../shared/modules/entitlements'
 import { Raised, Inset, SectionLabel } from './ui'

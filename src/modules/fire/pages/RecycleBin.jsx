@@ -25,7 +25,7 @@ import {
   purgeAed,
   restoreFasMany,
   purgeFas,
-} from '../lib/firestore'
+} from '../lib/data'
 import { downloadJsonBackup } from '../lib/exporter'
 import { toDate } from '../lib/extinguisherLogic'
 import { canManageAsset, daysRemaining, matchesBinSearch, PURGE_AFTER_DAYS } from '../lib/recycle'

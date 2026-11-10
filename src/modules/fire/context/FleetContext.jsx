@@ -15,7 +15,7 @@ import {
   subscribeStretchers,
   subscribeDefectClosures,
   backfillDeletedAt,
-} from '../lib/firestore'
+} from '../lib/data'
 import {
   fleetSummary,
   isToBeRefilled,
@@ -26,7 +26,7 @@ import {
 } from '../lib/extinguisherLogic'
 import { derivePhysicalDefectLog } from '../lib/defectReports'
 import { aedCondition, fasCondition, stretcherCondition } from '../lib/assetLogic'
-import { EXT_LOAD_CAP } from '../lib/firestore'
+import { EXT_LOAD_CAP } from '../lib/data'
 import { subscribeSites, incompleteReadNotice } from '../../../shared/org/orgData'
 import { resolveAccessibleSites } from '../../../shared/auth/access'
 import { useTodayKey } from '../../../shared/lib/useToday'

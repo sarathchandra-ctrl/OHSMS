@@ -11,7 +11,7 @@ import { usePagination } from '../../../shared/ui/usePagination'
 import DocIdTag from '../../../shared/docId/DocIdTag'
 import { useAuth } from '../context/AuthContext'
 import { useData } from '../context/DataContext'
-import { deleteRecord } from '../lib/firestore'
+import { deleteRecord } from '../lib/data'
 
 function RecordDetail({ record, onClose }) {
   const findings = Object.values(record.responses || {}).filter(

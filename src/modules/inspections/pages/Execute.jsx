@@ -9,7 +9,7 @@ import {
 import { PageHeader, Spinner, Field } from '../components/ui'
 import { useAuth } from '../context/AuthContext'
 import { useData } from '../context/DataContext'
-import { addRecord, completeAssignment } from '../lib/firestore'
+import { addRecord, completeAssignment } from '../lib/data'
 import { fileToDataUrl } from '../lib/fileToDataUrl'
 import { putFile, MAX_UPLOAD_BYTES, MAX_INLINE_BYTES, tooLargeForInline, formatSize } from '../../../shared/storage'
 import { hasAnsweredQuestion, scoreResponses, groupFieldsByCategory, usesCategories } from '../lib/schedule'

@@ -2,7 +2,7 @@ import { createContext, useContext, useEffect, useMemo, useState } from 'react'
 import { useAuth } from '../../../shared/auth/AuthContext'
 import { subscribeOrgUsers, subscribeSites } from '../../../shared/org/orgData'
 import { resolveAccessibleSites } from '../../../shared/auth/access'
-import { subscribeCourses, subscribeRecords, subscribeAssignments } from '../lib/firestore'
+import { subscribeCourses, subscribeRecords, subscribeAssignments } from '../lib/data'
 import { summarize, summarizeAssignments, todayISO } from '../lib/status'
 
 const TrainingContext = createContext(null)

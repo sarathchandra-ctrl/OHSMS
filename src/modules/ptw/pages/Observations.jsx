@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { Eye, CheckCircle2, AlertTriangle, FileText, QrCode, Monitor } from 'lucide-react'
 import { PageHeader, EmptyState, Spinner } from '../components/ui'
-import { subscribeObservations } from '../lib/firestore'
+import { subscribeObservations } from '../lib/data'
 import { readableOnTint } from '../../../shared/lib/contrast'
 
 const fmt = (ts) => {

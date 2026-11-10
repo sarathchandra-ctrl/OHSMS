@@ -24,7 +24,7 @@ vi.mock('../context/FleetContext', () => ({ useFleet: () => fleet.value }))
 // trap answers every key also answers `then`, which makes the mocked module
 // look like a thenable, and `await import()` of the page under test never
 // settles. The run hangs with no output rather than failing.
-vi.mock('../lib/firestore', () => ({
+vi.mock('../lib/data', () => ({
   addFirstAid: vi.fn(), updateFirstAid: vi.fn(), deleteFirstAid: vi.fn(),
   saveFirstAidBox: vi.fn(), linkFirstAidToSites: vi.fn(),
   addStretcher: vi.fn(), updateStretcher: vi.fn(), deleteStretcher: vi.fn(),

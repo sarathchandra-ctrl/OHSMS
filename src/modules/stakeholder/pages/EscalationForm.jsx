@@ -9,7 +9,7 @@ import {
 import SiteScopePicker from '../../../shared/org/SiteScopePicker'
 import { useAuth } from '../../../shared/auth/AuthContext'
 import { useStakeholder } from '../context/StakeholderContext'
-import { addEscalation, updateEscalation, deleteEscalation } from '../lib/firestore'
+import { addEscalation, updateEscalation, deleteEscalation } from '../lib/data'
 import { ESCALATION_STATUS, ESCALATION_CHANNEL, SEVERITY } from '../lib/constants'
 import AttachmentField from '../components/AttachmentField'
 import CapaEditor from '../components/CapaEditor'

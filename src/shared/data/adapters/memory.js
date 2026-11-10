@@ -21,7 +21,7 @@
 // green test as proof the app works on Firestore:
 //
 //   1. orderBy KEEPS documents missing the ordered field (sorted last).
-//      Firestore drops them, which orgData.js:275 and cctv/lib/firestore.js:38
+//      Firestore drops them, which orgData.js:275 and cctv/lib/data.js:38
 //      both rely on knowing. Emulating the drop would mean this driver silently
 //      hiding rows too; showing an extra row is the failure you can see.
 //   2. A subscriber may be woken by a write that does not change its result

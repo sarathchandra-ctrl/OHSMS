@@ -28,7 +28,7 @@ import {
 } from '../../../shared/ui'
 import { useAuth } from '../../../shared/auth/AuthContext'
 import { useAccessibleSites } from '../../../shared/org/useAccessibleSites'
-import { subscribeContacts, subscribeLayouts, subscribeRescuePlans } from '../lib/firestore'
+import { subscribeContacts, subscribeLayouts, subscribeRescuePlans } from '../lib/data'
 import {
   refreshSites,
   needsRealNumber,

@@ -9,7 +9,7 @@ import {
 import SiteScopePicker from '../../../shared/org/SiteScopePicker'
 import { useAuth } from '../../../shared/auth/AuthContext'
 import { useStakeholder } from '../context/StakeholderContext'
-import { addLegalIssue, updateLegalIssue, deleteLegalIssue } from '../lib/firestore'
+import { addLegalIssue, updateLegalIssue, deleteLegalIssue } from '../lib/data'
 import {
   DEPARTMENTS, DEPARTMENT_GROUPS, NOTICE_TYPES, NOTICE_BY_KEY, LEGAL_STATUS,
 } from '../lib/constants'

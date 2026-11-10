@@ -12,7 +12,7 @@ import { useFleet } from '../context/FleetContext'
 import {
   addStretcher, updateStretcher, deleteStretcher, serviceStretcher,
   generateStretcherQr, bulkDeleteStretchers, linkStretchersToSites, reserveAssetIds,
-} from '../lib/firestore'
+} from '../lib/data'
 import { planSiteLinks } from '../lib/siteLink'
 import { listLinkedAssets, filterByLinkState, siteIdSet, isLinkedToSite } from '../lib/linkedSites'
 import LinkSitesModal from '../components/LinkSitesModal'

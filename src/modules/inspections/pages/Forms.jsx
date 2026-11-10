@@ -8,7 +8,7 @@ import {
 import { PageHeader, EmptyState, StatusPill } from '../components/ui'
 import { useAuth } from '../context/AuthContext'
 import { useData } from '../context/DataContext'
-import { deleteTemplate, setTemplateStatus, updateTemplateAssignments } from '../lib/firestore'
+import { deleteTemplate, setTemplateStatus, updateTemplateAssignments } from '../lib/data'
 import { isOnDemand } from '../lib/schedule'
 import InspectionAssignmentsModal from './Inspections/InspectionAssignmentsModal'
 

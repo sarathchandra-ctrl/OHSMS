@@ -41,7 +41,7 @@ vi.mock('../../../shared/data/client.js', () => ({
   documentId: vi.fn(),
 }))
 
-const { createReport } = await import('./firestore')
+const { createReport } = await import('./data')
 
 const denied = Object.assign(new Error('denied'), { code: 'permission-denied' })
 const report = { kind: 'defect', extId: 'ext1', defectType: 'empty', token: 'tok1', source: 'qr' }

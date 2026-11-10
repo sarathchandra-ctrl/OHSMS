@@ -97,7 +97,7 @@ export function defineDataContract(
     // A DELIBERATE divergence. Firestore drops documents missing the ordered
     // field; this driver keeps them, sorted last. Showing a row you did not expect
     // is a failure someone can see; hiding one is the failure orgData.js:275 and
-    // cctv/lib/firestore.js:38 both warn about.
+    // cctv/lib/data.js:38 both warn about.
     it('keeps documents missing the ordered field, sorted last', async () => {
       const d = await open()
       await d.set(P, 'named', { name: 'Alpha' })

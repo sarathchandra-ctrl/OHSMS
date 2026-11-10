@@ -6,7 +6,7 @@ import {
   subscribeOrgUsers,
   subscribeOrg,
   reconcilePermitStatus,
-} from '../lib/firestore'
+} from '../lib/data'
 import { derivePermitStatus, STATUS } from '../lib/permitStatus'
 import { openUnsafeByPermit } from '../lib/observations'
 import { canActForTeam, TEAMS } from '../lib/permissions'

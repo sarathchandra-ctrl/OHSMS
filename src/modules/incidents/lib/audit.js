@@ -1,6 +1,6 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // Audit-log action constants + pure helpers (no Firestore here, so they're
-// unit-testable). The Firestore write itself lives in firestore.js (logAudit).
+// unit-testable). The Firestore write itself lives in data.js (logAudit).
 // ─────────────────────────────────────────────────────────────────────────────
 // Format-only, and pure: isEnvelope tests a string's shape and touches no key,
 // no network and no Firestore, so importing it here keeps this module as

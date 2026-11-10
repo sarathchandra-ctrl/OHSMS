@@ -9,7 +9,7 @@ import { Pager } from '../../../shared/ui'
 import { usePagination } from '../../../shared/ui/usePagination'
 import { useAuth } from '../context/AuthContext'
 import { parseCsv, downloadTemplate, previewRows, CSV_COLUMNS } from '../lib/csv'
-import { bulkCreateAssessments, logActivity } from '../lib/firestore'
+import { bulkCreateAssessments, logActivity } from '../lib/data'
 
 export default function BulkImport() {
   const { profile, user } = useAuth()

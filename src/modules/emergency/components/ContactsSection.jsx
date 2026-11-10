@@ -21,7 +21,7 @@ import {
   deleteContact,
   EXTERNAL_ROLES,
   INTERNAL_ROLES,
-} from '../lib/firestore'
+} from '../lib/data'
 import { findNearestServices, activeProvider } from '../lib/nearby'
 import { autofillSite, planContactWrite } from '../lib/autofill'
 import { erpRoleLabel } from '../../../shared/org/erpRoles'

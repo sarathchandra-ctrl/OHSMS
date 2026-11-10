@@ -6,7 +6,7 @@ import { PageHeader, Card, SkeletonCard, Button, Modal } from '../../../shared/u
 import { useAuth } from '../../../shared/auth/AuthContext'
 import { subscribeOrgUsers } from '../../../shared/org/orgData'
 import RescuePlans from '../components/RescuePlans'
-import { subscribeRescuePlans, RESCUE_SCENARIOS, installBaselineLibrary } from '../lib/firestore'
+import { subscribeRescuePlans, RESCUE_SCENARIOS, installBaselineLibrary } from '../lib/data'
 import { BASELINE_LIBRARY } from '../lib/baselineLibrary'
 
 /**

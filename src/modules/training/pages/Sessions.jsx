@@ -23,7 +23,7 @@ import { useAccessibleSites } from '../../../shared/org/useAccessibleSites'
 import { useTraining } from '../context/TrainingContext'
 import {
   subscribeSessions, subscribeRequests, createSession, updateSession, deleteSession, decideRequest,
-} from '../lib/firestore'
+} from '../lib/data'
 import {
   SESSION_MODES, sessionProblems, sessionState, sortSessions, countRequests, sessionWhere, isClassroom,
 } from '../lib/sessions'

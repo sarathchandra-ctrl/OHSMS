@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { applyControlPatch } from './firestore'
+import { applyControlPatch } from './data'
 
 // The merge behind patchAdditionalControl. It exists as a pure function because
 // what went wrong here was silent: the Action Tracker rebuilt the whole

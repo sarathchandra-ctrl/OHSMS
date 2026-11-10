@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { BASELINE_LIBRARY, BASELINE_SCENARIO_COUNT } from './baselineLibrary'
-import { baselinePlanFrom, planLibraryDiff } from './firestore'
-import { RESCUE_SCENARIOS } from './firestore'
+import { baselinePlanFrom, planLibraryDiff } from './data'
+import { RESCUE_SCENARIOS } from './data'
 import { ERP_ROLE_KEYS, ALL_EMPLOYEES } from '../../../shared/org/erpRoles'
 
 describe('BASELINE_LIBRARY', () => {

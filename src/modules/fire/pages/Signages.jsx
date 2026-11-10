@@ -7,7 +7,7 @@ import { Pager, IconButton } from '../../../shared/ui'
 import { usePagination } from '../../../shared/ui/usePagination'
 import { useAuth } from '../context/AuthContext'
 import { useFleet } from '../context/FleetContext'
-import { addSignage, updateSignage, deleteSignage, linkSignagesToSites } from '../lib/firestore'
+import { addSignage, updateSignage, deleteSignage, linkSignagesToSites } from '../lib/data'
 import { planSiteLinks } from '../lib/siteLink'
 import { listLinkedAssets, filterByLinkState, siteIdSet, isLinkedToSite } from '../lib/linkedSites'
 import LinkSitesModal from '../components/LinkSitesModal'
@@ -63,7 +63,7 @@ const EMPTY = {
   lastChecked: '',
   notes: '',
   // The photos: stored pointers, plus freshly picked ones (compressed data: URLs)
-  // that are uploaded on save. See resolveSignagePhotos in lib/firestore.js.
+  // that are uploaded on save. See resolveSignagePhotos in lib/data.js.
   // (A legacy single `photo` on an older record is read as one entry.)
   photos: [],
   // FERP floor coverage

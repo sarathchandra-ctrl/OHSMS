@@ -19,7 +19,7 @@ import {
   QrCode, Loader2, ShieldCheck, ShieldAlert, Clock, MapPin, User, HardHat,
   AlertTriangle, Building2,
 } from 'lucide-react'
-import { subscribePermitByToken, createPublicObservation, OBSERVER_ROLES } from '../lib/firestore'
+import { subscribePermitByToken, createPublicObservation, OBSERVER_ROLES } from '../lib/data'
 import { derivePermitStatus, statusMeta, effectiveValidTo, STATUS } from '../lib/permitStatus'
 
 /** Statuses under which work may actually proceed. */

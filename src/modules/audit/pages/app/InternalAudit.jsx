@@ -401,7 +401,7 @@ const AuditorWorkplace = ({ setView, session, isGlobalOwner, plans, findings, si
   const handleVerifyClose = async () => {
     if (!currentTask.findingRecord) return
     try {
-      await updateAuditFinding(currentTask.findingRecord.firebaseKey, { status: 'Closed', closureDate: new Date().toISOString() })
+      await updateAuditFinding(currentTask.findingRecord.docKey, { status: 'Closed', closureDate: new Date().toISOString() })
       alert('Audit verified & closed!')
       setView('hub')
     } catch (e) { alert('Error closing: ' + e.message) }
@@ -564,7 +564,7 @@ const AuditeeWorkplace = ({ session, users, findings }) => {
   // keep the selected record fresh as live data updates
   useEffect(() => {
     if (selected) {
-      const fresh = myAudits.find((a) => a.firebaseKey === selected.firebaseKey)
+      const fresh = myAudits.find((a) => a.docKey === selected.docKey)
       if (fresh && fresh !== selected) setSelected(fresh)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -607,7 +607,7 @@ const AuditeeWorkplace = ({ session, users, findings }) => {
     if (!allDone) return alert('Please provide a response for ALL findings before submitting.')
     const updated = { ...selected, status: 'Submitted for Verification', submissionDate: new Date().toISOString() }
     try {
-      await updateAuditFinding(selected.firebaseKey, { findings: updated.findings, status: updated.status, submissionDate: updated.submissionDate })
+      await updateAuditFinding(selected.docKey, { findings: updated.findings, status: updated.status, submissionDate: updated.submissionDate })
       alert('Audit response submitted successfully!')
       setSelected(updated)
     } catch (e) { alert('Submission failed: ' + e.message) }
@@ -636,7 +636,7 @@ const AuditeeWorkplace = ({ session, users, findings }) => {
               const tone = a.status === 'Reported' ? 'border-l-rose-500' : a.status === 'Submitted for Verification' ? 'border-l-orange-500' : 'border-l-emerald-500'
               const label = a.status === 'Reported' ? 'Action Required' : a.status === 'Submitted for Verification' ? 'Pending Approval' : 'Closed'
               return (
-                <button type="button" key={a.firebaseKey} onClick={() => setSelected(a)} className={`w-full cursor-pointer rounded-2xl border border-l-4 border-ink-100 ${tone} p-5 text-left transition hover:bg-surface-50 ${selected?.firebaseKey === a.firebaseKey ? 'ring-2 ring-amber-300' : ''}`}>
+                <button type="button" key={a.docKey} onClick={() => setSelected(a)} className={`w-full cursor-pointer rounded-2xl border border-l-4 border-ink-100 ${tone} p-5 text-left transition hover:bg-surface-50 ${selected?.docKey === a.docKey ? 'ring-2 ring-amber-300' : ''}`}>
                   <div className="mb-3 flex items-start justify-between">
                     <span className="rounded border border-ink-100 bg-surface-50 px-2 py-1 font-mono text-[10px] font-bold text-ink-600">{a.docId}</span>
                     <span className="rounded bg-surface-100 px-2 py-1 text-[9px] font-bold uppercase tracking-widest text-ink-600">{label}</span>

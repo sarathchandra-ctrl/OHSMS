@@ -9,7 +9,7 @@ import { useAuth } from '../../../shared/auth/AuthContext'
 import { fileToDataUrl } from '../../../shared/lib/files'
 import { putFile, removeFile, MAX_UPLOAD_BYTES, MAX_INLINE_BYTES, tooLargeForInline, formatSize } from '../../../shared/storage'
 import { useTraining } from '../context/TrainingContext'
-import { createCourse, updateCourse, deleteCourse, COURSE_CATEGORIES } from '../lib/firestore'
+import { createCourse, updateCourse, deleteCourse, COURSE_CATEGORIES } from '../lib/data'
 import { DELIVERY_MODES } from '../lib/sessions'
 
 const EMPTY = { name: '', category: 'Induction', deliveryMode: 'module', validityMonths: 12, mandatory: false, description: '', content: [], thumbnail: '', thumbnailPath: '' }

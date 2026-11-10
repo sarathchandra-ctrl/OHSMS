@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { isBehindBaseline, baselineFor } from './firestore'
+import { isBehindBaseline, baselineFor } from './data'
 
 const baseline = (over = {}) => ({ id: 'b1', kind: 'baseline', revision: 3, title: 'Fire evacuation', ...over })
 const sitePlan = (over = {}) => ({

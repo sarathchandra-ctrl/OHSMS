@@ -9,7 +9,7 @@ import {
 import { usePagination } from '../../../shared/ui/usePagination'
 import { useAuth } from '../../../shared/auth/AuthContext'
 import { useStakeholder } from '../context/StakeholderContext'
-import { deleteLegalIssue } from '../lib/firestore'
+import { deleteLegalIssue } from '../lib/data'
 import {
   DEPARTMENTS, DEPARTMENT_BY_KEY, NOTICE_BY_KEY, LEGAL_STATUS_BY_KEY,
 } from '../lib/constants'

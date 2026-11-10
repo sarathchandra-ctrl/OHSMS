@@ -23,7 +23,7 @@ vi.mock('../../shared/org/orgData', () => ({
   incompleteReadNotice: () => null,
   COLLECTION_READ_CAP: 5000,
 }))
-vi.mock('../../modules/fire/lib/firestore', () => ({ releaseDefectLocks: vi.fn() }))
+vi.mock('../../modules/fire/lib/data', () => ({ releaseDefectLocks: vi.fn() }))
 
 const { siteStats, linkAssets } = await import('./siteStats')
 const { resolveSite } = await import('../../modules/fire/lib/siteLink')

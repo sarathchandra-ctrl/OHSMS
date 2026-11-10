@@ -5,7 +5,7 @@ import { UsersRound, Search, Download, BadgeCheck, AlertTriangle, CalendarClock,
 import { PageHeader, Card, Field, Input, Select, Button, Modal, Badge, StatCard, EmptyState, SkeletonTable, Pager } from '../../../shared/ui'
 import { formatDate } from '../../../shared/lib/format'
 import { useTraining } from '../context/TrainingContext'
-import { fetchAllRecords, fetchAllAssignments } from '../lib/firestore'
+import { fetchAllRecords, fetchAllAssignments } from '../lib/data'
 import {
   buildMatrix, assignmentStatus,
   buildStatusReport, toCsv, REPORT_COLUMNS, todayISO,

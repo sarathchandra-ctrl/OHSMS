@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { applyAssignmentStatus } from './firestore'
+import { applyAssignmentStatus } from './data'
 import { buildScheduledTasks } from './schedule'
 
 // A completed assigned inspection used to stay Pending forever. The only

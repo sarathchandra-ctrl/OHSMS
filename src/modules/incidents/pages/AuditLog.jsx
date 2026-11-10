@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
 import { ScrollText, Search } from 'lucide-react'
 import { PageHeader, Badge, EmptyState } from '../components/ui'
-import { subscribeAuditLogs } from '../lib/firestore'
+import { subscribeAuditLogs } from '../lib/data'
 import { auditMeta } from '../lib/audit'
 
 function fmtTime(ts) {

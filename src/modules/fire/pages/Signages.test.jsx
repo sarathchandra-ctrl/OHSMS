@@ -18,7 +18,7 @@ vi.mock('../context/AuthContext', () => ({
   useAuth: () => ({ orgName: 'Acme', profile: { uid: 'u1', name: 'Ravi' } }),
 }))
 vi.mock('../context/FleetContext', () => ({ useFleet: () => fleet.value }))
-vi.mock('../lib/firestore', () => ({
+vi.mock('../lib/data', () => ({
   addSignage: (...a) => addSignage(...a),
   updateSignage: (...a) => updateSignage(...a),
   deleteSignage: vi.fn(),

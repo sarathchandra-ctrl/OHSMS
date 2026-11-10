@@ -33,7 +33,7 @@ vi.mock('../../../shared/data/client.js', () => ({
 }))
 vi.mock('../../../shared/db', () => ({ db: {} }))
 vi.mock('../context/AuthContext', () => ({ useAuth: () => auth.value }))
-vi.mock('../lib/firestore', () => ({
+vi.mock('../lib/data', () => ({
   restoreExtinguisher: vi.fn(() => Promise.resolve()),
   restoreAed: vi.fn(() => Promise.resolve()),
   restoreFas: vi.fn(() => Promise.resolve()),
@@ -44,7 +44,7 @@ vi.mock('react-router-dom', () => ({ useParams: () => ({ token: 'tok-1' }) }))
 vi.mock('react-hot-toast', () => ({ default: { success: vi.fn(), error: vi.fn() } }))
 
 const { default: QrLanding } = await import('./QrLanding')
-const { restoreExtinguisher } = await import('../lib/firestore')
+const { restoreExtinguisher } = await import('../lib/data')
 
 const deletedMirror = {
   orgName: 'Acme',

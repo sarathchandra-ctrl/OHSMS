@@ -9,7 +9,7 @@ import { usePagination } from '../../../shared/ui/usePagination'
 import { RiskBadge } from '../components/RiskBits'
 import { useRa } from '../context/RaContext'
 import { useAuth } from '../context/AuthContext'
-import { patchAdditionalControl, logActivity } from '../lib/firestore'
+import { patchAdditionalControl, logActivity } from '../lib/data'
 import { flattenAdditionalControls, isOverdue, isNonAcceptable} from '../lib/raStats'
 import { CONTROL_STATUS } from '../lib/constants'
 

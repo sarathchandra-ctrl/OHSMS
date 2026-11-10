@@ -7,7 +7,7 @@ import { toastCaught } from '../../../shared/lib/toastCaught'
 import { PageHeader, EmptyState, Badge } from '../components/ui'
 import { useFleet } from '../context/FleetContext'
 import { useAuth } from '../context/AuthContext'
-import { approveReport, rejectReport, decideAssetReport } from '../lib/firestore'
+import { approveReport, rejectReport, decideAssetReport } from '../lib/data'
 import { DEFECT_BY_KEY, STATUS_LABEL, STATUS_COLOR, REFILL_DEFECT_KEYS } from '../lib/constants'
 import { toDate } from '../lib/extinguisherLogic'
 

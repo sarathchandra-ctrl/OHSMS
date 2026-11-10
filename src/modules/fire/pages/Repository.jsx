@@ -43,7 +43,7 @@ import {
   resolveDefects,
   backfillExtinguisherQr,
   linkExtinguishersToSites,
-} from '../lib/firestore'
+} from '../lib/data'
 import { planSiteLinks } from '../lib/siteLink'
 import { listLinkedAssets, filterByLinkState, siteIdSet, isLinkedToSite } from '../lib/linkedSites'
 import LinkStateChips from '../components/LinkStateChips'

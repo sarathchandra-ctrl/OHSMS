@@ -197,7 +197,7 @@ export function buildAlertFeed({
       if (!inScope(meeting, sites)) continue
       const at = millisOf(meeting.createdAt) || millisOf(meeting.date)
       if (!withinWindow(at, now)) continue
-      const id = meeting.firebaseKey || meeting.id
+      const id = meeting.docKey || meeting.id
       if (!id) continue
       rows.push({
         id: `meeting:${id}`,

@@ -1,6 +1,6 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // Audit-log action constants + metadata (no Firestore here, so they're
-// unit-testable). The Firestore write lives in firestore.js (logAudit).
+// unit-testable). The Firestore write lives in data.js (logAudit).
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const AUDIT = {

@@ -26,7 +26,7 @@ const findingsCol = () =>
 export function subscribeAuditPlans(callback) {
   return onSnapshot(
     query(plansCol(), limit(COLLECTION_READ_CAP)),
-    (snap) => callback(snap.docs.map((d) => ({ firebaseKey: d.id, ...d.data() }))),
+    (snap) => callback(snap.docs.map((d) => ({ docKey: d.id, ...d.data() }))),
     onReadError('audit plans', callback),
   )
 }
@@ -34,7 +34,7 @@ export function subscribeAuditPlans(callback) {
 export function subscribeAuditFindings(callback) {
   return onSnapshot(
     query(findingsCol(), limit(COLLECTION_READ_CAP)),
-    (snap) => callback(snap.docs.map((d) => ({ firebaseKey: d.id, ...d.data() }))),
+    (snap) => callback(snap.docs.map((d) => ({ docKey: d.id, ...d.data() }))),
     onReadError('audit findings', callback),
   )
 }
@@ -58,9 +58,9 @@ export async function createAuditFinding(payload) {
   return ref.id
 }
 
-export function updateAuditFinding(firebaseKey, data) {
+export function updateAuditFinding(docKey, data) {
   return updateDoc(
-    doc(db, 'auditFindings', firebaseKey),
+    doc(db, 'auditFindings', docKey),
     data,
   )
 }

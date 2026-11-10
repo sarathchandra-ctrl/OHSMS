@@ -21,7 +21,7 @@ import ContactsSection from '../components/ContactsSection'
 import SosPoster from '../components/SosPoster'
 import {
   subscribeContacts, subscribeLayouts, subscribeRescuePlans, saveFloors, deleteLayout, floorsOf, INTERNAL_ROLES,
-} from '../lib/firestore'
+} from '../lib/data'
 import { MAX_UPLOAD_BYTES, formatSize } from '../../../shared/storage'
 import { safeHref, safeSrc } from '../../../shared/safeUrl'
 

@@ -30,7 +30,7 @@ const fake = vi.hoisted(() => {
 
 vi.mock('../db', () => ({ db: {} }))
 // logAudit writes its own document; it is not what these tests are about.
-vi.mock('./firestore', () => ({ logAudit: vi.fn(async () => {}) }))
+vi.mock('./data', () => ({ logAudit: vi.fn(async () => {}) }))
 // purgeInjury deletes the clinical documents out of Cloud Storage as well as
 // their pointers. Mocked so the assertion is "it asked for this path", which is
 // the part that matters — a bucket is not what this suite is testing.

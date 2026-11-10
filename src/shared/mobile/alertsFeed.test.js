@@ -69,7 +69,7 @@ describe('buildAlertFeed', () => {
       ],
       meetings: [
         {
-          firebaseKey: 'm1',
+          docKey: 'm1',
           siteId: 's1',
           type: 'HSE Committee Meeting',
           date: '2026-10-24',

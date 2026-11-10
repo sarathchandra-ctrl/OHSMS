@@ -8,7 +8,7 @@ const mocks = vi.hoisted(() => ({
   findNearestServices: vi.fn(async () => mocks.found),
 }))
 
-vi.mock('./firestore', () => ({
+vi.mock('./data', () => ({
   addContact: mocks.addContact,
   updateContact: mocks.updateContact,
   deleteContact: mocks.deleteContact,

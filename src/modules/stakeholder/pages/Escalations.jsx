@@ -9,7 +9,7 @@ import {
 import { usePagination } from '../../../shared/ui/usePagination'
 import { useAuth } from '../../../shared/auth/AuthContext'
 import { useStakeholder } from '../context/StakeholderContext'
-import { deleteEscalation } from '../lib/firestore'
+import { deleteEscalation } from '../lib/data'
 import {
   ESCALATION_STATUS, ESCALATION_STATUS_BY_KEY, SEVERITY_BY_KEY, NOTICE_BY_KEY,
 } from '../lib/constants'

@@ -8,7 +8,7 @@ import { useAuth } from '../../../shared/auth/AuthContext'
 import { useCctv } from '../context/CctvContext'
 import { parseImport, DVR_COLUMNS, CAMERA_COLUMNS } from '../lib/bulkImport'
 import { downloadImportTemplate } from '../lib/exporter'
-import { bulkImport } from '../lib/firestore'
+import { bulkImport } from '../lib/data'
 import { assertWorkbookSize } from '../../../shared/lib/workbookGuard'
 
 const KINDS = {

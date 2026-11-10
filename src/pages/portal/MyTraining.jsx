@@ -8,7 +8,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { GraduationCap } from 'lucide-react'
 import { useAuth } from '../../shared/auth/AuthContext'
-import { subscribeAssignments, subscribeCourses } from '../../modules/training/lib/firestore'
+import { subscribeAssignments, subscribeCourses } from '../../modules/training/lib/data'
 import { Raised, Inset, PortalHeading, Ring } from './ui'
 import { courseProgress } from './myWork'
 

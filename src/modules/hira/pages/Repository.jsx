@@ -11,7 +11,7 @@ import { RiskBadge } from '../components/RiskBits'
 import DocIdTag from '../../../shared/docId/DocIdTag'
 import { useRa } from '../context/RaContext'
 import { useAuth } from '../context/AuthContext'
-import { deleteAssessment, logActivity } from '../lib/firestore'
+import { deleteAssessment, logActivity } from '../lib/data'
 import { residualRisk } from '../lib/raStats'
 import { exportAssessmentPdf } from '../lib/pdf'
 

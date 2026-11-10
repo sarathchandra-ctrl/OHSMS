@@ -59,7 +59,7 @@ export function subscribeConsultations(cb, onError) {
   // bound. No orderBy, deliberately — see subscribeCollections in orgData.
   return onSnapshot(
     query(consultationCol(), limit(COLLECTION_READ_CAP)),
-    (snap) => opened(snap.docs.map((d) => ({ firebaseKey: d.id, ...d.data() }))),
+    (snap) => opened(snap.docs.map((d) => ({ docKey: d.id, ...d.data() }))),
     (err) => {
       if (!isSessionEnd('consultations', err) && !isPermissionDenied(err)) {
         // eslint-disable-next-line no-console

@@ -15,7 +15,7 @@ import { useErpRoleLabels } from '../../../shared/org/useErpRoleLabels'
 import {
   addRescuePlan, updateRescuePlan, deleteRescuePlan, recallBaselines, approveRescuePlan,
   RESCUE_SCENARIOS, PLAN_STATUS, syncFromBaseline, isBehindBaseline, baselineFor,
-} from '../lib/firestore'
+} from '../lib/data'
 
 const newStep = () => ({ id: `st-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, action: '', responsible: '' })
 const newMember = () => ({ id: `tm-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, role: '', name: '', phone: '', uid: '' })

@@ -13,7 +13,7 @@ import {
   serviceAed,
   serviceFas,
   serviceStretcher,
-} from '../../modules/fire/lib/firestore'
+} from '../../modules/fire/lib/data'
 import { retiredQrCopy } from '../../modules/fire/lib/recycle'
 import ReportDefectModal from '../../modules/fire/components/ReportDefectModal'
 import ReportAssetDefectModal from '../../modules/fire/components/ReportAssetDefectModal'

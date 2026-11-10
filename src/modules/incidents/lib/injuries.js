@@ -40,7 +40,7 @@ import { db } from '../../../shared/db'
 import { putFile, removeFile, MAX_INLINE_BYTES, tooLargeForInline } from '../../../shared/storage'
 import { resolveSubscription } from '../../../shared/storage/resolveFiles'
 import { onReadError } from '../../../shared/org/readError'
-import { logAudit } from './firestore'
+import { logAudit } from './data'
 import { AUDIT } from './audit'
 // The clinical fields are sealed under the MEDICAL key class — a keypair, not a
 // shared secret, precisely because of the asymmetry this collection is built on:

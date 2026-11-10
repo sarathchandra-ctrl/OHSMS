@@ -2,7 +2,7 @@ import { createContext, useContext, useEffect, useMemo, useState } from 'react'
 import { subscribeOrgCollection, incompleteReadNotice } from '../../../shared/org/orgData'
 import { useAccessibleSites, useSiteFacets } from '../../../shared/org/useAccessibleSites'
 import { subscribeActions } from '../../actions/lib/sources'
-import { subscribeObjectives } from '../lib/firestore'
+import { subscribeObjectives } from '../lib/data'
 
 const ObjectivesContext = createContext(null)
 

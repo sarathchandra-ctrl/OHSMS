@@ -12,9 +12,9 @@ import {
   subscribeMockDrills,
   subscribeReports,
   subscribeStretchers,
-} from '../../modules/fire/lib/firestore'
+} from '../../modules/fire/lib/data'
 import { subscribeIncidents } from '../../modules/incidents/lib/incidents'
-import { subscribeConsultations } from '../../modules/committee/lib/firestore'
+import { subscribeConsultations } from '../../modules/committee/lib/data'
 import { useAllSiteWeather } from '../../modules/weather/lib/useAllSiteWeather'
 import { AlertFeedProviderContext } from './alertContext'
 import {
