@@ -61,8 +61,7 @@ describe('public legal pages', () => {
   })
 
   it('links both documents from the sign-in footer', () => {
-    // publicPath keeps the clean URL and adds the GitHub Pages demo's
-    // sub-path when there is one.
+    // publicPath keeps the clean URL and adds the app's base path, if any.
     expect(login).toContain("href={publicPath('/privacy')}")
     expect(login).toContain('Privacy Policy')
     expect(login).toContain("href={publicPath('/terms')}")

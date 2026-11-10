@@ -152,8 +152,8 @@
 // rather than emulating it.
 //
 // Which implementation backs the seam comes from VITE_DATA_DRIVER (default
-// 'postgres': this installation's server). 'memory' exists for tests and
-// demos. Adding a backend = one adapter file implementing everything above
+// 'postgres': this installation's server). 'memory' exists for tests.
+// Adding a backend = one adapter file implementing everything above
 // plus a line in DRIVERS. ./README.md is the contract note that sits next to
 // the code.
 // ─────────────────────────────────────────────────────────────────────────────
@@ -168,7 +168,7 @@ import { runtimeEnv } from '../runtimeConfig'
 // day it is registered — do not "fix" it with a dynamic import.
 const DRIVERS = {
   postgres, // this installation's server. The browser talks to the gateway; RLS enforces.
-  memory, // in-process, for tests and demos — NOT a production store
+  memory, // in-process, for tests — NOT a production store
 }
 
 // Throws UnimplementedDataDriverError for a reserved name. Anything else that

@@ -46,8 +46,6 @@ const DRIVER = String(runtimeEnv('STORAGE_DRIVER') || 's3')
 // Dynamic imports so only the selected driver's code (and its SDK) is loaded.
 const DRIVERS = {
   s3: () => import('./adapters/s3.js'),
-  // The GitHub Pages demo only: files in the tab's memory.
-  demo: () => import('./adapters/demo.js'),
 }
 
 let adapterPromise = null

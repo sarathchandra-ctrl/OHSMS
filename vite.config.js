@@ -35,9 +35,8 @@ function legalPages() {
 
 // https://vitejs.dev/config/
 export default defineConfig({
-  // '/' for every real deployment. The GitHub Pages demo serves from
-  // '/<repo>/' and sets VITE_BASE (.github/workflows/pages-demo.yml).
-  base: process.env.VITE_BASE || '/',
+  // The app is served from the root of its own address (the Cloudflare Worker).
+  base: '/',
   plugins: [react(), legalPages()],
   resolve: {
     alias: {
