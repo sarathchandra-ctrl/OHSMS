@@ -533,3 +533,42 @@ describe('ending sessions', () => {
     await s.stop()
   })
 })
+
+// A training quiz opened from its QR code (stack/quiz.mjs): two jobs answered
+// for someone with no account, and nothing more.
+describe('a training quiz from its QR code', () => {
+  const quiz = {
+    title: 'Fire safety',
+    token: 'quizhttptoken12345',
+    active: true,
+    questions: [
+      { id: 'q1', text: 'Electrical fire?', options: ['Water', 'CO2'], answer: 1 },
+      { id: 'q2', text: 'Lift in a fire?', options: ['Never', 'Yes'], answer: 0 },
+    ],
+  }
+  const taker = { employeeId: 'E-9', name: 'Ravi', centerName: 'Indiranagar' }
+
+  it('serves the quiz and scores it without a session, and no other job', async () => {
+    const s = await start()
+    await s.engine.commit(null, [{ type: 'set', path: 'quizzes', id: 'qz1', merge: false, data: quiz }])
+    const shown = await s.rpc('', 'publicQuiz', { token: quiz.token })
+    expect(shown.status).toBe(200)
+    expect(JSON.stringify(shown.body)).not.toContain('answer')
+    const sent = await s.rpc('', 'submitQuiz', { token: quiz.token, ...taker, answers: [1, 0] })
+    expect(sent.body.result).toMatchObject({ score: 2, percent: 100, passed: true })
+    expect((await s.rpc('', 'publicQuiz', { token: 'nosuchquiztoken123' })).status).toBe(404)
+    // The other jobs still want a session.
+    expect((await s.rpc('', 'exportSubjectData', { uid: 'x' })).status).toBe(401)
+    // And a stale session does not refuse a public job.
+    expect((await s.rpc('not.a.token', 'publicQuiz', { token: quiz.token })).status).toBe(200)
+    await s.stop()
+  })
+
+  it('limits how often one address may call them', async () => {
+    const s = await start()
+    let last
+    for (let i = 0; i < 61; i += 1) last = await s.rpc('', 'publicQuiz', { token: 'nosuchquiztoken123' })
+    expect(last.status).toBe(429)
+    await s.stop()
+  })
+})

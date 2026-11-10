@@ -1646,3 +1646,50 @@ describe('an electrical work permit and its LOTO procedure', () => {
     await as('memberA').update('permits', 'el-legacy', { jobDescription: 'Note added' })
   })
 })
+
+// Training quizzes (stack/lib/quiz.js): a quiz holds its answer key and a
+// response holds a person's details and score. Managers read both; only the
+// server writes a response, because it is the server's score.
+describe('training quizzes and their responses', () => {
+  const denied = { code: 'permission-denied' }
+  const quiz = { title: 'Fire safety', token: 'tok123456789abcdef', active: true, questions: [{ text: 'Q', options: ['A', 'B'], answer: 1 }] }
+  const response = { quizId: 'qz-1', employeeId: 'E-1', name: 'Asha', centerName: 'HSR', answers: [1], score: 1, total: 1, percent: 100, passed: true }
+
+  beforeAll(async () => {
+    await seed('quizzes', 'qz-1', quiz)
+    await seed('quizResponses', 'qr-1', response)
+  })
+
+  it('keeps the answer key and the scores from employees and from strangers', async () => {
+    for (const uid of ['memberA', 'auditorA', '']) {
+      expect(await as(uid).get('quizzes', 'qz-1'), uid).toBeNull()
+      expect(await as(uid).list('quizzes'), uid).toEqual([])
+      expect(await as(uid).list('quizResponses'), uid).toEqual([])
+    }
+  })
+
+  it('refuses a response written by anyone but the server — a pass is the server’s to give', async () => {
+    for (const uid of ['memberA', 'managerA', 'adminA', '']) {
+      await expect(as(uid).set('quizResponses', `qr-fake-${uid}`, response), uid).rejects.toMatchObject(denied)
+    }
+    await expect(as('managerA').update('quizResponses', 'qr-1', { score: 0 })).rejects.toMatchObject(denied)
+    expect((await adminEngine.get(null, 'quizResponses', 'qr-1')).score).toBe(1)
+  })
+
+  it('leaves writing quizzes to managers', async () => {
+    await expect(as('memberA').set('quizzes', 'qz-mine', quiz)).rejects.toMatchObject(denied)
+    await expect(as('memberA').update('quizzes', 'qz-1', { active: false })).rejects.toThrow()
+    await as('managerA').set('quizzes', 'qz-2', quiz)
+    expect(await as('managerA').get('quizzes', 'qz-1')).toMatchObject({ title: 'Fire safety' })
+    expect((await as('managerA').list('quizResponses')).map((r) => r.id)).toContain('qr-1')
+  })
+
+  it('lets a manager remove a response, and nobody else', async () => {
+    // A row the caller cannot see is not theirs to remove: the engine skips it
+    // without saying whether it exists.
+    await as('memberA').remove('quizResponses', 'qr-1')
+    expect(await adminEngine.get(null, 'quizResponses', 'qr-1')).not.toBeNull()
+    await as('managerA').remove('quizResponses', 'qr-1')
+    expect(await adminEngine.get(null, 'quizResponses', 'qr-1')).toBeNull()
+  })
+})

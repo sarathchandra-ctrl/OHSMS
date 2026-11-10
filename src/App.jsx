@@ -11,6 +11,7 @@ import ErrorBoundary from './shared/ErrorBoundary'
 // Public QR landing for equipment labels — no auth, so it stays outside the shell.
 const QrLanding = lazy(() => import('./modules/fire/pages/QrLanding'))
 const PublicPermit = lazy(() => import('./modules/ptw/pages/PublicPermit'))
+const PublicQuiz = lazy(() => import('./modules/training/pages/PublicQuiz'))
 
 // Public / auth pages (eager — small, first paint).
 import SetupNeeded from './pages/SetupNeeded'
@@ -131,6 +132,9 @@ export default function App() {
       {/* The QR printed on every work permit. Public: whoever scans a permit
           taped to a scaffold has no account. */}
       <Route path="/permit/:token" element={<ErrorBoundary><Suspense fallback={<SamLoading />}><PublicPermit /></Suspense></ErrorBoundary>} />
+      {/* A training quiz's QR code. Public: the person taking it may have no
+          account; the server scores it (stack/quiz.mjs). */}
+      <Route path="/quiz/:token" element={<ErrorBoundary><Suspense fallback={<SamLoading />}><PublicQuiz /></Suspense></ErrorBoundary>} />
       <Route path="/pending" element={<PendingApproval />} />
 
       {/* The QR printed on a LOTO isolation procedure. It has always encoded

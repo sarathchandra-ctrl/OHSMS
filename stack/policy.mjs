@@ -128,6 +128,8 @@ export const MODULE_OF_COLLECTION = {
   trainingRecords: 'training',
   trainingSessions: 'training',
   trainingRequests: 'training',
+  quizzes: 'training',
+  quizResponses: 'training',
   documents: 'documents',
   erpContacts: 'emergency',
   erpLayouts: 'emergency',
@@ -276,6 +278,7 @@ export function readScope(path, ctx) {
   if (rootOf(path) === 'inbox') return ownInbox(path, ctx) && passwordOk(ctx) ? 'all' : 'none'
   if (serverOnly(path)) return 'none'
   if (isMedical(path) && !isManager(ctx)) return 'none'
+  if (MANAGER_READ_ONLY.includes(rootOf(path)) && !isManager(ctx)) return 'none'
   if (moduleBlocked(path, ctx, { read: true })) return ctx.uid ? { ownedBy: ctx.uid } : 'none'
   // gate_password: a temporary password reaches nothing but the person's own profile.
   if (!passwordOk(ctx)) return path === 'users' && ctx.uid ? { onlyId: ctx.uid } : 'none'
@@ -316,7 +319,13 @@ export const ownedBy = (row, uid) =>
 // The site register is the organization's map: every scope, picker and
 // grant resolves through it. Creating, editing and deleting sites is the
 // Sites page's job (site.manage), and that is a manager's.
-const MANAGER_ONLY_COLLECTIONS = ['sites', 'lotoSettings']
+const MANAGER_ONLY_COLLECTIONS = ['sites', 'lotoSettings', 'quizzes']
+
+// Training quizzes (stack/lib/quiz.js). A quiz holds its answer key, and a
+// response holds a person's name, employee ID and score, so both are a
+// manager's to read. Responses are written only by the server, which scores
+// them (stack/quiz.mjs): a client that could write one could write a pass.
+export const MANAGER_READ_ONLY = ['quizzes', 'quizResponses']
 
 // An employee creates, views and closes; deleting is a manager's. Three
 // deletes are part of an employee's own flow rather than removing a record:
@@ -477,6 +486,8 @@ function restrictWrite(op, path, id, ctx, { next, prev } = {}) {
   }
   if (serverOnly(path)) return 'server-only'
   if (isCryptoKey(path, id)) return 'crypto-keys'
+  // A quiz response is the server's score; a manager may only remove one.
+  if (rootOf(path) === 'quizResponses' && op !== 'delete') return 'quiz-response-server-only'
   if (op === 'insert' && isAuditor(ctx) && collectionOf(path) !== 'auditLogs') return 'auditor'
   if ((op === 'update' || op === 'delete') && isAuditor(ctx)) return 'auditor'
   if ((op === 'update' || op === 'delete') && collectionOf(path) === 'auditLogs') return 'audit-log'
