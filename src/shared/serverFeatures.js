@@ -7,11 +7,12 @@
 //             the organization's numbers, the Meta webhook
 //   metabase  ODIN analytics from Metabase: the connection settings and the
 //             ODIN / Auditors analytics tabs
-//   mail      lifecycle and notification mail (new incident, CAPA assigned,
-//             permit awaiting approval, meeting minutes). Only password-reset
-//             mail is sent today. While off, the screens do not render and
-//             upload the report PDF a mail would attach (shared/print/
-//             mailedReport.js), and do not say that anything was sent.
+//   mail      a report PDF attached to lifecycle mail (drills, meeting
+//             minutes, incident and permit prints). Notification mail itself
+//             is sent whenever the server has a mailer (stack/notify.mjs) and
+//             attaches nothing: a mail carries a reference and a link. While
+//             this is off, the screens do not render and upload a PDF no mail
+//             would ever attach (shared/print/mailedReport.js).
 export const SERVER_FEATURES = {
   whatsapp: false,
   metabase: false,

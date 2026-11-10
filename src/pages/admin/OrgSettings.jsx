@@ -84,6 +84,7 @@ import {
   SkeletonCard,
 } from '../../shared/ui'
 import MetabaseSettings from './MetabaseSettings'
+import NotificationSettings from './NotificationSettings'
 import WhatsAppConnect from './WhatsAppConnect.jsx'
 import { SERVER_FEATURES } from '../../shared/serverFeatures'
 
@@ -569,7 +570,7 @@ export default function OrgSettings() {
               <Field
                 label="Notification email"
                 htmlFor="email"
-                hint="Kept for safety notification mail, which is not switched on yet. Only password-reset mail is sent today."
+                hint="Also told of every new incident, alongside the site’s managers. Leave empty if no shared mailbox should be."
               >
                 <Input
                   id="email"
@@ -580,6 +581,8 @@ export default function OrgSettings() {
               </Field>
             </div>
           </Card>
+
+          <NotificationSettings org={org} actor={actor} />
 
           {/* Brand mark. Saved on pick rather than on Submit — see the comment
               on logoBusy above. */}

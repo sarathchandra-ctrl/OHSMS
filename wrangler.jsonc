@@ -20,7 +20,7 @@
   // five minutes; the Recycle Bin purge, the closed-permit purge and stale
   // public permit pages nightly at 03:45 IST. Change these together with
   // FREQUENT_CRON / NIGHTLY_CRON there, which pick the job by the expression.
-  "triggers": { "crons": ["*/5 * * * *", "15 22 * * *"] },
+  "triggers": { "crons": ["*/5 * * * *", "15 22 * * *", "30 2 * * *"] },
   "assets": {
     "directory": "./dist",
     "binding": "ASSETS",

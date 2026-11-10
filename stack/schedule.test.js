@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { openSqlite } from './sqlite.mjs'
 import { applySchema, createEngine } from './engine.mjs'
-import { FREQUENT_CRON, NIGHTLY_CRON, jobForCron, runNightly } from './schedule.mjs'
+import { DIGEST_CRON, FREQUENT_CRON, NIGHTLY_CRON, jobForCron, runNightly } from './schedule.mjs'
 
 const DAY = 24 * 3600 * 1000
 const NOW = Date.parse('2026-11-10T22:15:00Z')
@@ -85,9 +85,10 @@ describe('the clocks', () => {
   it('names a job for each Cloudflare cron trigger, and only those', () => {
     const text = readFileSync(new URL('../wrangler.jsonc', import.meta.url), 'utf8')
     const crons = JSON.parse(text.match(/"crons":\s*(\[[^\]]*\])/)[1])
-    expect(crons.sort()).toEqual([FREQUENT_CRON, NIGHTLY_CRON].sort())
+    expect(crons.sort()).toEqual([FREQUENT_CRON, NIGHTLY_CRON, DIGEST_CRON].sort())
     expect(jobForCron(FREQUENT_CRON)).toBe('frequent')
     expect(jobForCron(NIGHTLY_CRON)).toBe('nightly')
+    expect(jobForCron(DIGEST_CRON)).toBe('digest')
     expect(jobForCron('0 0 * * *')).toBe('')
   })
 })

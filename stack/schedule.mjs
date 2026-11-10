@@ -10,6 +10,9 @@
 //                     the Recycle Bin purge (runRetention), closed LOTO
 //                     permits a year on (purgeClosedLotoPermits), and stale
 //                     public permit pages withdrawn (withdrawStaleMirrors)
+//   daily, 08:00 IST (02:30 UTC)
+//                     each person's summary email (stack/notify.mjs), when
+//                     mail is configured
 //
 // They run from the cron triggers in wrangler.jsonc (worker/index.js
 // `scheduled`).
@@ -22,6 +25,7 @@ import { purgeClosedLotoPermits, runRetention, sweepLoto, withdrawStaleMirrors }
 
 export const FREQUENT_CRON = '*/5 * * * *'
 export const NIGHTLY_CRON = '15 22 * * *'
+export const DIGEST_CRON = '30 2 * * *'
 
 export async function runFrequent(engine, { now = Date.now() } = {}) {
   return { lotoSweep: await sweepLoto(engine, { nowMs: now }) }
@@ -54,5 +58,6 @@ export async function runNightly(engine, { blobStore = null, now = Date.now() } 
 export function jobForCron(cron) {
   if (cron === FREQUENT_CRON) return 'frequent'
   if (cron === NIGHTLY_CRON) return 'nightly'
+  if (cron === DIGEST_CRON) return 'digest'
   return ''
 }

@@ -10,6 +10,7 @@
 import { verifySession, signSession } from './session.mjs'
 import { refreshFileLinks } from './lib/fileLinks.js'
 import { decidePresign } from './presign.mjs'
+import { notifyChanges, sendDigests } from './notify.mjs'
 import {
   releaseDataKeys,
   deleteOrgFile,
@@ -49,6 +50,7 @@ const ADMIN_JOBS = new Set([
   'withdrawStalePermitMirrors',
   'sweepLotoPermits',
   'migrateLegacyFiles',
+  'sendDigestsNow',
 ])
 
 function send(res, status, body, headers = {}) {
@@ -234,8 +236,13 @@ export function createOwnStackHandler({
     }
     if (body.op === 'commit') {
       try {
-        const result = await engine.commit(roleSession, body.ops || [], body.expect || [])
+        const { changes, ...result } = await engine.commit(roleSession, body.ops || [], body.expect || [])
         send(res, 200, result)
+        // After the response: a save never waits on a mailbox, and a mail
+        // that fails never fails the save.
+        if (mail && changes?.length) {
+          background(notifyChanges(engine, { changes, actorUid: roleSession.uid, mail, origin }))
+        }
       } catch (err) {
         send(res, err.code === 'permission-denied' ? 403 : 400, {
           code: err.code || 'unknown',
@@ -420,6 +427,8 @@ export function createOwnStackHandler({
       revokeMemberSessions: () => revokeMemberSessions(engine, { uid, targetUid: body.uid }),
       deleteOrgFile: () => deleteOrgFile(engine, blobStore, { uid, path: body.path }),
       purgeSoftDeleted: () => runRetention(engine, { blobStore }),
+      // Today's summaries now, for whoever has not had one yet today.
+      sendDigestsNow: () => (mail ? sendDigests(engine, db, { mail, origin }) : { ok: false, code: 'unavailable', reason: 'no-mail' }),
       withdrawStalePermitMirrors: () => withdrawStaleMirrors(engine),
       sweepLotoPermits: () => sweepLoto(engine, { uid }),
       migrateLegacyFiles: () =>

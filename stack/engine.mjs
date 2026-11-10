@@ -444,8 +444,13 @@ export function createEngine(db) {
     }
     const upserts = []
     const deletes = []
+    // What each touched row was and became, for the notifications that follow
+    // a commit (stack/notify.mjs). Server-side only: handler.mjs strips it
+    // before the response, which carries the paths alone.
+    const changes = []
     for (const [k, [path, id]] of touched) {
       const next = state.get(k)
+      changes.push({ path, id, before: rows.has(k) ? parse(rows.get(k).data) : null, after: next ? next.data : null })
       if (next) {
         const data = JSON.stringify(encodeTree(next.data))
         const bytes = utf8.encode(data).byteLength
@@ -483,7 +488,7 @@ export function createEngine(db) {
       if (/commit_guard/.test(String(e?.message))) return { conflict: true }
       throw e
     }
-    return { stale: false, paths: [...new Set(ops.map((op) => op.path))] }
+    return { stale: false, paths: [...new Set(ops.map((op) => op.path))], changes }
   }
 
   return {

@@ -347,3 +347,12 @@ export async function revokeMemberSessions({ uid } = {}) {
   const fn = await callable('revokeMemberSessions')
   return (await fn({ uid })).data
 }
+
+// ── Notifications ───────────────────────────────────────────────────────────
+
+/** Admin: send today's daily summaries now, to whoever has not had one today. */
+export async function sendDigestsNow() {
+  // One mail at a time, to everyone due one: longer than a data call.
+  const fn = await callable('sendDigestsNow', { timeout: 120_000 })
+  return (await fn()).data
+}

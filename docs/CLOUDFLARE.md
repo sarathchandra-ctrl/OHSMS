@@ -51,13 +51,15 @@ fit this server, for three reasons that each fail in front of users:
    `ADMIN_PASSWORD` (at least 10 characters). Keep a copy somewhere safe:
    losing `DATA_KEY_MASTER` loses encrypted fields and every person's
    two-step login setup.
-5. **Password-reset email (optional).** Create a Resend account
+5. **Email (optional).** Create a Resend account
    (resend.com), verify the sending domain there (it gives DNS records to
    add), create an API key, then set `MAIL_FROM` in `wrangler.jsonc` (for
    example `OHSMS <noreply@example.com>`) and
    `npx wrangler secret put RESEND_API_KEY`. The sign-in page then offers
-   **Forgot password?**, which emails a one-time link valid for 30 minutes.
-   Without it, administrators reset passwords from Employees.
+   **Forgot password?**, which emails a one-time link valid for 30 minutes,
+   and the server starts sending notifications (below). Without it,
+   administrators reset passwords from Employees and no notification is
+   sent.
 6. **Address.** `PUBLIC_ORIGIN` is the address people type (the
    `workers.dev` URL, or a custom domain added under the Worker's Settings →
    Domains & Routes). It is **not** in `wrangler.jsonc`: the repository is
@@ -88,12 +90,25 @@ organization. One record may be at most 1,900,000 bytes, under D1's
 save is refused with `record too large` rather than failing inside D1. Files
 belong in R2, not inside records.
 
-**Scheduled jobs.** `wrangler.jsonc` sets two cron triggers that run the
+**Scheduled jobs.** `wrangler.jsonc` sets three cron triggers that run the
 server's own jobs (`stack/schedule.mjs`): LOTO due/overdue flags every five
 minutes, and nightly at 03:45 IST the Recycle Bin purge, the purge of LOTO
 permits closed more than a year ago, and the withdrawal of stale public permit
-pages. They deploy with the Worker. A run that hit a problem shows as a failed
+pages; and at 08:00 IST each person's daily summary email, when mail is set
+up. They deploy with the Worker. A run that hit a problem shows as a failed
 invocation under the Worker's logs.
+
+**Notifications.** With mail set up, a save that needs someone's attention
+mails them right after it is answered (`stack/notify.mjs`, rules in
+`stack/lib/notify.js`): a new incident to the site's managers and the
+organization's notification email, a corrective action to its owner, a new
+permit to its approvers, audit findings between auditee and auditor, and
+training to the person assigned it. Each kind can be switched off under
+Admin → Organization settings → Notifications; all are on until then. A mail
+carries a reference, a site, a date and a link, never a narrative or anything
+medical; illness reports are not mailed. People opt out of the daily summary
+under Account security. **Send today's summaries now**, on the same card,
+is for checking a new set-up; each person still gets at most one a day.
 
 **Backups.** D1 keeps 30 days of point-in-time history (Time Travel):
 `npx wrangler d1 time-travel restore ohsms --timestamp <time>`. For a copy
