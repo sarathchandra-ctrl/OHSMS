@@ -1,10 +1,17 @@
-# Response headers for the Cloudflare deploy (wrangler.jsonc). This mirrors
-# hosting.headers in firebase.json; a change to one belongs in both, or the
-# two hosts serve the app under different security policy.
+# Response headers for the Cloudflare deploy (wrangler.jsonc).
 #
 # Cloudflare merges every matching block, joining duplicate header names, so
 # the narrower blocks below detach the catch-all Cache-Control with
 # "! Cache-Control" before setting their own.
+#
+# The Content-Security-Policy names only hosts the app contacts today:
+#   img-src     OpenStreetMap tiles (maps); Firebase Storage, read-only, for
+#               photos attached before files moved to this server
+#   connect-src geocoding and nearby-services lookups (Nominatim, Overpass
+#               mirrors, Google Places) and Sentry error reports
+# The Firebase sign-in, Firestore, Cloud Functions and reCAPTCHA hosts it
+# used to list are gone with those services: each one was somewhere an
+# injected script could send data or load code from.
 
 /*
   X-Frame-Options: DENY
@@ -12,7 +19,7 @@
   Referrer-Policy: strict-origin-when-cross-origin
   Permissions-Policy: camera=(self), microphone=(), geolocation=(self), payment=()
   Strict-Transport-Security: max-age=86400
-  Content-Security-Policy: default-src 'self'; script-src 'self' https://www.gstatic.com https://www.google.com https://apis.google.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https://*.googleapis.com https://*.gstatic.com https://*.googleusercontent.com https://*.firebasestorage.app https://tile.openstreetmap.org https://*.tile.openstreetmap.org; connect-src 'self' https://www.google.com https://www.recaptcha.net https://*.cloudfunctions.net https://*.run.app https://*.googleapis.com https://*.firebaseio.com wss://*.firebaseio.com https://*.firebasestorage.app https://firestore.googleapis.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://nominatim.openstreetmap.org https://overpass-api.de https://overpass.kumi.systems https://overpass.private.coffee https://overpass.openstreetmap.fr https://lz4.overpass-api.de https://maps.mail.ru https://maps.googleapis.com https://*.ingest.sentry.io https://*.ingest.us.sentry.io; frame-src https://www.google.com https://www.recaptcha.net; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'
+  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data: blob: https://tile.openstreetmap.org https://*.tile.openstreetmap.org https://firebasestorage.googleapis.com https://*.firebasestorage.app; connect-src 'self' https://nominatim.openstreetmap.org https://overpass-api.de https://lz4.overpass-api.de https://overpass.kumi.systems https://overpass.private.coffee https://overpass.openstreetmap.fr https://maps.mail.ru https://places.googleapis.com https://*.ingest.sentry.io https://*.ingest.us.sentry.io; frame-src 'none'; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'
   Cache-Control: no-cache
 
 # Vite's content-hashed bundles. Only these are immutable: an unhashed file

@@ -17,7 +17,7 @@
 // and again here against the directory, so a crafted path cannot escape it.
 
 import { createReadStream, createWriteStream } from 'node:fs'
-import { mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises'
+import { link, mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { dirname, join, normalize, sep } from 'node:path'
 import { pipeline } from 'node:stream/promises'
 import { isAppFilePath } from './lib/fileDelete.js'
@@ -91,8 +91,18 @@ export function createBlobStore({ dir, key, origin }) {
         await rm(tmp, { force: true })
         return deny(err?.code === 'big' ? 413 : 400, 'upload failed')
       }
-      await rename(tmp, file)
-      await writeFile(`${file}.type`, type)
+      // Never replace a stored file. Every upload gets a fresh random path,
+      // so a file already at this one is someone else's — an incident photo,
+      // a permit document — and the record that names it is the evidence.
+      // rename() replaced it silently; link() refuses when the name exists.
+      try {
+        await link(tmp, file)
+      } catch (err) {
+        await rm(tmp, { force: true })
+        return deny(err?.code === 'EEXIST' ? 409 : 500, 'upload refused')
+      }
+      await rm(tmp, { force: true })
+      await writeFile(`${file}.type`, type, { flag: 'wx' })
       res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' })
       res.end(JSON.stringify({ ok: true }))
       return true

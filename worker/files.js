@@ -35,6 +35,9 @@ export function createR2FileStore({ bucket, key, origin }) {
       if (request.method === 'PUT') {
         const path = signer.check(url, 'put', now)
         if (!path) return deny(403, 'upload link refused')
+        // Never replace a stored file: every upload gets a fresh random
+        // path, so an object already here is someone else's evidence.
+        if (await bucket.head(path)) return deny(409, 'a file already exists at this path')
         const type = String(
           request.headers.get('content-type') || 'application/octet-stream'
         ).slice(0, 200)

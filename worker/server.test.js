@@ -30,12 +30,36 @@ function fakeBucket() {
     async delete(key) {
       objects.delete(key)
     },
+    async head(key) {
+      const o = objects.get(key)
+      return o ? { size: o.bytes.length, httpMetadata: o.httpMetadata } : null
+    },
   }
 }
 
 describe('files in R2', () => {
   const origin = 'https://ehs.example.com'
   const key = blobKeyFrom('s'.repeat(40))
+
+  // A fresh upload link for a path that already holds a file is the way to
+  // swap someone's evidence for something else. Every real upload gets a new
+  // random path, so the second PUT is never legitimate.
+  it('never replaces a stored file', async () => {
+    const bucket = fakeBucket()
+    const files = createR2FileStore({ bucket, key, origin })
+    const put = (body) =>
+      files.handle(
+        new Request(files.uploadUrl('files/photos/evidence.txt'), {
+          method: 'PUT',
+          body,
+          headers: { 'Content-Type': 'text/plain', 'Content-Length': String(body.length) },
+        })
+      )
+    expect((await put('original')).status).toBe(200)
+    expect((await put('swapped')).status).toBe(409)
+    const got = await files.handle(new Request(files.downloadUrl('files/photos/evidence.txt')))
+    expect(await got.text()).toBe('original')
+  })
 
   it('uploads and downloads through signed links only', async () => {
     const bucket = fakeBucket()
@@ -80,11 +104,11 @@ describe('files in R2', () => {
     expect(late.status).toBe(403)
   })
 
-  it('accepts exactly 2 MB and refuses an extra byte without replacing an existing file', async () => {
+  it('accepts exactly 2 MB and refuses an extra byte without storing it', async () => {
     const bucket = fakeBucket()
     const files = createR2FileStore({ bucket, key, origin })
-    const path = 'files/photos/limit.pdf'
-    const upload = (size) =>
+    // Each upload has its own path, as every real one does.
+    const upload = (path, size) =>
       files.handle(
         new Request(files.uploadUrl(path), {
           method: 'PUT',
@@ -92,9 +116,10 @@ describe('files in R2', () => {
           headers: { 'Content-Type': 'application/pdf' },
         })
       )
-    expect((await upload(MAX_UPLOAD_BYTES)).status).toBe(200)
-    expect((await upload(MAX_UPLOAD_BYTES + 1)).status).toBe(413)
-    expect(bucket.objects.get(path).bytes.length).toBe(MAX_UPLOAD_BYTES)
+    expect((await upload('files/photos/limit.pdf', MAX_UPLOAD_BYTES)).status).toBe(200)
+    expect((await upload('files/photos/over.pdf', MAX_UPLOAD_BYTES + 1)).status).toBe(413)
+    expect(bucket.objects.get('files/photos/limit.pdf').bytes.length).toBe(MAX_UPLOAD_BYTES)
+    expect(bucket.objects.has('files/photos/over.pdf')).toBe(false)
   })
 
   it('counts a streamed body even if the declared length is smaller', async () => {
@@ -138,16 +163,16 @@ describe('files in R2', () => {
   it('allows only the authentication-tag overhead for a sealed 2 MB file', async () => {
     const bucket = fakeBucket()
     const files = createR2FileStore({ bucket, key, origin })
-    const upload = (size) =>
+    const upload = (path, size) =>
       files.handle(
-        new Request(files.uploadUrl('files/medical/a.bin'), {
+        new Request(files.uploadUrl(path), {
           method: 'PUT',
           body: new Uint8Array(size),
           headers: { 'Content-Type': 'application/octet-stream' },
         })
       )
-    expect((await upload(MAX_SEALED_UPLOAD_BYTES)).status).toBe(200)
-    expect((await upload(MAX_SEALED_UPLOAD_BYTES + 1)).status).toBe(413)
+    expect((await upload('files/medical/a.bin', MAX_SEALED_UPLOAD_BYTES)).status).toBe(200)
+    expect((await upload('files/medical/b.bin', MAX_SEALED_UPLOAD_BYTES + 1)).status).toBe(413)
   })
 })
 
