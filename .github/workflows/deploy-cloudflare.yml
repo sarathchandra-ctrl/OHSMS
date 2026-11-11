@@ -18,19 +18,17 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      # Until these three repository secrets exist the job skips with a notice
-      # rather than failing every push to main. OHSMS_PUBLIC_ORIGIN is the
-      # Worker's address: a secret, not a variable, so GitHub masks it in this
-      # public repository's logs, including where wrangler prints the URL.
+      # Until the API token and account id exist the job skips with a notice
+      # rather than failing every push to main. Everything else is optional;
+      # docs/CLOUDFLARE.md "Deploying main from GitHub" lists it all.
       - name: Check deployment credentials
         id: creds
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          OHSMS_PUBLIC_ORIGIN: ${{ secrets.OHSMS_PUBLIC_ORIGIN }}
         run: |
-          if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ] || [ -z "$OHSMS_PUBLIC_ORIGIN" ]; then
-            echo "::notice::Cloudflare deploy skipped: add CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID and OHSMS_PUBLIC_ORIGIN in GitHub Settings > Secrets and variables > Actions to enable it."
+          if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
+            echo "::notice::Cloudflare deploy skipped: add CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID in GitHub Settings > Secrets and variables > Actions to enable it."
             echo "ready=false" >> "$GITHUB_OUTPUT"
           else
             echo "ready=true" >> "$GITHUB_OUTPUT"
@@ -55,18 +53,82 @@ jobs:
           npm run lint
           node scripts/case-collision.mjs
           npm test -- --maxWorkers=2
-      # wrangler.jsonc builds dist/ and deploys the Worker and assets together.
-      - name: Build and deploy the ohsms Worker
+      # The Worker secrets are optional: a Worker that already has them keeps
+      # them, and a deploy never replaces one (worker/deployConfig.js
+      # secretsToSet: a changed DATA_KEY_MASTER would make every encrypted
+      # field unreadable). When set, they are checked with the same rules the
+      # server applies at start (worker/server.js settingsProblems), so a value
+      # the server would refuse with a 503 never reaches it.
+      #
+      # The database, bucket and Worker name default to wrangler.jsonc; the
+      # variables below override them in a generated wrangler.deploy.json.
+      #
+      # The Worker's address (PUBLIC_ORIGIN) can live on the Worker itself
+      # (Settings > Variables and Secrets), where keep_vars in wrangler.jsonc
+      # stops every deploy from deleting it. OHSMS_PUBLIC_ORIGIN, if set, is
+      # applied on each deploy and lets the job check /health afterwards.
+      # It is a secret, not a variable, so GitHub masks it in this public
+      # repository's logs.
+      - name: Validate repository Actions configuration
         if: steps.creds.outputs.ready == 'true'
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           OHSMS_PUBLIC_ORIGIN: ${{ secrets.OHSMS_PUBLIC_ORIGIN }}
-        run: npx --no-install wrangler deploy --name ohsms --var "BUILD_COMMIT:${GITHUB_SHA}" --var "PUBLIC_ORIGIN:${OHSMS_PUBLIC_ORIGIN}"
+          SESSION_SECRET: ${{ secrets.SESSION_SECRET }}
+          DATA_KEY_MASTER: ${{ secrets.DATA_KEY_MASTER }}
+          ADMIN_EMAIL: ${{ secrets.ADMIN_EMAIL }}
+          ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
+          CLOUDFLARE_WORKER_NAME: ${{ vars.CLOUDFLARE_WORKER_NAME }}
+          CLOUDFLARE_D1_DATABASE_ID: ${{ secrets.CLOUDFLARE_D1_DATABASE_ID }}
+          CLOUDFLARE_D1_DATABASE_NAME: ${{ vars.CLOUDFLARE_D1_DATABASE_NAME }}
+          CLOUDFLARE_R2_BUCKET_NAME: ${{ vars.CLOUDFLARE_R2_BUCKET_NAME }}
+        run: node scripts/deploy-config.mjs check
+      - name: Prepare deployment config
+        if: steps.creds.outputs.ready == 'true'
+        env:
+          CLOUDFLARE_WORKER_NAME: ${{ vars.CLOUDFLARE_WORKER_NAME }}
+          CLOUDFLARE_D1_DATABASE_ID: ${{ secrets.CLOUDFLARE_D1_DATABASE_ID }}
+          CLOUDFLARE_D1_DATABASE_NAME: ${{ vars.CLOUDFLARE_D1_DATABASE_NAME }}
+          CLOUDFLARE_R2_BUCKET_NAME: ${{ vars.CLOUDFLARE_R2_BUCKET_NAME }}
+        run: node scripts/deploy-config.mjs config
+      # The generated config builds dist/ and deploys the Worker and assets together.
+      - name: Build and deploy the Worker
+        if: steps.creds.outputs.ready == 'true'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          OHSMS_PUBLIC_ORIGIN: ${{ secrets.OHSMS_PUBLIC_ORIGIN }}
+        run: |
+          set -- --config wrangler.deploy.json --var "BUILD_COMMIT:${GITHUB_SHA}"
+          if [ -n "$OHSMS_PUBLIC_ORIGIN" ]; then set -- "$@" --var "PUBLIC_ORIGIN:${OHSMS_PUBLIC_ORIGIN%/}"; fi
+          npx --no-install wrangler deploy "$@"
+      # Only names come back from `secret list`; the values never leave
+      # Cloudflare or GitHub, and the file handed to `secret bulk` is removed.
+      - name: Set Worker secrets the Worker does not have yet
+        if: steps.creds.outputs.ready == 'true'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          SESSION_SECRET: ${{ secrets.SESSION_SECRET }}
+          DATA_KEY_MASTER: ${{ secrets.DATA_KEY_MASTER }}
+          ADMIN_EMAIL: ${{ secrets.ADMIN_EMAIL }}
+          ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
+        run: |
+          npx --no-install wrangler secret list --config wrangler.deploy.json --format json > "$RUNNER_TEMP/secret-names.json" || echo '[]' > "$RUNNER_TEMP/secret-names.json"
+          node scripts/deploy-config.mjs secrets "$RUNNER_TEMP/secret-names.json" "$RUNNER_TEMP/secrets.json"
+          if [ "$(cat "$RUNNER_TEMP/secrets.json")" != "{}" ]; then
+            npx --no-install wrangler secret bulk "$RUNNER_TEMP/secrets.json" --config wrangler.deploy.json
+          fi
+          rm -f "$RUNNER_TEMP/secrets.json"
       - name: Verify the deployed version
         if: steps.creds.outputs.ready == 'true'
         env:
           OHSMS_PUBLIC_ORIGIN: ${{ secrets.OHSMS_PUBLIC_ORIGIN }}
         run: |
+          if [ -z "$OHSMS_PUBLIC_ORIGIN" ]; then
+            echo "::notice::Deployed. Add the OHSMS_PUBLIC_ORIGIN secret for this job to check /health afterwards."
+            exit 0
+          fi
           curl --fail --silent --show-error --retry 5 --retry-delay 3 --max-time 20 "${OHSMS_PUBLIC_ORIGIN%/}/health" --output "$RUNNER_TEMP/ohsms-health.json"
           node -e "const fs = require('node:fs'); const h = JSON.parse(fs.readFileSync(process.env.RUNNER_TEMP + '/ohsms-health.json', 'utf8')); if (!h.ok || h.database !== 'ok' || !h.files || h.version !== process.env.GITHUB_SHA) { console.error('The deployed Worker did not pass its database, storage and version checks.'); process.exit(1) }"

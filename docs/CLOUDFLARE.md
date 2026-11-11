@@ -124,29 +124,44 @@ you hold yourself: `npx wrangler d1 export ohsms --remote --output ohsms.sql`.
 existing **ohsms** Worker on every push, and can also be run from Actions.
 It does not deploy the separate sms Worker.
 
-Before the first run, in GitHub **Settings → Secrets and variables → Actions**,
-add three repository secrets: `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`
-and `OHSMS_PUBLIC_ORIGIN` (the Worker's address, `https://<address>`). The
-address is a secret rather than a variable so that GitHub masks it in this
-public repository's Actions logs, including where `wrangler deploy` prints the
-URL. The workflow passes it to the Worker as `PUBLIC_ORIGIN` on every deploy
-and checks `/health` there. Use an API token scoped to the intended account that can deploy Workers and
-access the configured D1 and R2 resources. Enter credentials in GitHub's secure
-settings, never in a source file or issue.
+Everything goes in GitHub **Settings → Secrets and variables → Actions**,
+never in a source file or issue. Only the first two are required; until they
+exist the job skips with a notice. Each value is checked before anything is
+deployed (`worker/deployConfig.js`), and a bad one is named, never printed.
 
-The existing D1 database and the private R2 bucket declared in `wrangler.jsonc`
-must exist. Keep the Worker's existing `SESSION_SECRET` and `DATA_KEY_MASTER`
-unchanged. Worker secrets are separate from GitHub's deployment credentials.
-Email reset also needs `RESEND_API_KEY` and a verified `MAIL_FROM` setting.
+| Name | Kind | What it is |
+|---|---|---|
+| `CLOUDFLARE_API_TOKEN` | secret | A token that can deploy Workers and use the account's D1 and R2 |
+| `CLOUDFLARE_ACCOUNT_ID` | secret | The 32-character account id (dashboard, right-hand column) |
+| `OHSMS_PUBLIC_ORIGIN` | secret | Optional. The Worker's address, `https://<address>`: applied as `PUBLIC_ORIGIN` on each deploy, and lets the job check `/health`. Without it the Worker keeps the address set on it (keep_vars) |
+| `SESSION_SECRET` | secret | Optional. `openssl rand -hex 32` |
+| `DATA_KEY_MASTER` | secret | Optional. `openssl rand -base64 32` |
+| `ADMIN_EMAIL`, `ADMIN_PASSWORD` | secret | Optional. The first administrator, used only on the very first start |
+| `CLOUDFLARE_D1_DATABASE_ID` | secret | Optional. Overrides the database id in `wrangler.jsonc` |
+| `CLOUDFLARE_D1_DATABASE_NAME` | variable | Optional. Overrides the database name |
+| `CLOUDFLARE_R2_BUCKET_NAME` | variable | Optional. Overrides the bucket name |
+| `CLOUDFLARE_WORKER_NAME` | variable | Optional. Overrides the Worker name (`ohsms`) |
+
+The four Worker secrets are set on the Worker only when it does not already
+have them; a deploy never replaces one. A Worker that already runs keeps its
+`SESSION_SECRET` and `DATA_KEY_MASTER`, whatever GitHub holds: a different
+`DATA_KEY_MASTER` cannot open what the old one encrypted, so a deploy that
+swapped it would make every encrypted field and two-step login unreadable.
+Rotate deliberately, with `npx wrangler secret put`. Cloudflare never shows a
+secret again once set, so keep your own copy.
+
+The D1 database and the private R2 bucket must exist before the first deploy.
+Email reset also needs `RESEND_API_KEY` (a Worker secret) and a verified
+`MAIL_FROM` setting.
 
 The workflow installs locked dependencies, runs lint and tests, builds the app,
-and deploys its assets and backend together. It then checks `/health` for the
-database, storage binding and deployed Git commit.
+and deploys its assets and backend together. With `OHSMS_PUBLIC_ORIGIN` set it then checks
+`/health` for the database, storage binding and deployed Git commit.
 
-Until all three secrets exist the job **skips** the build and deploy and
+Until the API token and account id exist the job **skips** the build and deploy and
 still shows as passed, with a notice saying why. A green run is therefore not
 proof of a live deployment: open the run and check that "Build and deploy the
-ohsms Worker" ran. After supplying secrets, use **Actions → Deploy OHSMS → Run
+Worker" ran. After supplying secrets, use **Actions → Deploy OHSMS → Run
 workflow**, branch `main`.
 
 ## Updating
