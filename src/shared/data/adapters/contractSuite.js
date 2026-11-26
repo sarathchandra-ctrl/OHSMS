@@ -262,6 +262,33 @@ export function defineDataContract(
     })
   })
 
+  describe('deleteField', () => {
+    it('removes a field in update(), top level or nested by a dotted key', async () => {
+      const d = await open()
+      await d.set(P, 'x', { photo: 'old.jpg', photos: ['a.jpg'], meta: { by: 'u1', note: 'n' } })
+      await d.update(P, 'x', {
+        photo: d.deleteField(),
+        'meta.note': d.deleteField(),
+        photos: ['b.jpg'],
+      })
+      expect(await d.get(P, 'x')).toEqual({ id: 'x', photos: ['b.jpg'], meta: { by: 'u1' } })
+    })
+
+    it('removes a field in set(..., {merge: true}) and keeps the rest', async () => {
+      const d = await open()
+      await d.set(P, 'x', { a: 1, b: 2, nested: { c: 3, d: 4 } })
+      await d.set(P, 'x', { b: d.deleteField(), nested: { d: d.deleteField() } }, { merge: true })
+      expect(await d.get(P, 'x')).toEqual({ id: 'x', a: 1, nested: { c: 3 } })
+    })
+
+    it('leaves a field that is not there as it is', async () => {
+      const d = await open()
+      await d.set(P, 'x', { a: 1 })
+      await d.update(P, 'x', { gone: d.deleteField(), 'deep.er': d.deleteField() })
+      expect(await d.get(P, 'x')).toEqual({ id: 'x', a: 1 })
+    })
+  })
+
   describe('subscribe', () => {
     it('returns its unsubscribe synchronously and emits first asynchronously', async () => {
       const d = await open()

@@ -196,6 +196,10 @@ function resolveSentinel(s, prev) {
       for (const v of s.value) if (!base.some((x) => deepEqual(x, v))) base.push(deepClone(v))
       return base
     }
+    case 'deleteField':
+      // Resolves to "no value"; each caller below removes the key rather than
+      // storing undefined, which this driver refuses as a value.
+      return undefined
     default:
       throw fail('invalid-argument', `memory: unknown sentinel ${String(s[KIND])}`)
   }
@@ -204,11 +208,18 @@ function resolveSentinel(s, prev) {
 /** Resolve sentinels in a value tree; `prev` supplies each field's old value. */
 function resolveTree(value, prev) {
   if (isSentinel(value)) return resolveSentinel(value, prev)
-  if (Array.isArray(value)) return value.map((v) => resolveTree(v, undefined))
+  if (Array.isArray(value)) {
+    // Firestore refuses a field delete inside an array; there is no key to drop.
+    if (value.some((v) => isSentinel(v) && v[KIND] === 'deleteField')) {
+      throw fail('invalid-argument', 'memory: deleteField() cannot be an array element')
+    }
+    return value.map((v) => resolveTree(v, undefined))
+  }
   if (isPlainObject(value)) {
     const out = {}
     for (const [k, v] of Object.entries(value)) {
-      out[k] = resolveTree(v, isPlainObject(prev) ? prev[k] : undefined)
+      const next = resolveTree(v, isPlainObject(prev) ? prev[k] : undefined)
+      if (next !== undefined) out[k] = next
     }
     return out
   }
@@ -220,7 +231,11 @@ function mergeTree(prev, value) {
   if (isSentinel(value)) return resolveSentinel(value, prev)
   if (isPlainObject(value)) {
     const base = isPlainObject(prev) ? deepClone(prev) : {}
-    for (const [k, v] of Object.entries(value)) base[k] = mergeTree(base[k], v)
+    for (const [k, v] of Object.entries(value)) {
+      const next = mergeTree(base[k], v)
+      if (next === undefined) delete base[k]
+      else base[k] = next
+    }
     return base
   }
   return resolveTree(value, prev)
@@ -258,6 +273,12 @@ function getPath(obj, segs) {
     if (cur === undefined) return undefined
   }
   return cur
+}
+
+/** Removes the field at a dotted path; a path that is not there is left alone. */
+function deletePath(obj, segs) {
+  const parent = getPath(obj, segs.slice(0, -1))
+  if (isPlainObject(parent)) delete parent[segs[segs.length - 1]]
 }
 
 function setPath(obj, segs, value) {
@@ -514,7 +535,9 @@ export function createMemoryAdapter() {
       const out = deepClone(prev)
       for (const [key, value] of Object.entries(op.data)) {
         const segs = String(key).split('.')
-        setPath(out, segs, resolveTree(value, getPath(out, segs)))
+        const next = resolveTree(value, getPath(out, segs))
+        if (next === undefined) deletePath(out, segs)
+        else setPath(out, segs, next)
       }
       return out
     }
@@ -583,6 +606,7 @@ export function createMemoryAdapter() {
     serverTimestamp: () => sentinel('serverTimestamp'),
     increment: (n) => sentinel('increment', Number(n) || 0),
     arrayUnion: (...values) => sentinel('arrayUnion', values),
+    deleteField: () => sentinel('deleteField'),
 
     // ── Reads ────────────────────────────────────────────────────────────────
 

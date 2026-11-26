@@ -37,6 +37,9 @@
 //   increment(n)             atomic numeric add — must survive concurrent
 //                            writers WITHOUT a read (stats deltas depend on it)
 //   arrayUnion(...values)    append-if-absent, atomic
+//   deleteField()            removes the field, in update() (a dotted key
+//                            reaches a nested one) and set(..., {merge:true});
+//                            a field that is not there is left as it is
 //
 // ── Reads ────────────────────────────────────────────────────────────────────
 //   get(path, id)                        -> {id, ...} | null
